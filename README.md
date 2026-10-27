@@ -24,6 +24,30 @@ Every push or pull request on a KiCad project repository will:
 - **Comment** on the pull request with links to all of the above.
 - **Release**: tagging `vX.Y` produces a versioned, ready-to-order fab package.
 
+## How the pieces fit together
+
+```
+ KiCad (each designer)
+        │  git push / pull request
+        ▼
+ GitHub repository ──► GitHub Actions (Docker)
+        │                 │  KiBot image (headless KiCad)
+        │                 ├─ ERC / DRC          → PR goes red if they fail
+        │                 ├─ Gerbers, drill, pick & place, BOM
+        │                 ├─ schematic PDF, 3D render
+        │                 ├─ interactive BOM (iBOM)
+        │                 └─ visual diff against the target branch (Kiri / KiDiff)
+        ▼
+ GitHub Pages: one web portal per project
+        ├─ KiCanvas viewer (schematic and PCB in the browser)
+        ├─ iBOM
+        ├─ diff of the revision
+        └─ fabrication downloads
+```
+
+The same design should be portable to GitLab (GitLab CI + GitLab Pages + merge
+requests) for teams that self-host.
+
 ## How it will be used
 
 kicad-hub is a reusable GitHub Action. A board project only needs a small workflow:

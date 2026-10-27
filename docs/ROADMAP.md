@@ -1,31 +1,44 @@
 # Roadmap
 
-## Phase 1 — Project template
+Time estimates are rough, for one person.
+
+## Phase 1 — Project template (~1 day)
 - [ ] Folder structure for a board repository
 - [ ] KiCad `.gitignore` (`*-backups/`, `fp-info-cache`, `*.lck`, `~*.lck`)
 - [ ] Git LFS for 3D models (`*.step`, `*.stp`, `*.wrl`)
 - [ ] Project libraries referenced with `${KIPRJMOD}` paths
-- [ ] Pull request template with a design review checklist
+- [ ] Pull request template with a design review checklist (decoupling,
+      clearances, fiducials…)
 
-## Phase 2 — CI with KiBot
+## Phase 2 — CI with KiBot (~1–2 days)
 - [ ] `.kibot.yaml` with all outputs
-- [ ] Reusable workflow `.github/workflows/kicad.yml`
+- [ ] Reusable workflow `.github/workflows/kicad.yml` that runs it on every push
 - [ ] ERC/DRC block the merge when they fail
-- [ ] Tag `vX.Y` → versioned fabrication zip attached to a GitHub Release
+- [ ] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
+      a GitHub Release
 
-## Phase 3 — Web portal
-- [ ] Static page per branch/PR on GitHub Pages
+## Phase 3 — Web portal (~2–3 days)
+- [ ] Static page per commit or branch on GitHub Pages
 - [ ] KiCanvas viewer embedded
 - [ ] Interactive BOM and downloads
-- [ ] Bot comment on the PR with links
+- [ ] Bot comment on the PR with links: "view design", "view diff", "BOM"
 
-## Phase 4 — Visual diff
+## Phase 4 — Visual diff (~1–2 days)
 - [ ] Kiri or KiDiff comparing the PR branch with the target branch
-- [ ] Diff published in the portal and linked from the PR comment
+- [ ] Diff HTML published in the portal and linked from the PR comment
 
 ## Phase 5 (optional) — Comments on the design
-- [ ] Small web app on top of KiCanvas: click a component → create a PR review
-      comment through the GitHub API (e.g. "U12 (x, y): missing decoupling")
+The only piece no existing tool provides. A small web app on top of KiCanvas:
+clicking a component creates a PR review comment through the GitHub API
+(e.g. "U12 (x, y): missing decoupling").
+
+- [ ] Prototype
+
+This is a software project in its own right. Leave it until phases 1–4 work and
+it's clear the feature is actually missed.
+
+## Later
+- [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
 
 ## Before going public
 - [ ] Choose license
