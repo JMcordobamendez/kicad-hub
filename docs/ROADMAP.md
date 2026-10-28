@@ -2,6 +2,68 @@
 
 Time estimates are rough, for one person.
 
+## Where we are
+
+```mermaid
+flowchart LR
+  classDef done fill:#1a7f37,stroke:#116329,color:#ffffff
+  classDef doing fill:#d9622b,stroke:#a8461b,color:#ffffff
+  classDef todo fill:#eaeef2,stroke:#8c959f,color:#1f2328
+  classDef optional fill:#ffffff,stroke:#8c959f,color:#59636e,stroke-dasharray:4 3
+
+  subgraph P1["1 · Template"]
+    direction TB
+    p1a["Layout, .gitignore, LFS<br/>KIPRJMOD libs, PR checklist"]:::done
+    p1b["Tried on a real board<br/>(RiegoAutomatico PR)"]:::doing
+  end
+
+  subgraph P2["2 · CI with KiBot"]
+    direction TB
+    p2a["ERC / DRC + job summary"]:::done
+    p2b["PDF, BOM, iBOM, Gerbers,<br/>drill, pick & place"]:::done
+    p2c["Example board, first green run"]:::done
+    p2d["Release zip on tag vX.Y"]:::todo
+  end
+
+  subgraph P2B["2b · BOM, sourcing, manufacturing"]
+    direction TB
+    b1["1 · BOM diff in PR comment"]:::doing
+    b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::doing
+    b6["6 · Datasheets"]:::todo
+    b5["5 · Variants"]:::todo
+    b3["3 · JLCPCB package"]:::todo
+    b2["2 · Cost and stock"]:::todo
+    b7["7 · Before/after images<br/>changes highlighted"]:::todo
+  end
+
+  subgraph P3["3 · Web portal"]
+    direction TB
+    p3["KiCanvas viewer, iBOM,<br/>downloads on GitHub Pages"]:::todo
+  end
+
+  subgraph P4["4 · Visual diff"]
+    direction TB
+    p4["Diff in the portal"]:::todo
+  end
+
+  subgraph P5["5 · Pinned comments"]
+    direction TB
+    p5["Click a part → PR comment"]:::optional
+  end
+
+  PUB(["Go public · v1"]):::todo
+
+  P1 --> P2 --> P2B --> P3 --> P4 --> PUB
+  P4 -.-> P5
+  b7 -. same diff engine .- p4
+```
+
+**Legend:** green = done · orange = next / in progress · grey = planned ·
+dashed = optional.
+
+*Last update: 2026-10-28. Update the classes (`:::done`, `:::doing`, `:::todo`)
+whenever a task changes state.*
+
 ## Phase 1 — Project template (~1 day)
 Lives in `template/`.
 
