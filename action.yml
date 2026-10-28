@@ -103,7 +103,7 @@ runs:
         fi
 
         {
-          echo "## KiCad checks â€” $NAME"
+          echo "## KiCad checks: $NAME"
           echo
           echo "| Check | Errors | Warnings | Unconnected |"
           echo "|---|---|---|---|"

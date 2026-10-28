@@ -28,8 +28,8 @@ First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico
 - [x] Example board with a routed PCB: `examples/royalblue54l-feather` (KiCad demo,
       CERN-OHL-P), checked on every push by `.github/workflows/test.yml`
 - [x] First green run on GitHub Actions (2026-10-28, example board: all outputs OK)
-- [ ] Standard KiCad libraries registered for kicad-cli in the container (first run
-      reported ~190 spurious "library not found" warnings; fix pushed, to confirm)
+- [x] Standard KiCad libraries registered for kicad-cli in the container (ERC on the
+      example went from 203 to 18 findings, DRC lost 67 spurious library warnings)
 
 ### 2b — BOM, sourcing and manufacturing
 
