@@ -3,12 +3,17 @@
 Time estimates are rough, for one person.
 
 ## Phase 1 — Project template (~1 day)
-- [ ] Folder structure for a board repository
-- [ ] KiCad `.gitignore` (`*-backups/`, `fp-info-cache`, `*.lck`, `~*.lck`)
-- [ ] Git LFS for 3D models (`*.step`, `*.stp`, `*.wrl`)
-- [ ] Project libraries referenced with `${KIPRJMOD}` paths
-- [ ] Pull request template with a design review checklist (decoupling,
+Lives in `template/`.
+
+- [x] Folder structure for a board repository
+- [x] KiCad `.gitignore` (`*-backups/`, `fp-info-cache`, `*.lck`, `~*.lck`)
+- [x] Git LFS for 3D models (`*.step`, `*.stp`, `*.wrl`) and LF line endings
+      for KiCad files, in `.gitattributes`
+- [x] Project libraries referenced with `${KIPRJMOD}` paths
+- [x] Pull request template with a design review checklist (decoupling,
       clearances, fiducials…)
+- [ ] Try it on a real personal board and adjust
+- [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
 ## Phase 2 — CI with KiBot (~1–2 days)
 - [ ] `.kibot.yaml` with all outputs

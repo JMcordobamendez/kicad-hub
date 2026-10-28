@@ -60,6 +60,9 @@ jobs:
     uses: JMcordobamendez/kicad-hub/.github/workflows/kicad.yml@v1
 ```
 
+New board repositories start from [`template/`](template/): folder layout,
+`.gitignore`, Git LFS for 3D models, project libraries and a PR review checklist.
+
 The platform evolves in this repository; every board project that uses it picks up
 the improvements.
 
