@@ -122,7 +122,8 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [x] File names with board name + revision; checksum list inside the zip
    - [x] Fab notes warn when the smallest features used are below the project rules
          (example board: vias with a 0.00001 mm drill)
-   - [ ] Confirm the release on GitHub with a test tag
+   - [x] Confirmed on GitHub: tag `v0.0.1-test` → release with
+         `RoyalBlue54L-Feather-v0.0.1-test-fab.zip` (666 KB)
    - [ ] Fab profiles as an **optional** layer on top (`fab-profile: jlcpcb |
          pcbway | eurocircuits …`): only renames columns/files and applies that
          fab's DRC rules. Default: `generic`
@@ -161,7 +162,7 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          full-size diff
    - [ ] Shares the diff engine with phase 4 (visual diff in the portal)
 - [x] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
-      a GitHub Release (see 2b.3; to confirm on GitHub)
+      a GitHub Release (see 2b.3; confirmed with tag v0.0.1-test, 2026-10-28)
 
 ## Phase 3 — Web portal (~2–3 days)
 - [ ] Static page per commit or branch on GitHub Pages
