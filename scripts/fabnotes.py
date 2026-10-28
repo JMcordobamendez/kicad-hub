@@ -23,11 +23,11 @@ vias = [t for t in b.GetTracks() if t.Type() == pcbnew.PCB_VIA_T]
 pads = [p for f in b.GetFootprints() for p in f.Pads()]
 pth = [p for p in pads if p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH]
 npth = [p for p in pads if p.GetAttribute() == pcbnew.PAD_ATTRIB_NPTH]
-drills = [mm(v.GetDrillValue()) for v in vias] + [mm(min(p.GetDrillSize().x, p.GetDrillSize().y)) for p in pth]
+pad_holes = [mm(min(p.GetDrillSize().x, p.GetDrillSize().y)) for p in pth]
 
 
 def fmt(v, unit="mm"):
-    return "n/a" if v is None else f"{v:.4g} {unit}"
+    return "n/a" if v is None else f"{v:.5f}".rstrip("0").rstrip(".") + f" {unit}"
 
 
 def smallest(values):
@@ -68,11 +68,11 @@ bottom = sum(1 for f in b.GetFootprints() if f.IsFlipped() and f.GetAttributes()
 
 min_track = smallest(mm(t.GetWidth()) for t in tracks)
 min_via_drill = smallest(mm(v.GetDrillValue()) for v in vias)
-min_hole = smallest(drills)
+min_hole = smallest(pad_holes)
 warnings = []
 if min_track is not None and min_track < mm(ds.m_TrackMinWidth):
     warnings.append(f"Track width {fmt(min_track)} is below the project minimum {fmt(mm(ds.m_TrackMinWidth))}")
-for what, v in (("Via drill", min_via_drill), ("Plated hole", min_hole)):
+for what, v in (("Via drill", min_via_drill), ("Plated pad hole", min_hole)):
     if v is not None and v < mm(ds.m_MinThroughDrill):
         warnings.append(f"{what} {fmt(v)} is below the project minimum drill {fmt(mm(ds.m_MinThroughDrill))}")
 warn_txt = ("\n!! CHECK BEFORE ORDERING\n" + "\n".join("  - " + w for w in warnings) + "\n") if warnings else ""
@@ -101,7 +101,7 @@ SMALLEST FEATURES USED ON THE BOARD
   Track width       {fmt(min_track)}
   Via drill         {fmt(min_via_drill)}
   Via diameter      {fmt(smallest(mm(v.GetWidth(pcbnew.F_Cu)) for v in vias))}
-  Plated hole       {fmt(min_hole)}
+  Plated pad hole   {fmt(min_hole)}
   Vias / PTH / NPTH {len(vias)} / {len(pth)} / {len(npth)}
 
 DESIGN RULES (project minimums)
