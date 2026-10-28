@@ -21,8 +21,18 @@ Every push or pull request on a KiCad project repository will:
   - interactive BOM ([InteractiveHtmlBom](https://github.com/openscopeproject/InteractiveHtmlBom)),
   - visual diff against the target branch,
   - downloadable fabrication package.
-- **Comment** on the pull request with links to all of the above.
-- **Release**: tagging `vX.Y` produces a versioned, ready-to-order fab package.
+- **Comment** on the pull request with links to all of the above, plus a BOM diff
+  (parts added, removed or changed) and missing-field checks (MPN, footprint,
+  datasheet, voltage rating).
+- **Price** the BOM: unit cost and stock per part, total per board and per batch,
+  warnings for obsolete or out-of-stock parts.
+- **Variants**: one BOM, cost and fab package per build variant of the same design.
+- **Datasheets** linked from the BOMs and bundled in the package.
+- **Release**: tagging `vX.Y` produces a versioned fab package, ready to upload to
+  a fab house (JLCPCB format first).
+
+Mockups: [PR comment](docs/mockups/pull-request.png) ·
+[design portal](docs/mockups/portal.png).
 
 ## How the pieces fit together
 

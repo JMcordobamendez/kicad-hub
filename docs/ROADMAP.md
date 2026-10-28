@@ -26,7 +26,41 @@ First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico
 - [x] Board without outline → DRC and PCB outputs skipped with a warning
 - [x] `strict: true` makes ERC/DRC errors fail the job
 - [ ] First green run on GitHub Actions (not tested yet: no Docker on the dev PC)
-- [ ] 3D render output
+
+### 2b — BOM, sourcing and manufacturing
+
+What a reviewer and a buyer need most, ranked by value. All of it is text or files
+in the CI artifact and the PR comment, so it doesn't depend on the web portal.
+
+1. **BOM diff in the PR comment** (cheap — do first)
+   - [ ] Compare the BOM of the PR branch with the target branch
+   - [ ] Post the changes as text: `+ C14 100nF 0603`, `R7: 10k → 4k7`, `− U5`
+   - [ ] Group by added / removed / changed value / changed footprint
+2. **Cost and availability**
+   - [ ] Unit price and stock per part from LCSC / Mouser / DigiKey (KiBot + KiCost)
+   - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
+   - [ ] Warn on obsolete, not-recommended or out-of-stock parts
+   - [ ] API keys as repository secrets; skip gracefully when they are missing
+3. **Ready-to-order package**
+   - [ ] On tag `vX.Y`: zip in the exact format of a fab house (JLCPCB first:
+         Gerbers + BOM + CPL with their column names; KiBot ships templates)
+   - [ ] Fab house as an input, so others can be added later
+4. **Checks the ERC doesn't do** (cheap — do with 1)
+   - [ ] Every part has MPN, footprint and datasheet (except `DNP` / not-in-BOM)
+   - [ ] Capacitors have a voltage rating field
+   - [ ] DRC against the chosen fab house rules (`.kicad_dru`) instead of defaults
+   - [ ] Report missing fields as a list in the job summary and PR comment
+5. **Variants** — same design, different builds (e.g. irrigation nodes with or
+   without level sensor)
+   - [ ] Variant definition in the board repo (KiBot variants, KiBoM style)
+   - [ ] One BOM, cost and fab package per variant; DNP parts per variant listed
+   - [ ] Variant as a dimension in the BOM diff
+6. **Datasheets**
+   - [ ] Datasheet column as a link in the HTML BOM and the interactive BOM
+   - [ ] Local datasheets in the board repo (e.g. `hardware/datasheet/`) resolved
+         and copied into the artifact, so the package is self-contained
+   - [ ] Check that every datasheet link or file exists
+   - [ ] (Phase 3) open the datasheet from the selected part in the web viewer
 - [ ] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
       a GitHub Release
 
@@ -52,6 +86,11 @@ it's clear the feature is actually missed.
 
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
+- [ ] Microcontroller pin map from the schematic (GPIO → net) as a table and a
+      `pinout.h`, so firmware and board don't drift apart
+- [ ] Notifications (e.g. Telegram) when CI finishes or a release is published
+- [ ] Before/after images embedded in the PR comment, not only a link to the diff
+- [ ] 3D render output (slow, low value per push: maybe only on releases)
 
 ## Before going public
 - [ ] Choose license
@@ -65,3 +104,10 @@ it's clear the feature is actually missed.
   template). Each board lives in its own repo and calls the action.
 - **Reuse existing tools** (KiBot, KiCanvas, Kiri, iBOM) instead of writing our own.
 - **Developed as a personal project**, with personal designs only.
+- **Usefulness over copying commercial platforms** (2026-10-28): BOM diff, cost,
+  ready-to-order packages, extra checks, variants and datasheets (phase 2b) come
+  before the web viewer polish. Pinned comments on the board (phase 5) stay
+  optional: too much work for a one-person team.
+- **Web portal needs public repos** (or GitHub Pro): GitHub Pages is free only
+  for public repositories.
+- **Mockups** of the PR comment and the portal: `docs/mockups/`.
