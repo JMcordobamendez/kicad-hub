@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write   # the action comments its report on PRs
+
 jobs:
   royalblue54l-feather:
     runs-on: ubuntu-latest

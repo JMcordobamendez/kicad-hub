@@ -1,5 +1,5 @@
 name: kicad-hub
-description: ERC/DRC and fabrication outputs for a KiCad project, using KiBot.
+description: ERC/DRC, BOM checks and diff, and fabrication outputs for a KiCad project, using KiBot.
 author: JMcordobamendez
 
 inputs:
@@ -9,6 +9,20 @@ inputs:
   strict:
     description: Fail the job when ERC or DRC report errors. Keep false while the design is in progress.
     default: "false"
+  required-fields:
+    description: >-
+      Symbol fields every fitted part must have, comma-separated. "A|B" means A or B is
+      enough (e.g. an MPN or a distributor part number). DNP parts are skipped.
+    default: "Footprint,Datasheet,MPN|LCSC"
+  check-capacitor-voltage:
+    description: Require a voltage rating on capacitors (a "Voltage" field, or a value like "10uF 16V").
+    default: "true"
+  comment:
+    description: On pull requests, post the report as a comment (updated on every push).
+    default: "true"
+  github-token:
+    description: Token used to comment on the pull request. Needs pull-requests write permission.
+    default: ${{ github.token }}
   image:
     description: KiBot Docker image (headless KiCad).
     default: ghcr.io/inti-cmnb/kicad10_auto:1.9.1
@@ -20,6 +34,9 @@ outputs:
   has-pcb:
     description: "true when the PCB has a board outline and PCB outputs were generated."
     value: ${{ steps.detect.outputs.has_pcb }}
+  missing-fields:
+    description: Number of fitted parts missing a required field.
+    value: ${{ steps.report.outputs.missing_fields }}
 
 runs:
   using: composite
@@ -75,7 +92,6 @@ runs:
         fi
 
     - name: ERC / DRC
-      id: checks
       shell: bash
       env:
         PROJECT_DIR: ${{ inputs.project-dir }}
@@ -90,30 +106,94 @@ runs:
 
         kicad sch erc --severity-all --format json -o "$OUT/reports/erc.json" "$PROJECT_DIR/$NAME.kicad_sch"
         kicad sch erc --severity-all --format report -o "$OUT/reports/erc.rpt" "$PROJECT_DIR/$NAME.kicad_sch"
-        erc_err=$(jq '[.sheets[].violations[] | select(.severity=="error")] | length' "$OUT/reports/erc.json")
-        erc_warn=$(jq '[.sheets[].violations[] | select(.severity=="warning")] | length' "$OUT/reports/erc.json")
-
-        drc_err=-; drc_warn=-; drc_unc=-
         if [ "$HAS_PCB" = true ]; then
           kicad pcb drc --severity-all --schematic-parity --format json -o "$OUT/reports/drc.json" "$PROJECT_DIR/$NAME.kicad_pcb"
           kicad pcb drc --severity-all --schematic-parity --format report -o "$OUT/reports/drc.rpt" "$PROJECT_DIR/$NAME.kicad_pcb"
-          drc_err=$(jq '[.violations[] | select(.severity=="error")] | length' "$OUT/reports/drc.json")
-          drc_warn=$(jq '[.violations[] | select(.severity=="warning")] | length' "$OUT/reports/drc.json")
-          drc_unc=$(jq '.unconnected_items | length' "$OUT/reports/drc.json")
         fi
 
-        {
-          echo "## KiCad checks: $NAME"
-          echo
-          echo "| Check | Errors | Warnings | Unconnected |"
-          echo "|---|---|---|---|"
-          echo "| ERC | $erc_err | $erc_warn | |"
-          echo "| DRC | $drc_err | $drc_warn | $drc_unc |"
-          [ "$HAS_PCB" = true ] || { echo; echo "_No board outline yet: DRC and PCB outputs skipped._"; }
-        } >> "$GITHUB_STEP_SUMMARY"
+    - name: Per-part BOM (this commit and PR base)
+      id: bom
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        OUT: ${{ inputs.output-dir }}
+        IMAGE: ${{ inputs.image }}
+        REQUIRED: ${{ inputs.required-fields }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set -euo pipefail
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
 
-        echo "erc_errors=$erc_err" >> "$GITHUB_OUTPUT"
-        echo "drc_errors=$drc_err" >> "$GITHUB_OUTPUT"
+        # Fields to export: fixed ones + every alternative named in required-fields
+        labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,Voltage"
+        while IFS= read -r f; do
+          [ -n "$f" ] || continue
+          case ",$labels," in *",$f,"*) ;; *) labels="$labels,$f" ;; esac
+        done < <(echo "$REQUIRED" | tr ',|' '\n\n' | sed 's/^ *//;s/ *$//')
+        fields=$(echo "$labels" | sed 's/\bDNP\b/${DNP}/')
+        bom() { kicad sch export bom --fields "$fields" --labels "$labels" --group-by "" --ref-range-delimiter "" -o "$2" "$1"; }
+
+        bom "$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts.csv"
+
+        # On pull requests, the same BOM from the target branch, for the diff
+        if [ -n "$BASE_SHA" ]; then
+          base_dir=.kicad-hub-base
+          if git fetch --no-tags --depth=1 origin "$BASE_SHA" && git worktree add --detach "$base_dir" FETCH_HEAD; then
+            if [ -f "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" ]; then
+              bom "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts-base.csv"
+            else
+              # board is new in this PR: every part counts as added
+              head -n 1 "$OUT/reports/bom-parts.csv" > "$OUT/reports/bom-parts-base.csv"
+            fi
+            git worktree remove --force "$base_dir"
+          else
+            echo "::warning::Could not check out the PR base: BOM diff skipped"
+          fi
+        fi
+
+    - name: Report
+      id: report
+      shell: bash
+      env:
+        NAME: ${{ steps.detect.outputs.name }}
+        OUT: ${{ inputs.output-dir }}
+        REQUIRED: ${{ inputs.required-fields }}
+        CAP_VOLTAGE: ${{ inputs.check-capacitor-voltage }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: |
+        set -euo pipefail
+        r="$OUT/reports"
+        python3 "$GITHUB_ACTION_PATH/scripts/report.py" \
+          --name "$NAME" --bom "$r/bom-parts.csv" --base-bom "$r/bom-parts-base.csv" --base-ref "${BASE_REF:-base}" \
+          --erc "$r/erc.json" --drc "$r/drc.json" \
+          --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+          --out "$r/report.md" --out-json "$r/counts.json"
+        cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
+        for k in erc_errors drc_errors missing_fields; do
+          echo "$k=$(jq -r ".$k // \"-\"" "$r/counts.json")" >> "$GITHUB_OUTPUT"
+        done
+
+    - name: Comment on pull request
+      if: github.event_name == 'pull_request' && inputs.comment == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        NAME: ${{ steps.detect.outputs.name }}
+        PR: ${{ github.event.pull_request.number }}
+        REPORT: ${{ inputs.output-dir }}/reports/report.md
+      run: |
+        set -uo pipefail
+        # One comment per board, edited on every push instead of piling up new ones
+        marker="<!-- kicad-hub:$NAME -->"
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+               --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F "body=@$REPORT" > /dev/null
+        else
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F "body=@$REPORT" > /dev/null
+        fi || echo "::warning::Could not comment on the PR (the workflow needs 'pull-requests: write' permission)"
 
     - name: Outputs (KiBot)
       shell: bash
@@ -134,7 +214,7 @@ runs:
           targets="$targets ibom gerbers drill position"
           pcb_args=(-b "$PROJECT_DIR/$NAME.kicad_pcb")
         fi
-        # -s all: ERC/DRC already ran in the previous step
+        # -s all: ERC/DRC already ran in a previous step
         docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" \
           kibot -c "$OUT/.kibot.yaml" -e "$PROJECT_DIR/$NAME.kicad_sch" "${pcb_args[@]}" \
                 -d "$OUT" -s all $targets
@@ -150,10 +230,10 @@ runs:
       if: inputs.strict == 'true'
       shell: bash
       env:
-        ERC: ${{ steps.checks.outputs.erc_errors }}
-        DRC: ${{ steps.checks.outputs.drc_errors }}
+        ERC: ${{ steps.report.outputs.erc_errors }}
+        DRC: ${{ steps.report.outputs.drc_errors }}
       run: |
         fail=0
         [ "$ERC" = 0 ] || { echo "::error::ERC reports $ERC errors"; fail=1; }
-        [ "$DRC" = 0 ] || [ "$DRC" = - ] || { echo "::error::DRC reports $DRC errors"; fail=1; }
+        [ "$DRC" = 0 ] || [ "$DRC" = - ] || [ "$DRC" = null ] || { echo "::error::DRC reports $DRC errors"; fail=1; }
         exit $fail

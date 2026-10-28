@@ -84,9 +84,30 @@ jobs:
           # strict: true                   # fail on ERC/DRC errors (off while drafting)
 ```
 
+To comment on pull requests the workflow needs:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+```
+
+Inputs:
+
+| Input | Default | What it does |
+|---|---|---|
+| `project-dir` | — | Folder with the `.kicad_pro` |
+| `strict` | `false` | Fail on ERC/DRC errors |
+| `required-fields` | `Footprint,Datasheet,MPN\|LCSC` | Fields every fitted part needs; `A\|B` = either |
+| `check-capacitor-voltage` | `true` | Capacitors need a `Voltage` field or a value like `10uF 16V` |
+| `comment` | `true` | Post the report on the PR (one comment, updated on each push) |
+| `output-dir` | `fab` | Where outputs are written |
+
 Results:
 
-- **Job summary**: ERC/DRC error and warning counts.
+- **Report** (job summary and PR comment): ERC/DRC counts, BOM changes against
+  the PR's target branch (parts added, removed, changed) and parts missing
+  required fields.
 - **Artifact `<board>-fab`**: ERC/DRC reports, schematic PDF, BOM (CSV/HTML) and,
   once the board has an outline on `Edge.Cuts`, Gerbers, drill, interactive BOM and
   pick & place. A board still without outline skips DRC and PCB outputs with a

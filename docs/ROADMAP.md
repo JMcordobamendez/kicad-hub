@@ -99,9 +99,11 @@ What a reviewer and a buyer need most, ranked by value. All of it is text or fil
 in the CI artifact and the PR comment, so it doesn't depend on the web portal.
 
 1. **BOM diff in the PR comment** (cheap — do first)
-   - [ ] Compare the BOM of the PR branch with the target branch
-   - [ ] Post the changes as text: `+ C14 100nF 0603`, `R7: 10k → 4k7`, `− U5`
-   - [ ] Group by added / removed / changed value / changed footprint
+   - [x] Compare the BOM of the PR branch with the target branch (per reference,
+         `kicad-cli sch export bom`, base checked out in a git worktree)
+   - [x] Post the changes as text: added / removed table + changed fields
+         (`Value: 10k → 4k7`), one sticky comment per board updated on each push
+   - [ ] Confirm on a real PR on GitHub
 2. **Cost and availability**
    - [ ] Unit price and stock per part from LCSC / Mouser / DigiKey (KiBot + KiCost)
    - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
@@ -122,11 +124,13 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          pcbway | eurocircuits …`): only renames columns/files and applies that
          fab's DRC rules. Default: `generic`
 4. **Checks the ERC doesn't do** (cheap — do with 1)
-   - [ ] Every part has MPN, footprint and datasheet (except `DNP` / not-in-BOM)
-   - [ ] Capacitors have a voltage rating field
+   - [x] Every part has MPN, footprint and datasheet (except `DNP` / not-in-BOM);
+         configurable with `required-fields`, `A|B` alternatives (`MPN|LCSC`)
+   - [x] Capacitors have a voltage rating field (or a value like `10uF 16V`)
    - [ ] DRC against the project's own rules by default; a fab profile can add that
          fab's rules (`.kicad_dru`)
-   - [ ] Report missing fields as a list in the job summary and PR comment
+   - [x] Report missing fields as a list in the job summary and PR comment
+         (example board: 42 of 59 parts, mostly datasheet and capacitor voltage)
 5. **Variants** — same design, different builds (e.g. irrigation nodes with or
    without level sensor)
    - [ ] Variant definition in the board repo (KiBot variants, KiBoM style)
