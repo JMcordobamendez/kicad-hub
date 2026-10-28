@@ -29,8 +29,9 @@ Every push or pull request on a KiCad project repository will:
   warnings for obsolete or out-of-stock parts.
 - **Variants**: one BOM, cost and fab package per build variant of the same design.
 - **Datasheets** linked from the BOMs and bundled in the package.
-- **Release**: tagging `vX.Y` produces a versioned fab package, ready to upload to
-  a fab house (JLCPCB format first).
+- **Release**: tagging `vX.Y` produces a versioned fab package in standard formats
+  any fab house accepts (Gerber X2, Excellon, IPC-D-356 netlist, BOM and pick &
+  place CSV, fab notes), with optional per-fab profiles on top.
 
 Mockups: [PR comment](docs/mockups/pull-request.png) ·
 [design portal](docs/mockups/portal.png).

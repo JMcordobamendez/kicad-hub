@@ -31,7 +31,7 @@ flowchart LR
     b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::doing
     b6["6 · Datasheets"]:::todo
     b5["5 · Variants"]:::todo
-    b3["3 · JLCPCB package"]:::todo
+    b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::todo
     b2["2 · Cost and stock"]:::todo
     b7["7 · Before/after images<br/>changes highlighted"]:::todo
   end
@@ -107,14 +107,25 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
    - [ ] Warn on obsolete, not-recommended or out-of-stock parts
    - [ ] API keys as repository secrets; skip gracefully when they are missing
-3. **Ready-to-order package**
-   - [ ] On tag `vX.Y`: zip in the exact format of a fab house (JLCPCB first:
-         Gerbers + BOM + CPL with their column names; KiBot ships templates)
-   - [ ] Fab house as an input, so others can be added later
+3. **Ready-to-order package — generic, any fab house**
+   - [ ] On tag `vX.Y`: one zip in standard formats every fab accepts, no vendor
+         lock-in:
+     - Gerber X2 (+ `.gbrjob`) and Excellon drill (PTH/NPTH split, drill map)
+     - IPC-D-356 netlist, so the fab can run its electrical test against the design
+     - Assembly: BOM (CSV with MPN, manufacturer, quantity, references, DNP) and
+       pick & place (CSV, mm, top/bottom)
+     - Fab notes (`README.txt`): board name, revision, layer count, thickness,
+       stackup, finish, min track/space and drill, generated from the KiCad project
+     - Optional ODB++ / IPC-2581 (KiCad exports both) for fabs that prefer them
+   - [ ] File names with board name + revision; checksum list inside the zip
+   - [ ] Fab profiles as an **optional** layer on top (`fab-profile: jlcpcb |
+         pcbway | eurocircuits …`): only renames columns/files and applies that
+         fab's DRC rules. Default: `generic`
 4. **Checks the ERC doesn't do** (cheap — do with 1)
    - [ ] Every part has MPN, footprint and datasheet (except `DNP` / not-in-BOM)
    - [ ] Capacitors have a voltage rating field
-   - [ ] DRC against the chosen fab house rules (`.kicad_dru`) instead of defaults
+   - [ ] DRC against the project's own rules by default; a fab profile can add that
+         fab's rules (`.kicad_dru`)
    - [ ] Report missing fields as a list in the job summary and PR comment
 5. **Variants** — same design, different builds (e.g. irrigation nodes with or
    without level sensor)
@@ -181,6 +192,9 @@ it's clear the feature is actually missed.
   ready-to-order packages, extra checks, variants and datasheets (phase 2b) come
   before the web viewer polish. Pinned comments on the board (phase 5) stay
   optional: too much work for a one-person team.
+- **Fab-house agnostic** (2026-10-28): the release package uses standard formats
+  (Gerber X2, Excellon, IPC-D-356, CSV BOM/CPL, fab notes) that any fab accepts.
+  Vendor formats (JLCPCB, PCBWay…) are optional profiles, never the default.
 - **Web portal needs public repos** (or GitHub Pro): GitHub Pages is free only
   for public repositories.
 - **Mockups** of the PR comment and the portal: `docs/mockups/`.
