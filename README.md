@@ -2,75 +2,97 @@
 
 Git-based hardware design review for KiCad, running entirely on GitHub.
 
-The goal is to get the collaboration experience of commercial PCB cloud platforms
-(web viewer, visual diffs, design reviews, release packages) for KiCad projects,
-using only free and open-source tools on top of plain git, GitHub Actions and
-GitHub Pages. No extra server to maintain.
+The goal is the collaboration experience of commercial PCB cloud platforms
+(design checks, BOM review, release packages, web viewer, visual diffs) for KiCad
+projects, using only free and open-source tools on top of plain git, GitHub Actions
+and GitHub Pages. No extra server to maintain.
 
-> **Status:** early design phase. Nothing usable yet — see the [roadmap](docs/ROADMAP.md).
+> **Status:** the CI part works and is tested on every push with a real board
+> (see [what works today](#what-works-today)). The web portal and visual diffs are
+> next — see the [roadmap](docs/ROADMAP.md).
 
-## What it will do
+## What works today
 
-Every push or pull request on a KiCad project repository will:
+On every push and pull request of a KiCad project, the action:
 
-- **Check** the design: run ERC and DRC and fail the PR if they don't pass.
-- **Build** fabrication outputs: Gerbers, drill files, pick & place, BOM,
-  schematic PDF and 3D renders.
-- **Publish** a web portal on GitHub Pages for each branch / PR:
-  - schematic and PCB viewer in the browser ([KiCanvas](https://kicanvas.org)),
-  - interactive BOM ([InteractiveHtmlBom](https://github.com/openscopeproject/InteractiveHtmlBom)),
-  - visual diff against the target branch,
-  - downloadable fabrication package.
-- **Comment** on the pull request with links to all of the above, plus a BOM diff
-  (parts added, removed or changed) and missing-field checks (MPN, footprint,
-  datasheet, voltage rating), and before/after images of the changed sheets and
-  layers with the changes highlighted.
-- **Price** the BOM: unit cost and stock per part, total per board and per batch,
-  warnings for obsolete or out-of-stock parts.
-- **Variants**: one BOM, cost and fab package per build variant of the same design.
-- **Datasheets** linked from the BOMs and bundled in the package.
-- **Release**: tagging `vX.Y` produces a versioned fab package in standard formats
-  any fab house accepts (Gerber X2, Excellon, IPC-D-356 netlist, BOM and pick &
-  place CSV, fab notes), with optional per-fab profiles on top.
+- **Checks the design**: ERC and DRC (plus schematic/PCB parity) with `kicad-cli`.
+  Non-blocking by default; `strict: true` fails the job on errors.
+- **Checks the BOM**: every fitted part needs the required fields (by default
+  footprint, datasheet and MPN or LCSC code); capacitors need a voltage rating.
+- **Diffs the BOM** of a pull request against its target branch: parts added,
+  removed and changed (`Value: 10uF → 22uF`).
+- **Resolves the datasheets**: links checked (broken vs. unverifiable), local PDFs
+  found by MPN or value in the datasheet folders and bundled for offline use.
+- **Builds a fab package** in standard formats any fab house accepts (Gerber X2,
+  Excellon, IPC-D-356, BOM and pick & place CSV) with fab notes read from the
+  board, which warn about features below the project rules.
+- **Reports** all of the above in the job summary and as **one comment on the PR**,
+  updated on every push.
+- **Publishes a GitHub Release** with the fab package when you tag `vX.Y`.
+- Also: schematic PDF, BOM (CSV/HTML) and interactive BOM.
+
+A board still being drawn (no outline on `Edge.Cuts`) skips DRC and the PCB outputs
+with a warning instead of failing.
+
+## Planned
+
+- **Variants**: one BOM and fab package per build variant (KiCad 10 variants).
+- **Cost and stock** per part, total per board and per batch.
+- **Before/after images** of the changed sheets and layers, changes highlighted.
+- **Web portal** on GitHub Pages: schematic/PCB viewer in the browser
+  ([KiCanvas](https://kicanvas.org)), iBOM, downloads.
+- **Visual diff** in the portal.
 
 Mockups: [PR comment](docs/mockups/pull-request.png) ·
-[design portal](docs/mockups/portal.png).
+[design portal](docs/mockups/portal.png). Details and progress:
+[roadmap](docs/ROADMAP.md).
 
 ## How the pieces fit together
 
 ```
  KiCad (each designer)
-        │  git push / pull request
+        │  git push / pull request / tag
         ▼
- GitHub repository ──► GitHub Actions (Docker)
-        │                 │  KiBot image (headless KiCad)
-        │                 ├─ ERC / DRC          → PR goes red if they fail
-        │                 ├─ Gerbers, drill, pick & place, BOM
-        │                 ├─ schematic PDF, 3D render
-        │                 ├─ interactive BOM (iBOM)
-        │                 └─ visual diff against the target branch (Kiri / KiDiff)
-        ▼
- GitHub Pages: one web portal per project
-        ├─ KiCanvas viewer (schematic and PCB in the browser)
-        ├─ iBOM
-        ├─ diff of the revision
-        └─ fabrication downloads
+ GitHub repository ──► GitHub Actions ── kicad-hub action (Docker: KiCad 10 + KiBot)
+                          │
+                          ├─ kicad-cli ── ERC / DRC
+                          │            ── per-part BOM (this commit + PR base)
+                          │            ── fab package: Gerber X2, Excellon,
+                          │               IPC-D-356, BOM, pick & place
+                          ├─ Python ──── scripts/datasheets.py  resolve, check, bundle
+                          │            ── scripts/fabnotes.py    fab notes from the board
+                          │            ── scripts/report.py      markdown report
+                          ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
+                          │
+                          ├──► job summary + sticky PR comment
+                          ├──► artifact <board>-fab
+                          └──► GitHub Release (on tags)
+
+ (planned) GitHub Pages portal: KiCanvas viewer, iBOM, visual diff, downloads
 ```
 
-The same design should be portable to GitLab (GitLab CI + GitLab Pages + merge
-requests) for teams that self-host.
+`kicad-cli` is used wherever possible: it respects the settings saved in the
+project (plot layers, rules) and its options are stable. KiBot is kept for the
+outputs it does best.
 
-## How it will be used
+## Usage
 
-kicad-hub is a GitHub Action. A board project only needs a small workflow:
+kicad-hub is a GitHub Action. A board repository only needs a small workflow:
 
 ```yaml
 # .github/workflows/kicad.yml in your board repository
 name: KiCad
+
 on:
   push:
     branches: [main]
+    tags: ["v*"]         # tagging vX.Y publishes the fab package as a release
   pull_request:
+
+permissions:
+  contents: write        # releases (use read if you don't want them)
+  pull-requests: write   # PR comment with the report
+
 jobs:
   board:
     runs-on: ubuntu-latest
@@ -81,27 +103,17 @@ jobs:
       - uses: JMcordobamendez/kicad-hub@main
         with:
           project-dir: hardware/my-board   # folder with the .kicad_pro
-          # strict: true                   # fail on ERC/DRC errors (off while drafting)
 ```
 
-To comment on pull requests and publish releases the workflow needs:
+While kicad-hub is private, enable *Settings → Actions → General → Access →
+"Accessible from repositories owned by the user"* in kicad-hub so your other repos
+can use it.
 
-```yaml
-on:
-  push:
-    branches: [main]
-    tags: ["v*"]         # tagging vX.Y publishes the fab package
-  pull_request:
-permissions:
-  contents: write        # releases (use read if you don't want them)
-  pull-requests: write   # PR comments
-```
-
-Inputs:
+### Inputs
 
 | Input | Default | What it does |
 |---|---|---|
-| `project-dir` | — | Folder with the `.kicad_pro` |
+| `project-dir` | — | Folder with the `.kicad_pro` (required) |
 | `strict` | `false` | Fail on ERC/DRC errors |
 | `required-fields` | `Footprint,Datasheet,MPN\|LCSC` | Fields every fitted part needs; `A\|B` = either |
 | `check-capacitor-voltage` | `true` | Capacitors need a `Voltage` field or a value like `10uF 16V` |
@@ -110,61 +122,79 @@ Inputs:
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
-| `comment` | `true` | Post the report on the PR (one comment, updated on each push) |
+| `comment` | `true` | Post the report on the PR |
+| `github-token` | `github.token` | Token for the PR comment and the release |
+| `image` | `ghcr.io/inti-cmnb/kicad10_auto:1.9.1` | Docker image with KiCad and KiBot |
 | `output-dir` | `fab` | Where outputs are written |
 
-Results:
+Outputs: `has-pcb`, `missing-fields`.
 
-- **Report** (job summary and PR comment): ERC/DRC counts, BOM changes against
-  the PR's target branch (parts added, removed, changed), parts missing
-  required fields and datasheet status (broken links, offline copies).
-- **`package/<board>-<rev>-fab.zip`**: ready to send to any fab house. Gerber X2
-  with job file (the board's own plot settings), Excellon with PTH/NPTH split and
-  drill map, IPC-D-356 netlist, grouped BOM and pick & place in CSV, `README.txt`
-  fab notes read from the board (size, layers, stackup, finish, smallest features,
-  warnings when they are below the project rules) and `SHA256SUMS.txt`. The
-  revision is the tag, else the title block revision, else the commit. On tags it
-  is attached to a GitHub Release.
-- **`datasheets/`** in the artifact: every local datasheet (referenced in the
-  schematic or found by name in the datasheet folders) and an `index.html` linking
-  each part to its datasheet.
-- **Artifact `<board>-fab`**: ERC/DRC reports, schematic PDF, BOM (CSV/HTML) and,
-  once the board has an outline on `Edge.Cuts`, Gerbers, drill, interactive BOM and
-  pick & place. A board still without outline skips DRC and PCB outputs with a
-  warning instead of failing.
+Datasheet folders searched by default: `datasheet(s)/` and `docs/` next to the
+project, and `datasheet(s)/` one level up. A file is used when its name contains
+the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
+`S-82A2AAA-A8T2U`).
 
-ERC/DRC run with `kicad-cli`; outputs are produced by KiBot from
-[`kibot/default.kibot.yaml`](kibot/default.kibot.yaml), inside the
-`ghcr.io/inti-cmnb/kicad10_auto` image.
+### What you get
 
-While kicad-hub is private, enable *Settings → Actions → General → Access →
-"Accessible from repositories owned by the user"* so your other repos can use it.
+**Report** — job summary and PR comment:
+ERC/DRC counts · BOM changes vs. the PR base · parts missing required fields ·
+datasheet status (broken links, offline copies) · fab package warnings.
+
+**Artifact `<board>-fab`:**
+
+```
+reports/      erc/drc (.rpt, .json), per-part BOMs, report.md, datasheets.json
+package/      <board>-<rev>-fab.zip  ← send this to the fab
+  <board>-<rev>/
+    gerber/       Gerber X2 + .gbrjob (layers as set in the board's plot settings)
+    drill/        Excellon PTH and NPTH, drill maps (PDF)
+    assembly/     BOM (CSV, grouped, no DNP) and pick & place (CSV, mm, both sides)
+    *.d356        IPC-D-356 netlist for electrical test
+    README.txt    fab notes: size, layers, stackup, finish, smallest features, warnings
+    SHA256SUMS.txt
+datasheets/   local datasheets + index.html (part → datasheet)
+schematic/    schematic PDF
+bom/          BOM CSV and HTML (KiBot)
+ibom/         interactive BOM
+```
+
+The package revision is the tag on releases, else the title block revision, else
+the commit hash.
+
+## Repository layout
+
+```
+action.yml                  the action
+scripts/                    report.py, datasheets.py, fabnotes.py
+kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
+template/                   starting point for a new board repository
+examples/                   boards used to test the action (see examples/README.md)
+.github/workflows/test.yml  runs the action on the example board on every push/PR/tag
+docs/                       roadmap and mockups
+```
 
 New board repositories start from [`template/`](template/): folder layout,
-`.gitignore`, Git LFS for 3D models, project libraries and a PR review checklist.
+`.gitignore`, `.gitattributes` (LF for KiCad files, Git LFS for 3D models),
+project libraries through `${KIPRJMOD}` and a PR design review checklist.
 
-The platform evolves in this repository; every board project that uses it picks up
-the improvements.
+## Development
 
-## Building blocks
-
-| Need | Tool |
-|---|---|
-| Version control | git (built into KiCad 9/10) |
-| Headless KiCad automation | [KiBot](https://github.com/INTI-CMNB/KiBot) (Docker image) |
-| Web viewer | [KiCanvas](https://kicanvas.org) |
-| Visual diff | [Kiri](https://github.com/leoheck/kiri) / KiDiff |
-| Interactive BOM | InteractiveHtmlBom |
-| CI and hosting | GitHub Actions + GitHub Pages |
+- Every push to `main`, every PR and every `v*` tag runs the action on
+  `examples/royalblue54l-feather` (`.github/workflows/test.yml`). A PR shows the
+  report comment, a tag publishes a release.
+- The Python scripts can be run locally against files exported with a local
+  `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` needs
+  KiCad's own Python (`pcbnew`); on Windows it may open a "font not found" dialog
+  that blocks until closed — that doesn't happen in CI.
 
 ## Known limits
 
 - **No real-time co-editing.** KiCad files don't merge well: split work by
   hierarchical sheet and keep a single owner for the PCB at a time.
-- **No component/supply-chain management** for now.
-- Comments pinned to a location on the board (click a component → comment) are a
-  possible later phase, not part of the first versions.
+- **No web viewer yet**, and GitHub Pages is free only for public repositories.
+- Comments pinned to a location on the board are an optional later phase.
 
 ## License
 
-To be decided before going public (probably MIT).
+To be decided before going public (probably MIT). The example board keeps its own
+license (CERN-OHL-P, see [examples/README.md](examples/README.md)).

@@ -17,7 +17,7 @@ flowchart LR
     p1b["Tried on a real board<br/>(RiegoAutomatico PR)"]:::doing
   end
 
-  subgraph P2["2 · CI with KiBot"]
+  subgraph P2["2 · CI"]
     direction TB
     p2a["ERC / DRC + job summary"]:::done
     p2b["PDF, BOM, iBOM, Gerbers,<br/>drill, pick & place"]:::done
@@ -58,6 +58,9 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
+**Now:** phase 2 done; 2b has BOM diff, field checks, datasheets and the fab
+package working. Next: variants.
+
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
 
@@ -77,11 +80,12 @@ Lives in `template/`.
 - [ ] Try it on a real personal board and adjust
 - [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
-## Phase 2 — CI with KiBot (~1–2 days)
+## Phase 2 — CI (~1–2 days)
 First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico)
 (branch `feat/ci`), a board with schematic in progress and an empty PCB.
 
-- [x] `kibot/default.kibot.yaml`: schematic PDF, BOM, iBOM, Gerbers, drill, pick & place
+- [x] `kibot/default.kibot.yaml`: schematic PDF, BOM (CSV/HTML), iBOM. Gerbers,
+      drill and pick & place moved to the fab package made with `kicad-cli` (2b.3)
 - [x] Composite action `action.yml` (instead of a reusable workflow: it can ship
       the KiBot config next to it and read it from `github.action_path`)
 - [x] ERC/DRC with `kicad-cli`, counts in the job summary, reports in the artifact
@@ -92,6 +96,8 @@ First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico
 - [x] First green run on GitHub Actions (2026-10-28, example board: all outputs OK)
 - [x] Standard KiCad libraries registered for kicad-cli in the container (ERC on the
       example went from 203 to 18 findings, DRC lost 67 spurious library warnings)
+- [x] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
+      a GitHub Release (see 2b.3; confirmed with tag v0.0.1-test, 2026-10-28)
 
 ### 2b — BOM, sourcing and manufacturing
 
@@ -137,9 +143,11 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (example board: 42 of 59 parts, mostly datasheet and capacitor voltage)
 5. **Variants** — same design, different builds (e.g. irrigation nodes with or
    without level sensor)
-   - [ ] Variant definition in the board repo (KiBot variants, KiBoM style)
-   - [ ] One BOM, cost and fab package per variant; DNP parts per variant listed
-   - [ ] Variant as a dimension in the BOM diff
+   - [ ] Use KiCad 10 native variants (defined in the project; `kicad-cli` takes
+         `--variant` for BOM, Gerbers and pick & place) instead of KiBot variants
+   - [ ] One BOM and fab package per variant; DNP parts per variant listed
+   - [ ] Variant as a dimension in the BOM diff and the report
+   - [ ] Example board: add a variant to test with (e.g. without the debugger)
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)
@@ -161,8 +169,6 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] Images embedded in the PR comment (not just a link), each linking to the
          full-size diff
    - [ ] Shares the diff engine with phase 4 (visual diff in the portal)
-- [x] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
-      a GitHub Release (see 2b.3; confirmed with tag v0.0.1-test, 2026-10-28)
 
 ## Phase 3 — Web portal (~2–3 days)
 - [ ] Static page per commit or branch on GitHub Pages
@@ -202,6 +208,12 @@ it's clear the feature is actually missed.
 - **Two kinds of repositories.** This repo is the platform (reusable action +
   template). Each board lives in its own repo and calls the action.
 - **Reuse existing tools** (KiBot, KiCanvas, Kiri, iBOM) instead of writing our own.
+- **`kicad-cli` first, KiBot for the rest** (2026-10-28): ERC/DRC, BOMs and the fab
+  package use `kicad-cli` (respects the project's saved settings, stable options);
+  KiBot keeps schematic PDF, BOM HTML and iBOM. Small Python scripts on the runner
+  glue it together (`scripts/`).
+- **Test on a finished board** (2026-10-28): the action is developed against the
+  KiCad demo `royalblue54l-feather`, not a board in progress.
 - **Developed as a personal project**, with personal designs only.
 - **Usefulness over copying commercial platforms** (2026-10-28): BOM diff, cost,
   ready-to-order packages, extra checks, variants and datasheets (phase 2b) come
