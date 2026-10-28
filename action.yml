@@ -17,6 +17,18 @@ inputs:
   check-capacitor-voltage:
     description: Require a voltage rating on capacitors (a "Voltage" field, or a value like "10uF 16V").
     default: "true"
+  datasheet-dirs:
+    description: >-
+      Extra folders (comma-separated, from the repo root) with datasheet files. Always
+      searched too: datasheet(s)/ and docs/ next to the project, and datasheet(s)/ one
+      level up. A file is used when its name contains the part's MPN or value.
+    default: ""
+  datasheet-optional-refs:
+    description: Reference prefixes that don't need a datasheet (generic parts).
+    default: "R,C,TP,H,MH,FID,JP,NT,LOGO"
+  check-datasheet-links:
+    description: Check that datasheet URLs respond (404 = broken; sites that block bots = unverified).
+    default: "true"
   comment:
     description: On pull requests, post the report as a comment (updated on every push).
     default: "true"
@@ -152,6 +164,19 @@ runs:
           fi
         fi
 
+    - name: Datasheets
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        OUT: ${{ inputs.output-dir }}
+        DIRS: ${{ inputs.datasheet-dirs }}
+        CHECK: ${{ inputs.check-datasheet-links }}
+      run: |
+        set -euo pipefail
+        python3 "$GITHUB_ACTION_PATH/scripts/datasheets.py" --bom "$OUT/reports/bom-parts.csv" \
+          --project-dir "$PROJECT_DIR" --dirs "$DIRS" --check-urls "$CHECK" \
+          --out-dir "$OUT" --json "$OUT/reports/datasheets.json"
+
     - name: Report
       id: report
       shell: bash
@@ -160,6 +185,7 @@ runs:
         OUT: ${{ inputs.output-dir }}
         REQUIRED: ${{ inputs.required-fields }}
         CAP_VOLTAGE: ${{ inputs.check-capacitor-voltage }}
+        DS_OPTIONAL: ${{ inputs.datasheet-optional-refs }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
       run: |
         set -euo pipefail
@@ -168,6 +194,7 @@ runs:
           --name "$NAME" --bom "$r/bom-parts.csv" --base-bom "$r/bom-parts-base.csv" --base-ref "${BASE_REF:-base}" \
           --erc "$r/erc.json" --drc "$r/drc.json" \
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
+          --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"

@@ -100,14 +100,20 @@ Inputs:
 | `strict` | `false` | Fail on ERC/DRC errors |
 | `required-fields` | `Footprint,Datasheet,MPN\|LCSC` | Fields every fitted part needs; `A\|B` = either |
 | `check-capacitor-voltage` | `true` | Capacitors need a `Voltage` field or a value like `10uF 16V` |
+| `datasheet-dirs` | — | Extra folders with datasheet files (matched by MPN or value) |
+| `datasheet-optional-refs` | `R,C,TP,H,MH,FID,JP,NT,LOGO` | Prefixes that don't need a datasheet |
+| `check-datasheet-links` | `true` | Check that datasheet URLs respond |
 | `comment` | `true` | Post the report on the PR (one comment, updated on each push) |
 | `output-dir` | `fab` | Where outputs are written |
 
 Results:
 
 - **Report** (job summary and PR comment): ERC/DRC counts, BOM changes against
-  the PR's target branch (parts added, removed, changed) and parts missing
-  required fields.
+  the PR's target branch (parts added, removed, changed), parts missing
+  required fields and datasheet status (broken links, offline copies).
+- **`datasheets/`** in the artifact: every local datasheet (referenced in the
+  schematic or found by name in the datasheet folders) and an `index.html` linking
+  each part to its datasheet.
 - **Artifact `<board>-fab`**: ERC/DRC reports, schematic PDF, BOM (CSV/HTML) and,
   once the board has an outline on `Edge.Cuts`, Gerbers, drill, interactive BOM and
   pick & place. A board still without outline skips DRC and PCB outputs with a

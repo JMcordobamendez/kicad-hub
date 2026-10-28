@@ -24,6 +24,9 @@ ap.add_argument("--drc")
 ap.add_argument("--required", default="Footprint,Datasheet,MPN|LCSC",
                 help="comma-separated fields; 'A|B' means A or B is enough")
 ap.add_argument("--cap-voltage", default="true")
+ap.add_argument("--datasheets", help="JSON from datasheets.py")
+ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
+                help="reference prefixes that don't need a datasheet")
 ap.add_argument("--run-url", default="")
 ap.add_argument("--out", required=True, help="markdown report")
 ap.add_argument("--out-json", required=True, help="counts for later steps")
@@ -109,6 +112,21 @@ else:
             md += [table(["Part", "Value", "Change"], changed), ""]
 
 # --- Missing fields ------------------------------------------------------------
+ds = json.load(open(args.datasheets, encoding="utf-8")) if args.datasheets and os.path.exists(args.datasheets) else None
+
+
+ds_optional = {p.strip().upper() for p in args.datasheet_optional.split(",") if p.strip()}
+
+
+def has(ref, r, field):
+    if field == "Datasheet" and ref_key(ref)[0].upper() in ds_optional:
+        return True  # resistors, capacitors, test points…: generic parts, no datasheet needed
+    if field == "Datasheet" and ds is not None:
+        # a PDF found in the datasheet folder counts even if the field is empty
+        return ds.get(ref, {}).get("source", "none") != "none"
+    return not blank(r.get(field))
+
+
 groups = [[a.strip() for a in g.split("|") if a.strip()] for g in args.required.split(",") if g.strip()]
 check_caps = args.cap_voltage.lower() == "true"
 volt_re = re.compile(r"\d+(\.\d+)?\s*[kK]?V\b")
@@ -117,23 +135,43 @@ for ref in sorted(head, key=ref_key):
     r = head[ref]
     if not blank(r.get("DNP")):
         continue  # not fitted: no MPN / datasheet needed
-    miss = ["|".join(g) for g in groups if all(blank(r.get(a)) for a in g)]
+    miss = ["|".join(g) for g in groups if not any(has(ref, r, a) for a in g)]
     if check_caps and re.match(r"C\d", ref) and blank(r.get("Voltage")) and not volt_re.search(r.get("Value") or ""):
         miss.append("Voltage")
     for m in miss:
         per_rule[m] = per_rule.get(m, 0) + 1
     if miss:
         missing.append([ref, cell(r.get("Value")), ", ".join(miss)])
+fitted = sum(1 for r in head.values() if blank(r.get("DNP")))
 counts["missing_fields"] = len(missing)
 
 md.append("### Missing fields")
 if not missing:
-    md += [f"All {len(head)} fitted parts have the required fields.", ""]
+    md += [f"All {fitted} fitted parts have the required fields.", ""]
 else:
     summary = ", ".join(f"{k}: {v}" for k, v in sorted(per_rule.items(), key=lambda kv: -kv[1]))
-    md += [f"**{len(missing)} of {len(head)} parts** miss required fields ({summary}).", "",
+    md += [f"**{len(missing)} of {fitted} fitted parts** miss required fields ({summary}).", "",
            "<details><summary>Show parts</summary>", "", table(["Part", "Value", "Missing"], missing),
            "", "</details>", ""]
+
+# --- Datasheets ---------------------------------------------------------------
+if ds is not None:
+    found = {k: v for k, v in ds.items() if v["source"] != "none"}
+    by_src = {s: sum(1 for v in found.values() if v["source"] == s) for s in ("url", "file", "folder")}
+    broken = [[k, cell(v["value"]), cell(v["target"]), cell(v.get("why"))] for k, v in ds.items() if v["status"] == "broken"]
+    unver = [[k, cell(v["value"]), cell(v["target"]), cell(v.get("why"))] for k, v in ds.items() if v["status"] == "unverified"]
+    counts.update(datasheets_found=len(found), datasheets_broken=len(broken))
+    md += ["### Datasheets",
+           f"**{len(found)} of {len(ds)} fitted parts** have a datasheet: {by_src['url']} links, "
+           f"{by_src['file']} files referenced in the schematic, {by_src['folder']} matched by name in the "
+           f"datasheet folder; {sum(1 for v in found.values() if v['source'] != 'url' or v.get('local'))} "
+           f"available offline in the artifact (`datasheets/index.html`).", ""]
+    if broken:
+        md += [f"**{len(broken)} broken:**", "", table(["Part", "Value", "Datasheet", "Problem"], broken), ""]
+    if unver:
+        md += [f"<details><summary>{len(unver)} links could not be verified (the site blocks automated "
+               f"checks or timed out)</summary>", "", table(["Part", "Value", "Datasheet", "Reason"], unver),
+               "", "</details>", ""]
 
 if args.run_url:
     md += [f"[Run details and fab outputs]({args.run_url})"]

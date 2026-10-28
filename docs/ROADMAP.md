@@ -29,8 +29,8 @@ flowchart LR
     direction TB
     b1["1 · BOM diff in PR comment"]:::done
     b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::done
-    b6["6 · Datasheets"]:::doing
-    b5["5 · Variants"]:::todo
+    b6["6 · Datasheets"]:::done
+    b5["5 · Variants"]:::doing
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::todo
     b2["2 · Cost and stock"]:::todo
     b7["7 · Before/after images<br/>changes highlighted"]:::todo
@@ -137,10 +137,17 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] One BOM, cost and fab package per variant; DNP parts per variant listed
    - [ ] Variant as a dimension in the BOM diff
 6. **Datasheets**
-   - [ ] Datasheet column as a link in the HTML BOM and the interactive BOM
-   - [ ] Local datasheets in the board repo (e.g. `hardware/datasheet/`) resolved
-         and copied into the artifact, so the package is self-contained
-   - [ ] Check that every datasheet link or file exists
+   - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
+         (URL and/or offline copy)
+   - [ ] Datasheet column as a clickable link in the KiBot HTML BOM and the iBOM
+   - [x] Local datasheets resolved and copied into the artifact, so the package is
+         self-contained: paths in the Datasheet field (`${KIPRJMOD}` or relative), and
+         files in datasheet folders matched by MPN/value, family names included
+         (`S-82A2A_B_C.pdf` → `S-82A2AAA-A8T2U`). Offline copy even when a URL exists
+   - [x] Check that every datasheet link or file exists: 404/410/DNS = broken,
+         sites that block bots (403, timeouts) = unverified, not counted as broken
+   - [x] Generic parts (R, C, test points, holes, fiducials…) don't need a datasheet
+         (`datasheet-optional-refs`)
    - [ ] (Phase 3) open the datasheet from the selected part in the web viewer
 7. **Before/after images in the PR comment, with the changes highlighted**
    - [ ] Render the changed schematic sheets and PCB layers for both branches (SVG/PNG)
