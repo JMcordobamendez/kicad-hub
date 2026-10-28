@@ -52,6 +52,28 @@ runs:
       shell: bash
       run: docker pull --quiet "${{ inputs.image }}"
 
+    - name: Register KiCad standard libraries
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -euo pipefail
+        # kicad-cli starts with an empty config in a fresh container, so every symbol and
+        # footprint from the standard libraries is reported as "library not found".
+        # Give it the stock global lib tables in a HOME shared by all later steps.
+        mkdir -p "$RUNNER_TEMP/kicad-home"
+        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" "$IMAGE" sh -c '
+          for t in sym-lib-table fp-lib-table; do
+            src=$(ls /usr/share/kicad/template/$t /usr/share/kicad/$t 2>/dev/null | head -n 1)
+            [ -n "$src" ] || { echo "missing $t"; continue; }
+            for v in $(ls /usr/share/kicad 2>/dev/null | grep -E "^[0-9]+\.[0-9]+$" || true) 10.0; do
+              mkdir -p "$HOME/.config/kicad/$v" && cp "$src" "$HOME/.config/kicad/$v/"
+            done
+          done' | tee "$RUNNER_TEMP/kicad-libs.log"
+        if grep -q missing "$RUNNER_TEMP/kicad-libs.log"; then
+          echo "::warning::Standard KiCad library tables not found in $IMAGE: ERC/DRC will report library warnings"
+        fi
+
     - name: ERC / DRC
       id: checks
       shell: bash
@@ -64,7 +86,7 @@ runs:
       run: |
         set -uo pipefail
         mkdir -p "$OUT/reports"
-        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
 
         kicad sch erc --severity-all --format json -o "$OUT/reports/erc.json" "$PROJECT_DIR/$NAME.kicad_sch"
         kicad sch erc --severity-all --format report -o "$OUT/reports/erc.rpt" "$PROJECT_DIR/$NAME.kicad_sch"
@@ -81,7 +103,7 @@ runs:
         fi
 
         {
-          echo "## KiCad checks — $NAME"
+          echo "## KiCad checks â€” $NAME"
           echo
           echo "| Check | Errors | Warnings | Unconnected |"
           echo "|---|---|---|---|"
@@ -113,7 +135,7 @@ runs:
           pcb_args=(-b "$PROJECT_DIR/$NAME.kicad_pcb")
         fi
         # -s all: ERC/DRC already ran in the previous step
-        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w "$IMAGE" \
+        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" \
           kibot -c "$OUT/.kibot.yaml" -e "$PROJECT_DIR/$NAME.kicad_sch" "${pcb_args[@]}" \
                 -d "$OUT" -s all $targets
         rm "$OUT/.kibot.yaml"
