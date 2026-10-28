@@ -61,6 +61,14 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          and copied into the artifact, so the package is self-contained
    - [ ] Check that every datasheet link or file exists
    - [ ] (Phase 3) open the datasheet from the selected part in the web viewer
+7. **Before/after images in the PR comment, with the changes highlighted**
+   - [ ] Render the changed schematic sheets and PCB layers for both branches (SVG/PNG)
+   - [ ] Highlight what changed: added in green, removed in red, unchanged dimmed
+         (pixel/vector diff, as Kiri/KiDiff do), plus a box around each changed area
+   - [ ] Only the sheets/layers that changed, to keep the comment short
+   - [ ] Images embedded in the PR comment (not just a link), each linking to the
+         full-size diff
+   - [ ] Shares the diff engine with phase 4 (visual diff in the portal)
 - [ ] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
       a GitHub Release
 
@@ -89,7 +97,6 @@ it's clear the feature is actually missed.
 - [ ] Microcontroller pin map from the schematic (GPIO → net) as a table and a
       `pinout.h`, so firmware and board don't drift apart
 - [ ] Notifications (e.g. Telegram) when CI finishes or a release is published
-- [ ] Before/after images embedded in the PR comment, not only a link to the diff
 - [ ] 3D render output (slow, low value per push: maybe only on releases)
 
 ## Before going public

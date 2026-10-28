@@ -23,7 +23,8 @@ Every push or pull request on a KiCad project repository will:
   - downloadable fabrication package.
 - **Comment** on the pull request with links to all of the above, plus a BOM diff
   (parts added, removed or changed) and missing-field checks (MPN, footprint,
-  datasheet, voltage rating).
+  datasheet, voltage rating), and before/after images of the changed sheets and
+  layers with the changes highlighted.
 - **Price** the BOM: unit cost and stock per part, total per board and per batch,
   warnings for obsolete or out-of-stock parts.
 - **Variants**: one BOM, cost and fab package per build variant of the same design.
