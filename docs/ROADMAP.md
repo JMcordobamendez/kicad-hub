@@ -30,10 +30,10 @@ flowchart LR
     b1["1 · BOM diff in PR comment"]:::done
     b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::done
     b6["6 · Datasheets"]:::done
-    b5["5 · Variants"]:::doing
+    b5["5 · Variants"]:::done
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::done
     b2["2 · Cost and stock"]:::todo
-    b7["7 · Before/after images<br/>changes highlighted"]:::todo
+    b7["7 · Before/after images<br/>changes highlighted"]:::doing
   end
 
   subgraph P3["3 · Web portal"]
@@ -59,7 +59,7 @@ flowchart LR
 ```
 
 **Now:** phase 2 done; 2b has BOM diff, field checks, datasheets and the fab
-package working. Next: variants.
+package working, variants added. Next: before/after images.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -143,11 +143,18 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (example board: 42 of 59 parts, mostly datasheet and capacitor voltage)
 5. **Variants** — same design, different builds (e.g. irrigation nodes with or
    without level sensor)
-   - [ ] Use KiCad 10 native variants (defined in the project; `kicad-cli` takes
-         `--variant` for BOM, Gerbers and pick & place) instead of KiBot variants
-   - [ ] One BOM and fab package per variant; DNP parts per variant listed
-   - [ ] Variant as a dimension in the BOM diff and the report
-   - [ ] Example board: add a variant to test with (e.g. without the debugger)
+   - [x] KiCad 10 native variants: names in `.kicad_pro` (`schematic.variants`),
+         overrides per symbol instance in the schematic (`(variant (name …) (dnp yes)
+         (field …))`). Input `variants: auto | list | none`
+   - [x] One BOM and pick & place per variant in the fab package (`assembly/<variant>/`).
+         Pick & place filtered with the schematic's per-variant DNP, because
+         `kicad-cli pcb export pos --variant` reads DNP from the PCB, which may not
+         be updated yet
+   - [x] Report: per variant, fitted parts, parts not fitted / fitted only there and
+         changed fields
+   - [x] Example board: variant `lite` (no debugger: U5, U6, Y2, C18, C20 DNP; C10
+         10uF as a field-change test)
+   - [ ] Variant as a dimension in the PR BOM diff (today the diff is on the default build)
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)

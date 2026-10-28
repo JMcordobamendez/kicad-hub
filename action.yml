@@ -29,6 +29,11 @@ inputs:
   check-datasheet-links:
     description: Check that datasheet URLs respond (404 = broken; sites that block bots = unverified).
     default: "true"
+  variants:
+    description: >-
+      KiCad design variants to build: "auto" (all defined in the project), a
+      comma-separated list of names, or "none".
+    default: auto
   extra-formats:
     description: Extra board formats for the fab package, comma-separated (odb, ipc2581).
     default: ""
@@ -138,6 +143,7 @@ runs:
         OUT: ${{ inputs.output-dir }}
         IMAGE: ${{ inputs.image }}
         REQUIRED: ${{ inputs.required-fields }}
+        VARIANTS: ${{ inputs.variants }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
@@ -153,6 +159,26 @@ runs:
         bom() { kicad sch export bom --fields "$fields" --labels "$labels" --group-by "" --ref-range-delimiter "" -o "$2" "$1"; }
 
         bom "$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts.csv"
+
+        # Design variants (KiCad 10): one per-part BOM each, listed in variants.json
+        pro="$PROJECT_DIR/$NAME.kicad_pro"
+        case "$VARIANTS" in
+          none) names="" ;;
+          auto) names=$(jq -r '.schematic.variants[]?.name' "$pro") ;;
+          *)    names=$(printf '%s' "$VARIANTS" | tr ',' '\n' | sed 's/^ *//;s/ *$//') ;;
+        esac
+        echo "[]" > "$OUT/reports/variants.json"
+        while IFS= read -r v; do
+          [ -n "$v" ] || continue
+          safe=$(printf '%s' "$v" | tr -c 'A-Za-z0-9._-' '_')
+          vbom="$OUT/reports/bom-parts-variant-$safe.csv"
+          kicad sch export bom --variant "$v" --fields "$fields" --labels "$labels" \
+            --group-by "" --ref-range-delimiter "" -o "$vbom" "$PROJECT_DIR/$NAME.kicad_sch"
+          desc=$(jq -r --arg v "$v" '.schematic.variants[]? | select(.name == $v) | .description // ""' "$pro")
+          jq --arg n "$v" --arg d "$desc" --arg b "$vbom" --arg s "$safe" \
+             '. + [{name: $n, description: $d, bom: $b, dir: $s}]' "$OUT/reports/variants.json" > "$OUT/reports/v.tmp"
+          mv "$OUT/reports/v.tmp" "$OUT/reports/variants.json"
+        done <<< "$names"
 
         # On pull requests, the same BOM from the target branch, for the diff
         if [ -n "$BASE_SHA" ]; then
@@ -215,13 +241,25 @@ runs:
         run kicad-cli pcb export drill --excellon-separate-th --generate-map --map-format pdf \
             --excellon-units mm -o "$pkg/drill/" "$pcb"
         run kicad-cli pcb export ipcd356 -o "$pkg/$base.d356" "$pcb"
-        run kicad-cli pcb export pos --format csv --units mm --side both --exclude-dnp \
-            -o "$pkg/assembly/$base-cpl.csv" "$pcb"
-        run kicad-cli sch export bom --exclude-dnp \
-            --fields 'Reference,${QUANTITY},Value,Footprint,MPN,Manufacturer,LCSC' \
-            --labels 'References,Qty,Value,Footprint,MPN,Manufacturer,LCSC' \
-            --group-by 'Value,Footprint,MPN,Manufacturer,LCSC' \
-            -o "$pkg/assembly/$base-bom.csv" "$sch"
+        # Assembly files for the default build and each variant. DNP comes from the
+        # schematic (per-variant BOM), so the CPL is right even if the PCB wasn't updated.
+        run kicad-cli pcb export pos --format csv --units mm --side both -o "$OUT/reports/cpl-all.csv" "$pcb"
+        assembly() {  # $1 dir, $2 file prefix, $3 per-part BOM, $4 variant name (empty = default)
+          mkdir -p "$1"
+          run kicad-cli sch export bom --exclude-dnp ${4:+--variant "$4"} \
+              --fields 'Reference,${QUANTITY},Value,Footprint,MPN,Manufacturer,LCSC' \
+              --labels 'References,Qty,Value,Footprint,MPN,Manufacturer,LCSC' \
+              --group-by 'Value,Footprint,MPN,Manufacturer,LCSC' \
+              -o "$1/$2-bom.csv" "$sch"
+          python3 "$GITHUB_ACTION_PATH/scripts/variant_cpl.py" "$3" "$OUT/reports/cpl-all.csv" "$1/$2-cpl.csv"
+        }
+        assembly "$pkg/assembly" "$base" "$OUT/reports/bom-parts.csv" ""
+        variant_lines=""
+        while IFS=$'\t' read -r vname vdir vbom vdesc; do
+          [ -n "$vname" ] || continue
+          assembly "$pkg/assembly/$vdir" "$base-$vdir" "$vbom" "$vname"
+          variant_lines="$variant_lines  $vname: assembly/$vdir/  ${vdesc}"$'\n'
+        done < <(jq -r '.[] | [.name, .dir, .bom, .description] | @tsv' "$OUT/reports/variants.json")
         for fmt in $(printf '%s' "$EXTRA" | tr ',' ' '); do
           case "$fmt" in
             odb) run kicad-cli pcb export odb -o "$pkg/$base-odb.zip" "$pcb" ;;
@@ -234,6 +272,9 @@ runs:
         cp "$GITHUB_ACTION_PATH/scripts/fabnotes.py" "$OUT/.fabnotes.py"
         run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" > "$OUT/reports/fab-warnings.txt"
         rm "$OUT/.fabnotes.py"
+        if [ -n "$variant_lines" ]; then
+          printf '\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n%s' "$variant_lines" >> "$pkg/README.txt"
+        fi
         while IFS= read -r w; do echo "::warning::$w"; done < "$OUT/reports/fab-warnings.txt"
 
         (cd "$pkg" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
@@ -261,6 +302,7 @@ runs:
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
+          --variants "$r/variants.json" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"

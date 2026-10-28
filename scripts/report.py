@@ -27,6 +27,7 @@ ap.add_argument("--cap-voltage", default="true")
 ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
+ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
 ap.add_argument("--package", default="", help="file name of the fab package zip")
 ap.add_argument("--package-warnings", help="text file, one warning per line, from fabnotes.py")
 ap.add_argument("--run-url", default="")
@@ -112,6 +113,31 @@ else:
             md += [table(["Part", "Value", "Footprint"], rows), ""]
         if changed:
             md += [table(["Part", "Value", "Change"], changed), ""]
+
+# --- Variants -------------------------------------------------------------------
+variants = json.load(open(args.variants, encoding="utf-8")) if args.variants and os.path.exists(args.variants) else []
+if variants:
+    md += ["### Variants", ""]
+    rows = []
+    for v in variants:
+        vb = load_bom(v["bom"]) or {}
+        not_fitted, fitted, changes = [], [], []
+        for ref in sorted(set(head) & set(vb), key=ref_key):
+            was, now = not blank(head[ref].get("DNP")), not blank(vb[ref].get("DNP"))
+            if now and not was:
+                not_fitted.append(ref)
+            elif was and not now:
+                fitted.append(ref)
+            changes += [f"{ref} {c}: {cell(head[ref].get(c))} → {cell(vb[ref].get(c))}"
+                        for c in compare if c != "DNP"
+                        and (head[ref].get(c) or "").strip() != (vb[ref].get(c) or "").strip()]
+        n_fit = sum(1 for r in vb.values() if blank(r.get("DNP")))
+        rows.append([f"**{v['name']}**", cell(v.get("description")), str(n_fit),
+                     ", ".join(not_fitted) or "—", ", ".join(fitted) or "—", "<br>".join(changes) or "—"])
+    md += [table(["Variant", "Description", "Fitted parts", "Not fitted (vs. default)",
+                  "Fitted only here", "Changed fields"], rows), "",
+           "Each variant has its own BOM and pick & place in the fab package (`assembly/<variant>/`).", ""]
+    counts["variants"] = len(variants)
 
 # --- Missing fields ------------------------------------------------------------
 ds = json.load(open(args.datasheets, encoding="utf-8")) if args.datasheets and os.path.exists(args.datasheets) else None

@@ -7072,6 +7072,10 @@
 				(path "/ba76ff89-c129-45ae-a3c9-97538370856c/bee6e003-c9d0-4aff-a9a9-7e1c876b28cb"
 					(reference "U6")
 					(unit 1)
+					(variant
+						(name "lite")
+						(dnp yes)
+					)
 				)
 			)
 		)
@@ -7760,6 +7764,10 @@
 				(path "/ba76ff89-c129-45ae-a3c9-97538370856c/bee6e003-c9d0-4aff-a9a9-7e1c876b28cb"
 					(reference "U5")
 					(unit 1)
+					(variant
+						(name "lite")
+						(dnp yes)
+					)
 				)
 			)
 		)
@@ -8122,6 +8130,10 @@
 				(path "/ba76ff89-c129-45ae-a3c9-97538370856c/bee6e003-c9d0-4aff-a9a9-7e1c876b28cb"
 					(reference "C20")
 					(unit 1)
+					(variant
+						(name "lite")
+						(dnp yes)
+					)
 				)
 			)
 		)
@@ -8419,6 +8431,13 @@
 				(path "/ba76ff89-c129-45ae-a3c9-97538370856c/bee6e003-c9d0-4aff-a9a9-7e1c876b28cb"
 					(reference "C10")
 					(unit 1)
+					(variant
+						(name "lite")
+						(field
+							(name "Value")
+							(value "10uF")
+						)
+					)
 				)
 			)
 		)
@@ -8640,6 +8659,10 @@
 				(path "/ba76ff89-c129-45ae-a3c9-97538370856c/bee6e003-c9d0-4aff-a9a9-7e1c876b28cb"
 					(reference "Y2")
 					(unit 1)
+					(variant
+						(name "lite")
+						(dnp yes)
+					)
 				)
 			)
 		)
@@ -9554,6 +9577,10 @@
 				(path "/ba76ff89-c129-45ae-a3c9-97538370856c/bee6e003-c9d0-4aff-a9a9-7e1c876b28cb"
 					(reference "C18")
 					(unit 1)
+					(variant
+						(name "lite")
+						(dnp yes)
+					)
 				)
 			)
 		)

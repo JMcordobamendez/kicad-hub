@@ -28,6 +28,9 @@ On every push and pull request of a KiCad project, the action:
   board, which warn about features below the project rules.
 - **Reports** all of the above in the job summary and as **one comment on the PR**,
   updated on every push.
+- **Builds every design variant** (KiCad 10 variants, read from the project): the
+  report lists what each one fits, leaves out or changes, and the fab package gets
+  a BOM and pick & place per variant.
 - **Publishes a GitHub Release** with the fab package when you tag `vX.Y`.
 - Also: schematic PDF, BOM (CSV/HTML) and interactive BOM.
 
@@ -36,7 +39,6 @@ with a warning instead of failing.
 
 ## Planned
 
-- **Variants**: one BOM and fab package per build variant (KiCad 10 variants).
 - **Cost and stock** per part, total per board and per batch.
 - **Before/after images** of the changed sheets and layers, changes highlighted.
 - **Web portal** on GitHub Pages: schematic/PCB viewer in the browser
@@ -120,6 +122,7 @@ can use it.
 | `datasheet-dirs` | — | Extra folders with datasheet files (matched by MPN or value) |
 | `datasheet-optional-refs` | `R,C,TP,H,MH,FID,JP,NT,LOGO` | Prefixes that don't need a datasheet |
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
+| `variants` | `auto` | Design variants to build: `auto` (all in the project), a list, or `none` |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
 | `comment` | `true` | Post the report on the PR |
@@ -137,7 +140,7 @@ the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 ### What you get
 
 **Report** — job summary and PR comment:
-ERC/DRC counts · BOM changes vs. the PR base · parts missing required fields ·
+ERC/DRC counts · BOM changes vs. the PR base · variants · parts missing required fields ·
 datasheet status (broken links, offline copies) · fab package warnings.
 
 **Artifact `<board>-fab`:**
@@ -149,6 +152,7 @@ package/      <board>-<rev>-fab.zip  ← send this to the fab
     gerber/       Gerber X2 + .gbrjob (layers as set in the board's plot settings)
     drill/        Excellon PTH and NPTH, drill maps (PDF)
     assembly/     BOM (CSV, grouped, no DNP) and pick & place (CSV, mm, both sides)
+      <variant>/  the same for each design variant
     *.d356        IPC-D-356 netlist for electrical test
     README.txt    fab notes: size, layers, stackup, finish, smallest features, warnings
     SHA256SUMS.txt
@@ -165,7 +169,7 @@ the commit hash.
 
 ```
 action.yml                  the action
-scripts/                    report.py, datasheets.py, fabnotes.py
+scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
