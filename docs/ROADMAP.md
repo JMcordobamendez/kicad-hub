@@ -25,6 +25,8 @@ First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico
 - [x] ERC/DRC with `kicad-cli`, counts in the job summary, reports in the artifact
 - [x] Board without outline → DRC and PCB outputs skipped with a warning
 - [x] `strict: true` makes ERC/DRC errors fail the job
+- [x] Example board with a routed PCB: `examples/royalblue54l-feather` (KiCad demo,
+      CERN-OHL-P), checked on every push by `.github/workflows/test.yml`
 - [ ] First green run on GitHub Actions (not tested yet: no Docker on the dev PC)
 
 ### 2b — BOM, sourcing and manufacturing
