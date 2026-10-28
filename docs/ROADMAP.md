@@ -151,7 +151,7 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)
-   - [ ] Datasheet column as a clickable link in the KiBot HTML BOM and the iBOM
+   - [x] Datasheet column as a clickable link in the KiBot HTML BOM and the iBOM
    - [x] Local datasheets resolved and copied into the artifact, so the package is
          self-contained: paths in the Datasheet field (`${KIPRJMOD}` or relative), and
          files in datasheet folders matched by MPN/value, family names included

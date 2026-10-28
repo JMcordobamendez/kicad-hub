@@ -25,9 +25,18 @@ outputs:
     dir: bom
     options:
       format: HTML
+      html:
+        # Datasheet column rendered as a clickable link
+        datasheet_as_link: Datasheet
 
   # --- From the PCB (only when the board has an outline) ------------------
   - name: ibom
     comment: Interactive BOM
     type: ibom
     dir: ibom
+    options:
+      # Pull Datasheet from the netlist and show it; iBOM turns URL values into links,
+      # but group only by Value/Footprint so the datasheet doesn't split the rows.
+      extra_fields: Datasheet
+      show_fields: Value,Footprint,Datasheet
+      group_fields: Value,Footprint
