@@ -1,0 +1,137 @@
+name: kicad-hub
+description: ERC/DRC and fabrication outputs for a KiCad project, using KiBot.
+author: JMcordobamendez
+
+inputs:
+  project-dir:
+    description: Directory that contains the .kicad_pro file, relative to the repository root.
+    required: true
+  strict:
+    description: Fail the job when ERC or DRC report errors. Keep false while the design is in progress.
+    default: "false"
+  image:
+    description: KiBot Docker image (headless KiCad).
+    default: ghcr.io/inti-cmnb/kicad10_auto:1.9.1
+  output-dir:
+    description: Where outputs are written, relative to the repository root.
+    default: fab
+
+outputs:
+  has-pcb:
+    description: "true when the PCB has a board outline and PCB outputs were generated."
+    value: ${{ steps.detect.outputs.has_pcb }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect project
+      id: detect
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+      run: |
+        set -euo pipefail
+        pro=$(find "$PROJECT_DIR" -maxdepth 1 -name '*.kicad_pro' | head -n 1)
+        if [ -z "$pro" ]; then
+          echo "::error::No .kicad_pro found in $PROJECT_DIR"
+          exit 1
+        fi
+        name=$(basename "$pro" .kicad_pro)
+        pcb="$PROJECT_DIR/$name.kicad_pcb"
+        # A board without anything on Edge.Cuts is still being drawn: skip PCB checks and outputs
+        if [ -f "$pcb" ] && grep -q '(layer "Edge.Cuts")' "$pcb"; then
+          has_pcb=true
+        else
+          has_pcb=false
+          echo "::warning::$name has no board outline yet: skipping DRC and PCB outputs"
+        fi
+        echo "name=$name" >> "$GITHUB_OUTPUT"
+        echo "has_pcb=$has_pcb" >> "$GITHUB_OUTPUT"
+
+    - name: Pull KiBot image
+      shell: bash
+      run: docker pull --quiet "${{ inputs.image }}"
+
+    - name: ERC / DRC
+      id: checks
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
+        OUT: ${{ inputs.output-dir }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -uo pipefail
+        mkdir -p "$OUT/reports"
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+
+        kicad sch erc --severity-all --format json -o "$OUT/reports/erc.json" "$PROJECT_DIR/$NAME.kicad_sch"
+        kicad sch erc --severity-all --format report -o "$OUT/reports/erc.rpt" "$PROJECT_DIR/$NAME.kicad_sch"
+        erc_err=$(jq '[.sheets[].violations[] | select(.severity=="error")] | length' "$OUT/reports/erc.json")
+        erc_warn=$(jq '[.sheets[].violations[] | select(.severity=="warning")] | length' "$OUT/reports/erc.json")
+
+        drc_err=-; drc_warn=-; drc_unc=-
+        if [ "$HAS_PCB" = true ]; then
+          kicad pcb drc --severity-all --schematic-parity --format json -o "$OUT/reports/drc.json" "$PROJECT_DIR/$NAME.kicad_pcb"
+          kicad pcb drc --severity-all --schematic-parity --format report -o "$OUT/reports/drc.rpt" "$PROJECT_DIR/$NAME.kicad_pcb"
+          drc_err=$(jq '[.violations[] | select(.severity=="error")] | length' "$OUT/reports/drc.json")
+          drc_warn=$(jq '[.violations[] | select(.severity=="warning")] | length' "$OUT/reports/drc.json")
+          drc_unc=$(jq '.unconnected_items | length' "$OUT/reports/drc.json")
+        fi
+
+        {
+          echo "## KiCad checks — $NAME"
+          echo
+          echo "| Check | Errors | Warnings | Unconnected |"
+          echo "|---|---|---|---|"
+          echo "| ERC | $erc_err | $erc_warn | |"
+          echo "| DRC | $drc_err | $drc_warn | $drc_unc |"
+          [ "$HAS_PCB" = true ] || { echo; echo "_No board outline yet: DRC and PCB outputs skipped._"; }
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        echo "erc_errors=$erc_err" >> "$GITHUB_OUTPUT"
+        echo "drc_errors=$drc_err" >> "$GITHUB_OUTPUT"
+
+    - name: Outputs (KiBot)
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
+        OUT: ${{ inputs.output-dir }}
+        IMAGE: ${{ inputs.image }}
+        CONFIG: ${{ github.action_path }}/kibot/default.kibot.yaml
+      run: |
+        set -euo pipefail
+        # The action's own files are outside the workspace that gets mounted in the container
+        cp "$CONFIG" "$OUT/.kibot.yaml"
+        targets="schematic_pdf bom_csv bom_html"
+        pcb_args=()
+        if [ "$HAS_PCB" = true ]; then
+          targets="$targets ibom gerbers drill position"
+          pcb_args=(-b "$PROJECT_DIR/$NAME.kicad_pcb")
+        fi
+        # -s all: ERC/DRC already ran in the previous step
+        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w "$IMAGE" \
+          kibot -c "$OUT/.kibot.yaml" -e "$PROJECT_DIR/$NAME.kicad_sch" "${pcb_args[@]}" \
+                -d "$OUT" -s all $targets
+        rm "$OUT/.kibot.yaml"
+
+    - name: Upload outputs
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.detect.outputs.name }}-fab
+        path: ${{ inputs.output-dir }}
+
+    - name: Strict mode
+      if: inputs.strict == 'true'
+      shell: bash
+      env:
+        ERC: ${{ steps.checks.outputs.erc_errors }}
+        DRC: ${{ steps.checks.outputs.drc_errors }}
+      run: |
+        fail=0
+        [ "$ERC" = 0 ] || { echo "::error::ERC reports $ERC errors"; fail=1; }
+        [ "$DRC" = 0 ] || [ "$DRC" = - ] || { echo "::error::DRC reports $DRC errors"; fail=1; }
+        exit $fail

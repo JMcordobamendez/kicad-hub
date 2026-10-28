@@ -50,15 +50,42 @@ requests) for teams that self-host.
 
 ## How it will be used
 
-kicad-hub is a reusable GitHub Action. A board project only needs a small workflow:
+kicad-hub is a GitHub Action. A board project only needs a small workflow:
 
 ```yaml
 # .github/workflows/kicad.yml in your board repository
-on: [push, pull_request]
+name: KiCad
+on:
+  push:
+    branches: [main]
+  pull_request:
 jobs:
-  kicad:
-    uses: JMcordobamendez/kicad-hub/.github/workflows/kicad.yml@v1
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: JMcordobamendez/kicad-hub@main
+        with:
+          project-dir: hardware/my-board   # folder with the .kicad_pro
+          # strict: true                   # fail on ERC/DRC errors (off while drafting)
 ```
+
+Results:
+
+- **Job summary**: ERC/DRC error and warning counts.
+- **Artifact `<board>-fab`**: ERC/DRC reports, schematic PDF, BOM (CSV/HTML) and,
+  once the board has an outline on `Edge.Cuts`, Gerbers, drill, interactive BOM and
+  pick & place. A board still without outline skips DRC and PCB outputs with a
+  warning instead of failing.
+
+ERC/DRC run with `kicad-cli`; outputs are produced by KiBot from
+[`kibot/default.kibot.yaml`](kibot/default.kibot.yaml), inside the
+`ghcr.io/inti-cmnb/kicad10_auto` image.
+
+While kicad-hub is private, enable *Settings → Actions → General → Access →
+"Accessible from repositories owned by the user"* so your other repos can use it.
 
 New board repositories start from [`template/`](template/): folder layout,
 `.gitignore`, Git LFS for 3D models, project libraries and a PR review checklist.

@@ -16,9 +16,17 @@ Lives in `template/`.
 - [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
 ## Phase 2 — CI with KiBot (~1–2 days)
-- [ ] `.kibot.yaml` with all outputs
-- [ ] Reusable workflow `.github/workflows/kicad.yml` that runs it on every push
-- [ ] ERC/DRC block the merge when they fail
+First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico)
+(branch `feat/ci`), a board with schematic in progress and an empty PCB.
+
+- [x] `kibot/default.kibot.yaml`: schematic PDF, BOM, iBOM, Gerbers, drill, pick & place
+- [x] Composite action `action.yml` (instead of a reusable workflow: it can ship
+      the KiBot config next to it and read it from `github.action_path`)
+- [x] ERC/DRC with `kicad-cli`, counts in the job summary, reports in the artifact
+- [x] Board without outline → DRC and PCB outputs skipped with a warning
+- [x] `strict: true` makes ERC/DRC errors fail the job
+- [ ] First green run on GitHub Actions (not tested yet: no Docker on the dev PC)
+- [ ] 3D render output
 - [ ] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
       a GitHub Release
 
