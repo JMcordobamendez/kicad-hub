@@ -3,10 +3,11 @@ name: Test action
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
-  contents: read
+  contents: write        # publish the fab package as a release asset on tags
   pull-requests: write   # the action comments its report on PRs
 
 jobs:

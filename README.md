@@ -84,12 +84,17 @@ jobs:
           # strict: true                   # fail on ERC/DRC errors (off while drafting)
 ```
 
-To comment on pull requests the workflow needs:
+To comment on pull requests and publish releases the workflow needs:
 
 ```yaml
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]         # tagging vX.Y publishes the fab package
+  pull_request:
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write        # releases (use read if you don't want them)
+  pull-requests: write   # PR comments
 ```
 
 Inputs:
@@ -103,6 +108,8 @@ Inputs:
 | `datasheet-dirs` | — | Extra folders with datasheet files (matched by MPN or value) |
 | `datasheet-optional-refs` | `R,C,TP,H,MH,FID,JP,NT,LOGO` | Prefixes that don't need a datasheet |
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
+| `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
+| `release` | `true` | On tags, attach the fab package to a GitHub Release |
 | `comment` | `true` | Post the report on the PR (one comment, updated on each push) |
 | `output-dir` | `fab` | Where outputs are written |
 
@@ -111,6 +118,13 @@ Results:
 - **Report** (job summary and PR comment): ERC/DRC counts, BOM changes against
   the PR's target branch (parts added, removed, changed), parts missing
   required fields and datasheet status (broken links, offline copies).
+- **`package/<board>-<rev>-fab.zip`**: ready to send to any fab house. Gerber X2
+  with job file (the board's own plot settings), Excellon with PTH/NPTH split and
+  drill map, IPC-D-356 netlist, grouped BOM and pick & place in CSV, `README.txt`
+  fab notes read from the board (size, layers, stackup, finish, smallest features,
+  warnings when they are below the project rules) and `SHA256SUMS.txt`. The
+  revision is the tag, else the title block revision, else the commit. On tags it
+  is attached to a GitHub Release.
 - **`datasheets/`** in the artifact: every local datasheet (referenced in the
   schematic or found by name in the datasheet folders) and an `index.html` linking
   each part to its datasheet.

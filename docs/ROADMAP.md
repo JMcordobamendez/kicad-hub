@@ -22,7 +22,7 @@ flowchart LR
     p2a["ERC / DRC + job summary"]:::done
     p2b["PDF, BOM, iBOM, Gerbers,<br/>drill, pick & place"]:::done
     p2c["Example board, first green run"]:::done
-    p2d["Release zip on tag vX.Y"]:::todo
+    p2d["Release zip on tag vX.Y"]:::done
   end
 
   subgraph P2B["2b · BOM, sourcing, manufacturing"]
@@ -31,7 +31,7 @@ flowchart LR
     b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::done
     b6["6 · Datasheets"]:::done
     b5["5 · Variants"]:::doing
-    b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::todo
+    b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::done
     b2["2 · Cost and stock"]:::todo
     b7["7 · Before/after images<br/>changes highlighted"]:::todo
   end
@@ -110,8 +110,8 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] Warn on obsolete, not-recommended or out-of-stock parts
    - [ ] API keys as repository secrets; skip gracefully when they are missing
 3. **Ready-to-order package — generic, any fab house**
-   - [ ] On tag `vX.Y`: one zip in standard formats every fab accepts, no vendor
-         lock-in:
+   - [x] One zip in standard formats every fab accepts, no vendor lock-in, built on
+         every run and attached to a GitHub Release on tag `vX.Y`:
      - Gerber X2 (+ `.gbrjob`) and Excellon drill (PTH/NPTH split, drill map)
      - IPC-D-356 netlist, so the fab can run its electrical test against the design
      - Assembly: BOM (CSV with MPN, manufacturer, quantity, references, DNP) and
@@ -119,7 +119,10 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
      - Fab notes (`README.txt`): board name, revision, layer count, thickness,
        stackup, finish, min track/space and drill, generated from the KiCad project
      - Optional ODB++ / IPC-2581 (KiCad exports both) for fabs that prefer them
-   - [ ] File names with board name + revision; checksum list inside the zip
+   - [x] File names with board name + revision; checksum list inside the zip
+   - [x] Fab notes warn when the smallest features used are below the project rules
+         (example board: vias with a 0.00001 mm drill)
+   - [ ] Confirm the release on GitHub with a test tag
    - [ ] Fab profiles as an **optional** layer on top (`fab-profile: jlcpcb |
          pcbway | eurocircuits …`): only renames columns/files and applies that
          fab's DRC rules. Default: `generic`
@@ -157,8 +160,8 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] Images embedded in the PR comment (not just a link), each linking to the
          full-size diff
    - [ ] Shares the diff engine with phase 4 (visual diff in the portal)
-- [ ] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
-      a GitHub Release
+- [x] Tag `vX.Y` → fabrication zip named with board name and revision, attached to
+      a GitHub Release (see 2b.3; to confirm on GitHub)
 
 ## Phase 3 — Web portal (~2–3 days)
 - [ ] Static page per commit or branch on GitHub Pages

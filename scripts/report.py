@@ -27,6 +27,8 @@ ap.add_argument("--cap-voltage", default="true")
 ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
+ap.add_argument("--package", default="", help="file name of the fab package zip")
+ap.add_argument("--package-warnings", help="text file, one warning per line, from fabnotes.py")
 ap.add_argument("--run-url", default="")
 ap.add_argument("--out", required=True, help="markdown report")
 ap.add_argument("--out-json", required=True, help="counts for later steps")
@@ -172,6 +174,18 @@ if ds is not None:
         md += [f"<details><summary>{len(unver)} link{'s' if len(unver) != 1 else ''} could not be verified (the site blocks automated "
                f"checks or timed out)</summary>", "", table(["Part", "Value", "Datasheet", "Reason"], unver),
                "", "</details>", ""]
+
+# --- Fab package ----------------------------------------------------------------
+if args.package:
+    warns = []
+    if args.package_warnings and os.path.exists(args.package_warnings):
+        warns = [w.strip() for w in open(args.package_warnings, encoding="utf-8") if w.strip()]
+    counts["fab_warnings"] = len(warns)
+    md += ["### Fab package",
+           f"`{args.package}` in the artifact: Gerber X2, Excellon (PTH/NPTH + drill map), IPC-D-356 "
+           "netlist, BOM and pick & place (CSV), fab notes and checksums.", ""]
+    if warns:
+        md += ["**Check before ordering:**", ""] + [f"- ⚠️ {w}" for w in warns] + [""]
 
 if args.run_url:
     md += [f"[Run details and fab outputs]({args.run_url})"]

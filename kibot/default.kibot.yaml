@@ -1,5 +1,7 @@
 # Default KiBot outputs used by the kicad-hub action.
-# ERC/DRC are run separately with kicad-cli, so KiBot is always called with `-s all`.
+# ERC/DRC, the BOM checks and the fab package (Gerbers, drill, IPC-D-356, pick & place)
+# are made with kicad-cli in the action itself, so KiBot is always called with `-s all`
+# and only for the outputs below.
 kibot:
   version: 1
 
@@ -29,27 +31,3 @@ outputs:
     comment: Interactive BOM
     type: ibom
     dir: ibom
-
-  - name: gerbers
-    comment: Gerbers
-    type: gerber
-    dir: gerbers
-    layers:
-      - copper
-      - F.SilkS
-      - B.SilkS
-      - F.Mask
-      - B.Mask
-      - F.Paste
-      - B.Paste
-      - Edge.Cuts
-
-  - name: drill
-    comment: Drill files
-    type: excellon
-    dir: gerbers
-
-  - name: position
-    comment: Pick and place
-    type: position
-    dir: assembly
