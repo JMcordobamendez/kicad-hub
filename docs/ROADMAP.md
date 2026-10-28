@@ -27,9 +27,9 @@ flowchart LR
 
   subgraph P2B["2b · BOM, sourcing, manufacturing"]
     direction TB
-    b1["1 · BOM diff in PR comment"]:::doing
-    b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::doing
-    b6["6 · Datasheets"]:::todo
+    b1["1 · BOM diff in PR comment"]:::done
+    b4["4 · Field checks<br/>MPN, footprint, datasheet, voltage"]:::done
+    b6["6 · Datasheets"]:::doing
     b5["5 · Variants"]:::todo
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::todo
     b2["2 · Cost and stock"]:::todo
@@ -103,7 +103,7 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          `kicad-cli sch export bom`, base checked out in a git worktree)
    - [x] Post the changes as text: added / removed table + changed fields
          (`Value: 10k → 4k7`), one sticky comment per board updated on each push
-   - [ ] Confirm on a real PR on GitHub
+   - [x] Confirmed on a real PR on GitHub (kicad-hub #1, 2026-10-28)
 2. **Cost and availability**
    - [ ] Unit price and stock per part from LCSC / Mouser / DigiKey (KiBot + KiCost)
    - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
