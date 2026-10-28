@@ -87,7 +87,7 @@ head = load_bom(args.bom) or {}
 base = load_bom(args.base_bom)
 compare = [c for c in (next(iter(head.values())).keys() if head else []) if c != "Reference"]
 
-md.append(f"### BOM changes vs `{args.base_ref}`")
+md.append(f"### BOM changes vs `{args.base_ref}`" if base is not None else "### BOM changes")
 if base is None:
     md += ["_Not a pull request (or no base schematic): nothing to compare._", ""]
 else:
@@ -169,7 +169,7 @@ if ds is not None:
     if broken:
         md += [f"**{len(broken)} broken:**", "", table(["Part", "Value", "Datasheet", "Problem"], broken), ""]
     if unver:
-        md += [f"<details><summary>{len(unver)} links could not be verified (the site blocks automated "
+        md += [f"<details><summary>{len(unver)} link{'s' if len(unver) != 1 else ''} could not be verified (the site blocks automated "
                f"checks or timed out)</summary>", "", table(["Part", "Value", "Datasheet", "Reason"], unver),
                "", "</details>", ""]
 
