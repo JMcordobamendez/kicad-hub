@@ -10,9 +10,20 @@ and GitHub Pages. No extra server to maintain.
 kicad-hub is an independent project, not affiliated with or endorsed by the KiCad
 project. KiCad is a trademark of its respective owners.
 
-> **Status:** v1 — the CI part works and is tested on every push with a real board
-> (see [what works today](#what-works-today)). The web portal is next — see the
+> **Status:** v1.1 — CI checks, BOM review, suppliers, fab package and the design
+> portal with interactive compare work and are tested on every push with a real
+> board (see [what works today](#what-works-today)). Next steps: the
 > [roadmap](docs/ROADMAP.md).
+
+![Design portal: PCB viewer with layers and checks](docs/screenshots/portal-pcb.png)
+
+| Changed sheet, swipe between before and after | The report posted on the pull request |
+|---|---|
+| ![Interactive compare](docs/screenshots/portal-compare.png) | ![PR comment](docs/screenshots/pull-request.png) |
+
+More: [schematic](docs/screenshots/portal-schematic.png) ·
+[BOM](docs/screenshots/portal-bom.png). Real screenshots of the example board's
+portal and PR comment, taken by the "Docs screenshots" workflow.
 
 ## What works today
 
@@ -22,6 +33,9 @@ On every push and pull request of a KiCad project, the action:
   Non-blocking by default; `strict: true` fails the job on errors.
 - **Checks the BOM**: every fitted part needs the required fields (by default
   footprint, datasheet and MPN or LCSC code); capacitors need a voltage rating.
+- **Checks your requirements**: a `kicad-hub-requirements.yaml` next to the project
+  (cost per board, layers, board size, stock, parts...) is checked on every run and
+  shown as a pass/fail table; `strict: true` fails the job on a failed requirement.
 - **Diffs the BOM** of a pull request against its target branch: parts added,
   removed and changed (`Value: 10uF → 22uF`).
 - **Resolves the datasheets**: links checked (broken vs. unverifiable), local PDFs
@@ -58,10 +72,7 @@ with a warning instead of failing.
 
 ## Planned
 
-
-Mockups: [PR comment](docs/mockups/pull-request.png) ·
-[design portal](docs/mockups/portal.png). Details and progress:
-[roadmap](docs/ROADMAP.md).
+Details and progress: [roadmap](docs/ROADMAP.md).
 
 ## How the pieces fit together
 
@@ -141,7 +152,7 @@ version.
 | Input | Default | What it does |
 |---|---|---|
 | `project-dir` | — | Folder with the `.kicad_pro` (required) |
-| `strict` | `false` | Fail on ERC/DRC errors |
+| `strict` | `false` | Fail on ERC/DRC errors or a failed requirement |
 | `required-fields` | `Footprint,Datasheet,MPN\|LCSC` | Fields every fitted part needs; `A\|B` = either |
 | `check-capacitor-voltage` | `true` | Capacitors need a `Voltage` field or a value like `10uF 16V` |
 | `datasheet-dirs` | — | Extra folders with datasheet files (matched by MPN or value) |
@@ -157,10 +168,12 @@ version.
 | `farnell-store` | `uk.farnell.com` | Farnell store to price from (`es.farnell.com`, `de.farnell.com`, `www.newark.com`…) |
 | `digikey-client-id` | — | DigiKey API client ID, from a secret |
 | `digikey-client-secret` | — | DigiKey API client secret, from a secret |
+| `requirements` | `kicad-hub-requirements.yaml` | Requirements file, relative to `project-dir` (see [requirements](#requirements)); no file = nothing checked |
 | `pages` | `true` | Publish the design portal (see [design portal](#design-portal)) |
 | `pages-branch` | `kicad-hub-site` | Branch the portal is published to |
 | `history` | `10` | Light snapshots of the last N commits of the default branch for the portal's timeline and compare page; `0` = off |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
+| `fab-profile` | `generic` | Optional fab layer: `jlcpcb`, `pcbway` or `eurocircuits` (see [fab profiles](#fab-profiles)) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
 | `comment` | `true` | Post the report on the PR |
@@ -168,12 +181,35 @@ version.
 | `image` | `ghcr.io/inti-cmnb/kicad10_auto:1.9.1` | Docker image with KiCad and KiBot |
 | `output-dir` | `fab` | Where outputs are written |
 
-Outputs: `has-pcb`, `missing-fields`.
+Outputs: `has-pcb`, `missing-fields`, `requirements-failed`.
 
 Datasheet folders searched by default: `datasheet(s)/` and `docs/` next to the
 project, and `datasheet(s)/` one level up. A file is used when its name contains
 the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 `S-82A2AAA-A8T2U`).
+
+### Fab profiles
+
+The package and the checks are generic by default. `fab-profile` adds an optional
+layer for one fab, without changing the project's own DRC or `strict`:
+
+- **DRC vs the fab's rules**: a second DRC on a copy of the project, with the fab's
+  published capabilities (`fab-profiles/<name>/rules.kicad_dru`) appended to the
+  project's own `.kicad_dru`. Shown as its own line in the report, the PR comment and
+  the portal; the artifact has `reports/drc-fab.rpt|json`. It never fails the build.
+- **Assembly files** in the fab's column layout, next to the generic ones
+  (`assembly/jlcpcb/`: BOM `Comment, Designator, Footprint, LCSC Part #` from the
+  `LCSC` field, and CPL `Designator, Mid X, Mid Y, Layer, Rotation`).
+- A note in the package's `README.txt`.
+
+| Profile | Rules | Assembly files |
+|---|---|---|
+| `jlcpcb` | standard 2-layer/multilayer, 1 oz | yes |
+| `pcbway` | standard process, 1 oz | no (generic files) |
+| `eurocircuits` | only limits independent of the pattern class | no (generic files) |
+
+Each `rules.kicad_dru` cites its source page and date. KiCad rules can't test the
+layer count, so where 2-layer and multilayer limits differ the safer value is used.
 
 ### Design portal
 
@@ -284,10 +320,54 @@ the batch. To choose yourself:
    the file stay automatic. It's a plain CSV (`Part,Supplier,SKU`, where `Part` is
    the MPN or the LCSC code), so it can also be edited by hand and reviewed in PRs.
 
+### Requirements
+
+Write down what the board has to meet and let CI check it. Put a
+`kicad-hub-requirements.yaml` next to the `.kicad_pro` (the `requirements` input
+renames it); without the file nothing is checked and nothing is shown. Each entry
+has an `id`, a human `text`, a `check` type and that check's parameters:
+
+```yaml
+- id: R1
+  text: Cost per board under 15 EUR at 100 units
+  check: max_cost
+  batch: 100
+  max: 15
+```
+
+The report gets a **Requirements** table (id, requirement, result, measured value) and
+the portal's Checks panel counts the failed ones. A requirement is **pass**, **fail**,
+or **unknown** when the data to check it isn't there (no prices, no board outline, a
+batch that isn't priced): unknown never fails the job. A malformed entry (unknown check,
+missing or misspelled parameter, duplicate id, invalid regex) is reported as **fail**
+with the reason. Failed requirements fail the job only with `strict: true`. The file
+is read with PyYAML inside the KiBot image; a top-level `requirements:` list is also
+accepted. A commented template is in [`template/`](template/kicad-hub-requirements.yaml)
+and a working one in [`examples/royalblue54l-feather/`](examples/royalblue54l-feather/kicad-hub-requirements.yaml).
+
+| `check` | Parameters | Passes when |
+|---|---|---|
+| `erc_errors_max` | `max` (default 0), `severity` (`error`, or `warning`) | ERC violations of that severity ≤ `max` |
+| `drc_errors_max` | `max` (default 0), `severity` | DRC violations ≤ `max` (unknown without a board outline) |
+| `max_parts` | `max`, `variant` | Fitted parts (DNP excluded) ≤ `max` |
+| `max_unique_parts` | `max`, `variant` | Distinct fitted parts ≤ `max` (same MPN or LCSC code, else same value and footprint, counts once) |
+| `max_cost` | `max`, `batch`, `variant` | Components cost per board at `batch` boards ≤ `max`, in the `currency` input. `batch` must be in the `boards` input. Unknown if some parts have no price and the priced ones are still within `max` |
+| `in_stock` | `batch`, `variant` | Every part has a supplier with stock for `batch` boards (the picked supplier if `kicad-hub-sourcing.csv` chooses one) |
+| `no_bad_lifecycle` | `variant` | No part is obsolete / EOL / NRND at every supplier that reports its lifecycle |
+| `max_layers` | `max` | Copper layers ≤ `max` |
+| `max_board_size` | `width`, `height` (mm) | Board outline fits in `width` x `height`, either orientation |
+| `min_track` | `min` (mm) | Narrowest track used ≥ `min` |
+| `min_drill` | `min` (mm) | Smallest drill used (vias and plated pad holes) ≥ `min` |
+| `required_fields` | `refs`, `fields`, `variant` | Every fitted part whose reference matches the regex `refs` (whole reference, e.g. `U\d+`) has all `fields` filled. Fields are the exported BOM columns (see `required-fields`) |
+| `forbidden_parts` | `pattern`, `variant` | No fitted part has an MPN or value matching the regex `pattern` (case-insensitive) |
+
+`variant` is the name of a design variant; leave it out for the default build.
+`max_cost`, `in_stock` and `no_bad_lifecycle` need `sourcing: true`.
+
 ### What you get
 
 **Report** — job summary and PR comment:
-ERC/DRC counts · BOM changes vs. the PR base · before/after images · variants · parts missing required fields ·
+ERC/DRC counts · requirements pass/fail · BOM changes vs. the PR base · before/after images · variants · parts missing required fields ·
 datasheet status (broken links, offline copies) · cost per batch and stock warnings ·
 fab package warnings.
 
@@ -303,6 +383,7 @@ package/      <board>-<rev>-fab.zip  ← send this to the fab
     drill/        Excellon PTH and NPTH, drill maps (PDF)
     assembly/     BOM (CSV, grouped, no DNP) and pick & place (CSV, mm, both sides)
       <variant>/  the same for each design variant
+      <fab>/      with a fab-profile: BOM and pick & place in that fab's columns
     *.d356        IPC-D-356 netlist for electrical test
     README.txt    fab notes: size, layers, stackup, finish, smallest features, warnings
     SHA256SUMS.txt
@@ -320,9 +401,10 @@ the commit hash.
 
 ```
 action.yml                  the action
-scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py,
-                            visual_diff.py, renders.py (page renders for the compare page),
-                            sourcing.py (+ sourcing.html, the comparison page),
+fab-profiles/               optional per-fab DRC rules and assembly column layouts
+scripts/                    fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
+                            variant_cpl.py, visual_diff.py, renders.py (page renders for the
+                            compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
                             compare.js, the compare page and its shared widget)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
@@ -330,13 +412,19 @@ template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
 .github/workflows/test.yml  runs the action on the example board on every push/PR/tag
 .github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
-docs/                       roadmap and mockups
+docs/                       roadmap and screenshots
 ```
 
 New board repositories start from [`template/`](template/): folder layout,
 `.gitignore`, `.gitattributes` (LF for KiCad files, Git LFS for 3D models),
 project libraries through `${KIPRJMOD}`, a PR design review checklist and the CI
 workflows.
+
+### Approval flows
+
+The template includes issue forms (part request, design review, fab release), a
+`CODEOWNERS.example` and an opt-in approval step for releases, all plain GitHub
+features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/approvals.md).
 
 ## Development
 
