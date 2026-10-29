@@ -14,7 +14,7 @@ flowchart LR
   subgraph P1["1 · Template"]
     direction TB
     p1a["Layout, .gitignore, LFS<br/>KIPRJMOD libs, PR checklist"]:::done
-    p1b["Tried on a real board<br/>(RiegoAutomatico PR)"]:::doing
+    p1b["Tried on a real<br/>personal board"]:::doing
   end
 
   subgraph P2["2 · CI"]
@@ -84,8 +84,7 @@ Lives in `template/`.
 - [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
 ## Phase 2 — CI (~1–2 days)
-First user: [RiegoAutomatico](https://github.com/JMcordobamendez/RiegoAutomatico)
-(branch `feat/ci`), a board with schematic in progress and an empty PCB.
+First user: one of the owner's personal boards (schematic in progress, empty PCB).
 
 - [x] `kibot/default.kibot.yaml`: schematic PDF, BOM (CSV/HTML), iBOM. Gerbers,
       drill and pick & place moved to the fab package made with `kicad-cli` (2b.3)
@@ -164,8 +163,8 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          fab's rules (`.kicad_dru`)
    - [x] Report missing fields as a list in the job summary and PR comment
          (example board: 42 of 59 parts, mostly datasheet and capacitor voltage)
-5. **Variants** — same design, different builds (e.g. irrigation nodes with or
-   without level sensor)
+5. **Variants** — same design, different builds (e.g. the same board with or
+   without an optional sensor)
    - [x] KiCad 10 native variants: names in `.kicad_pro` (`schematic.variants`),
          overrides per symbol instance in the schematic (`(variant (name …) (dnp yes)
          (field …))`). Input `variants: auto | list | none`
