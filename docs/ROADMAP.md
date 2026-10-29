@@ -43,7 +43,7 @@ flowchart LR
 
   subgraph P4["4 · Visual diff"]
     direction TB
-    p4["Diff in the portal"]:::todo
+    p4["Interactive compare<br/>in the portal"]:::done
   end
 
   subgraph P5["5 · Pinned comments"]
@@ -51,16 +51,17 @@ flowchart LR
     p5["Click a part → PR comment"]:::optional
   end
 
-  PUB(["Go public · v1"]):::todo
+  PUB(["Go public · v1"]):::done
 
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
   P4 -.-> P5
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phases 1–3 done and public as v1 (CI, BOM review, suppliers, before/after
-images, design portal on GitHub Pages). Next: visual diff in the portal (phase 4)
-and the small 2b extras (variant BOM diff, fab profiles, real supplier keys).
+**Now:** phases 1–4 done and public (CI, BOM review, suppliers, before/after
+images, design portal on GitHub Pages, interactive compare). Next: release v1.1.0
+(the `v1` tag predates the portal), fab profiles, then the portal timeline and
+fab comments on releases (see "Ideas from commercial platforms").
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -197,7 +198,8 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          sites that block bots (403, timeouts) = unverified, not counted as broken
    - [x] Generic parts (R, C, test points, holes, fiducials…) don't need a datasheet
          (`datasheet-optional-refs`)
-   - [ ] (Phase 3) open the datasheet from the selected part in the web viewer
+   - [x] (Phase 3) open the datasheet from the selected part in the web viewer
+         (side panel, "Selected")
 7. **Before/after images in the PR comment, with the changes highlighted**
    - [x] Render every schematic sheet and PCB layer (copper, silkscreen, outline) of
          both branches with `kicad-cli … export svg` (PCB in black and white, same
@@ -215,7 +217,7 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [x] Clean up `kicad-hub-images` folders of closed PRs: workflow
          `kicad-hub-cleanup.yml` (on PR close, or by hand with a PR number), in the
          template and in this repo
-   - [ ] Reuse the engine for phase 4 (visual diff in the portal)
+   - [x] Reuse the engine for phase 4 (visual diff in the portal)
 
 ## Phase 3 — Web portal (~2–3 days)
 - [x] Static page per branch, release (`releases/<tag>/`) and PR (`pr-<N>/`) on GitHub
@@ -269,6 +271,34 @@ it's clear the feature is actually missed.
 - [ ] Notifications (e.g. Telegram) when CI finishes or a release is published
 - [ ] 3D render output (slow, low value per push: maybe only on releases)
 
+## Ideas from commercial platforms
+Reviewed against the public docs of a commercial cloud platform for PCB design
+(2026-10-29). Chosen ones, in order:
+
+- [ ] **Timeline in the portal**: a page per commit on `main` (or a listed range), and
+      compare any two versions (e.g. release 1.0 vs 1.2), not only a PR against its base
+- [ ] **Fab house comments on a release**: a Discussion or Issue opened per release,
+      linked from the release page and the portal, so the fab's questions stay with
+      that snapshot
+- [ ] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
+      voltage rating, part count, cost per board…) checked by CI against ERC, DRC,
+      BOM and sourcing, with a pass/fail table in the report
+- [ ] **Approval flows on GitHub**: part requests and design reviews as Issue forms,
+      PR review rules and environments (documented recipes in the template, no engine
+      of our own)
+- [ ] **Net navigation and measuring in the viewer**: highlight a net, jump between
+      its pads, measure distances. Depends on KiCanvas (alpha)
+- [ ] **Sharing private boards**: a way to show a private repo's portal to people
+      without access (e.g. a password-protected or expiring static export)
+- [ ] **Target price per part** (last): optional column in `kicad-hub-sourcing.csv`,
+      warn when the chosen offer is above it
+- [ ] *Under study:* **versioned component library**: a KiCad library in its own repo
+      with tags, a lifecycle field (planned / production / obsolete) and a where-used
+      index across board repos
+
+Not planned: BOM health score, STEP comparison between revisions, compliance and
+end-of-life data (paid sources), MCAD plugins, PLM integration.
+
 ## Before going public
 - [x] License: MIT (2026-10-29)
 - [x] Documentation and a working example board
@@ -315,4 +345,8 @@ it's clear the feature is actually missed.
 - **PR images live in a branch of the board repo** (2026-10-29): a comment can only
   show images with a URL; a `kicad-hub-images` branch needs no extra service and
   works in private repos for anyone who can read the repo.
+- **Commercial-platform features, picked by usefulness** (2026-10-29): timeline,
+  fab comments, requirements, approval flows, net navigation, private sharing and
+  target price are planned; component library under study; BOM health score, STEP
+  diff, paid compliance data, MCAD and PLM integration dropped.
 - **Mockups** of the PR comment and the portal: `docs/mockups/`.
