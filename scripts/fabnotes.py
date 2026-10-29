@@ -2,8 +2,9 @@
 """Fabrication notes (README.txt) for the fab package, read from the board itself.
 
 Runs with KiCad's Python (pcbnew), so the numbers don't depend on the UI language.
-Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt> [board.json]
-The optional JSON has the same measurements for later steps (requirements.py).
+Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt> [board.json] [fab profile]
+The optional JSON has the same measurements for later steps (requirements.py);
+pass "" to skip it. The fab profile (default generic) is described in README.txt.
 """
 import datetime
 import json
@@ -14,6 +15,7 @@ import sys
 import pcbnew
 
 pcb_path, rev, out = sys.argv[1:4]
+profile = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else "generic"
 b = pcbnew.LoadBoard(pcb_path)
 mm = pcbnew.ToMM
 ds = b.GetDesignSettings()
@@ -124,9 +126,16 @@ FILES
   assembly/    BOM (CSV, grouped, DNP excluded) and pick & place (CSV, mm, both sides)
   SHA256SUMS.txt  checksums of every file in this package
 """
+if profile != "generic":
+    lines += f"""
+FAB PROFILE: {profile}
+  Checked with a second DRC that adds {profile}'s published capabilities
+  (kicad-hub fab-profiles/{profile}/rules.kicad_dru); see the DRC report.
+  assembly/{profile}/  BOM and pick & place in {profile}'s column layout, when it has one
+"""
 with open(out, "w", encoding="utf-8", newline="\n") as f:
     f.write(lines)
-if len(sys.argv) > 4:
+if len(sys.argv) > 4 and sys.argv[4]:
     drills = [d for d in (min_via_drill, min_hole) if d is not None]
     with open(sys.argv[4], "w", encoding="utf-8") as f:
         json.dump({"size_mm": [round(mm(bbox.GetWidth()), 3), round(mm(bbox.GetHeight()), 3)],

@@ -24,6 +24,7 @@ jobs:
         with:
           project-dir: .                 # folder with the .kicad_pro
           # strict: true                 # fail on ERC/DRC errors
+          # fab-profile: jlcpcb          # also DRC with that fab's rules + its BOM/CPL (jlcpcb | pcbway | eurocircuits)
           # boards: "1,5,10,100"         # batch sizes to price
           # requirements: kicad-hub-requirements.yaml   # checked when the file exists (template/ has a commented one)
           # currency: EUR

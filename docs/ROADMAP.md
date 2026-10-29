@@ -177,15 +177,24 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (example board: vias with a 0.00001 mm drill)
    - [x] Confirmed on GitHub: tag `v0.0.1-test` → release with
          `RoyalBlue54L-Feather-v0.0.1-test-fab.zip` (666 KB)
-   - [ ] Fab profiles as an **optional** layer on top (`fab-profile: jlcpcb |
+   - [x] Fab profiles as an **optional** layer on top (`fab-profile: jlcpcb |
          pcbway | eurocircuits …`): only renames columns/files and applies that
          fab's DRC rules. Default: `generic`
+     - `fab-profiles/<name>/rules.kicad_dru` (values and source URL/date from each
+       fab's public capabilities page) + `profile.json`; JLCPCB gets
+       `assembly/jlcpcb/` (BOM with LCSC, CPL Top/Bottom). PCBWay and Eurocircuits:
+       rules only (no BOM template or class-independent limits we could verify)
+     - 2026-10-29: written from the fabs' pages; exercised by CI on the example
+       board with `fab-profile: jlcpcb`
+     - JLCPCB silkscreen-to-pad rule dropped (owner decision, 2026-10-29): the fab clips
+       silkscreen itself and the rule alone gave ~200 findings on the example board
 4. **Checks the ERC doesn't do** (cheap — do with 1)
    - [x] Every part has MPN, footprint and datasheet (except `DNP` / not-in-BOM);
          configurable with `required-fields`, `A|B` alternatives (`MPN|LCSC`)
    - [x] Capacitors have a voltage rating field (or a value like `10uF 16V`)
-   - [ ] DRC against the project's own rules by default; a fab profile can add that
-         fab's rules (`.kicad_dru`)
+   - [x] DRC against the project's own rules by default; a fab profile can add that
+         fab's rules (`.kicad_dru`): second DRC on a copy of the project, own line in
+         report / PR comment / portal, never affects `strict`
    - [x] Report missing fields as a list in the job summary and PR comment
          (example board: 42 of 59 parts, mostly datasheet and capacitor voltage)
 5. **Variants** — same design, different builds (e.g. the same board with or
