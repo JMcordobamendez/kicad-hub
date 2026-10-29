@@ -3,7 +3,9 @@ name: Test action
 on:
   push:
     branches: [main]
-    tags: ["v*", "example-*"]   # v*: action versions · example-*: test the release step
+    # vX.Y.Z: action versions (not the moving major tag v1, same commit as its vX.Y.Z)
+    # example-*: test the release step
+    tags: ["v*.*.*", "example-*"]
   pull_request:
 
 permissions:

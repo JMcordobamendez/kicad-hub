@@ -48,17 +48,17 @@ flowchart LR
 
   subgraph P5["5 · Pinned comments"]
     direction TB
-    p5["Click a part → PR comment"]:::doing
+    p5["Click a part → PR comment"]:::done
   end
 
   PUB(["Go public · v1"]):::done
 
   subgraph P6["6 · Ideas from commercial platforms"]
     direction TB
-    i1["Fab profiles + fab DRC"]:::doing
+    i1["Fab profiles + fab DRC"]:::done
     i2["Timeline, compare<br/>any two versions"]:::done
     i3["Requirements in the repo"]:::done
-    i4["Approval flows"]:::doing
+    i4["Approval flows"]:::done
     i5["Net navigation, measuring"]:::todo
     i6["Sharing private boards"]:::todo
     i7["Target price"]:::todo
@@ -70,17 +70,11 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phases 1–4 done and released as v1.1.0 (`v1` moved to it, 2026-10-29).
-In progress, one branch and PR each, worked in parallel (2026-10-29):
-
-- Fab profiles with fab DRC rules (`feat/fab-profiles`)
-- Timeline in the portal and compare any two versions (`feat/timeline`)
-- Comments pinned on the board, phase 5 prototype (`feat/pinned-comments`)
-- Requirements in the repo (`feat/requirements`, PR #18)
-- Approval flows in the template (`feat/approval-flows`, PR #17)
-
-Next batch: net navigation and measuring in the viewer (after phase 5, same code),
-sharing private boards, target price last.
+**Now:** phases 1–5 done (phase 5 as a prototype confirmed in a browser). Merged on
+2026-10-29 after v1.1.0: fab profiles, requirements, approval flows, timeline and compare
+any two versions, comments pinned on the board. In progress: the Activity page (visual
+branch history, PRs, reviews, comments, pushes). Next: release v1.2.0, then net
+navigation and measuring in the viewer, sharing private boards, target price last.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -299,8 +293,11 @@ clicking a component creates a PR review comment through the GitHub API
       clicking one selects the part or zooms to the point and turns the board to the
       pin's side. Numbered markers are drawn over the viewer (`world_to_screen`,
       repositioned when the camera changes). Comment text is escaped, never rendered
-      as HTML. Written from KiCanvas's source and not yet confirmed in a browser:
-      owner to test posting.
+      as HTML. Confirmed in a browser by the owner (2026-10-29): comment posted without a
+      token (copy and paste on the PR), read back, numbered marker on the board.
+      Fixed after that test: a part selected just after the click is taken (the form
+      showed "free point"); the form closes on its own when the pasted comment comes
+      back (checked when the page gets the focus again).
 - [ ] After the prototype: replies and resolve from the page, review comments on the
       Changes diff, pins on releases (read-only), follow a part that moves between
       commits
