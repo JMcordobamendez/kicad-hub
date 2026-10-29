@@ -530,10 +530,15 @@ runs:
           targets="$targets ibom"
           pcb_args=(-b "$PROJECT_DIR/$NAME.kicad_pcb")
         fi
-        # -s all: ERC/DRC already ran in a previous step
-        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" \
+        # -s all: ERC/DRC already ran in a previous step. These outputs are extras: if
+        # KiBot can't load the design, say why and carry on, so the report, artifact and
+        # portal are still published.
+        if ! docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" \
           kibot -c "$OUT/.kibot.yaml" -e "$PROJECT_DIR/$NAME.kicad_sch" "${pcb_args[@]}" \
-                -d "$OUT" -s all $targets
+                -d "$OUT" -s all $targets 2>&1 | tee "$OUT/reports/kibot.log"; then
+          why=$(grep -E '^ERROR:' "$OUT/reports/kibot.log" | sed 's/^ERROR://; s/ (kibot[^)]*)$//' | tail -n 1)
+          echo "::warning::KiBot outputs (schematic PDF, BOM HTML, iBOM) skipped: ${why:-see reports/kibot.log}"
+        fi
         rm "$OUT/.kibot.yaml"
 
     - name: Publish design portal
