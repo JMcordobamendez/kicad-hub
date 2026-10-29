@@ -110,6 +110,9 @@
             url: url(c.html_url, /^https:\/\/github\.com\//)};
   }
 
+  // back from the GitHub tab after pasting: look for the new comment
+  window.addEventListener("focus", () => { if (S.awaiting && S.state !== "loading") load(); });
+
   async function load() {
     S.state = "loading"; S.error = ""; renderAll();
     try {
@@ -130,6 +133,9 @@
       S.comments = all.map(parse).filter(Boolean);
       S.state = "ok";
       applyDeep();
+      // the comment pasted on GitHub came back: close the form and show it
+      const w = S.awaiting, hit = w && S.comments.find(c => !w.known.has(c.id) && Math.abs(c.x - w.x) < 0.006 && Math.abs(c.y - w.y) < 0.006);
+      if (hit) { S.awaiting = null; S.active = hit.id; cancel(); }
     } catch (e) {
       S.state = "error"; S.error = (e && e.message) || "Could not load the comments.";
     }
@@ -316,7 +322,7 @@
   }
   function cancel() {
     const was = S.mode && S.views[S.mode];
-    S.mode = null; S.pending = null;
+    S.mode = null; S.pending = null; S.awaiting = null;
     for (const view of Object.values(S.views)) {
       view.btn.classList.remove("on"); view.form.hidden = true;
       view.form.querySelector(".kh-msg").textContent = ""; view.form.elements.text.value = "";
@@ -338,7 +344,7 @@
   async function submit(view) {
     const r = read(view); if (!r) return;
     const msg = view.form.querySelector(".kh-msg"), text = format(r.p, r.text);
-    if (!token.get()) { await copyAndOpen(view, text); return; }
+    if (!token.get()) { S.awaiting = {x: r.p.x, y: r.p.y, known: new Set(S.comments.map(c => c.id))}; await copyAndOpen(view, text); return; }
     const btn = view.form.querySelector('[data-kh="primary"]');
     btn.disabled = true; msg.textContent = "Posting…";
     try {
