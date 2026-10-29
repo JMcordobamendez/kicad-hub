@@ -9,6 +9,7 @@ Usage: fab_assembly.py <profile.json> <generic BOM> <generic CPL> <output dir> <
 import csv
 import json
 import os
+import re
 import sys
 
 profile_path, bom_in, cpl_in, out_dir, prefix = sys.argv[1:6]
@@ -16,6 +17,18 @@ asm = json.load(open(profile_path, encoding="utf-8")).get("assembly")
 if not asm:
     sys.exit(0)
 os.makedirs(out_dir, exist_ok=True)
+
+
+def expand(refs):
+    """KiCad collapses references ("C2-C4"); fabs want them listed ("C2,C3,C4")."""
+    out = []
+    for tok in re.split(r"\s*,\s*", refs):
+        m = re.fullmatch(r"([^\d]*)(\d+)-[^\d]*(\d+)", tok)
+        if m and int(m.group(2)) <= int(m.group(3)):
+            out += [f"{m.group(1)}{n}" for n in range(int(m.group(2)), int(m.group(3)) + 1)]
+        elif tok:
+            out.append(tok)
+    return ",".join(out)
 
 
 def convert(src, spec, layer_names=None):
@@ -26,6 +39,9 @@ def convert(src, spec, layer_names=None):
         w.writerow(spec["columns"])
         for r in rows:
             row = [(r.get(src_col) or "").strip() for src_col in spec["columns"].values()]
+            for i, src_col in enumerate(spec["columns"].values()):
+                if src_col == "References":
+                    row[i] = expand(row[i])
             if layer_names and "Side" in spec["columns"].values():
                 i = list(spec["columns"].values()).index("Side")
                 row[i] = layer_names.get(row[i].lower(), row[i])

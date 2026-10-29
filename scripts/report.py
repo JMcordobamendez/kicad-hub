@@ -109,7 +109,10 @@ if drc_fab and args.fab_profile != "generic":
     if new:
         kinds = {}
         for v in new:
-            kinds[v["description"]] = kinds.get(v["description"], 0) + 1
+            # "Annular width (rule 'X' min ...; actual 0.1 mm)" -> "Annular width: X"
+            m = re.match(r"(.*?) \(rule '([^']+)'", v["description"])
+            k = f"{m.group(1)}: {m.group(2)}" if m else v["description"]
+            kinds[k] = kinds.get(k, 0) + 1
         md += [table(["Fab rule violated", "Count"],
                      [[k, str(n)] for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])]), ""]
 
