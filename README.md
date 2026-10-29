@@ -31,6 +31,9 @@ On every push and pull request of a KiCad project, the action:
 - **Builds every design variant** (KiCad 10 variants, read from the project): the
   report lists what each one fits, leaves out or changes, and the fab package gets
   a BOM and pick & place per variant.
+- **Shows before/after images** of the schematic sheets and PCB layers changed in a
+  pull request, right in the PR comment: removed in red, added in green, each
+  changed area boxed.
 - **Publishes a GitHub Release** with the fab package when you tag `vX.Y`.
 - Also: schematic PDF, BOM (CSV/HTML) and interactive BOM.
 
@@ -40,7 +43,6 @@ with a warning instead of failing.
 ## Planned
 
 - **Cost and stock** per part, total per board and per batch.
-- **Before/after images** of the changed sheets and layers, changes highlighted.
 - **Web portal** on GitHub Pages: schematic/PCB viewer in the browser
   ([KiCanvas](https://kicanvas.org)), iBOM, downloads.
 - **Visual diff** in the portal.
@@ -59,14 +61,16 @@ Mockups: [PR comment](docs/mockups/pull-request.png) ·
                           │
                           ├─ kicad-cli ── ERC / DRC
                           │            ── per-part BOM (this commit + PR base)
+                          │            ── SVG of every sheet/layer (this commit + PR base)
                           │            ── fab package: Gerber X2, Excellon,
                           │               IPC-D-356, BOM, pick & place
                           ├─ Python ──── scripts/datasheets.py  resolve, check, bundle
                           │            ── scripts/fabnotes.py    fab notes from the board
+                          │            ── scripts/visual_diff.py before/after images
                           │            ── scripts/report.py      markdown report
                           ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
                           │
-                          ├──► job summary + sticky PR comment
+                          ├──► job summary + sticky PR comment (images: branch kicad-hub-images)
                           ├──► artifact <board>-fab
                           └──► GitHub Release (on tags)
 
@@ -92,7 +96,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write        # releases (use read if you don't want them)
+  contents: write        # releases and PR images (read = neither)
   pull-requests: write   # PR comment with the report
 
 jobs:
@@ -123,6 +127,7 @@ can use it.
 | `datasheet-optional-refs` | `R,C,TP,H,MH,FID,JP,NT,LOGO` | Prefixes that don't need a datasheet |
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
 | `variants` | `auto` | Design variants to build: `auto` (all in the project), a list, or `none` |
+| `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
 | `comment` | `true` | Post the report on the PR |
@@ -140,7 +145,7 @@ the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 ### What you get
 
 **Report** — job summary and PR comment:
-ERC/DRC counts · BOM changes vs. the PR base · variants · parts missing required fields ·
+ERC/DRC counts · BOM changes vs. the PR base · before/after images · variants · parts missing required fields ·
 datasheet status (broken links, offline copies) · fab package warnings.
 
 **Artifact `<board>-fab`:**
@@ -156,6 +161,7 @@ package/      <board>-<rev>-fab.zip  ← send this to the fab
     *.d356        IPC-D-356 netlist for electrical test
     README.txt    fab notes: size, layers, stackup, finish, smallest features, warnings
     SHA256SUMS.txt
+visual/       PRs only: before/after (<page>.png) and full-page overlay (<page>-full.png)
 datasheets/   local datasheets + index.html (part → datasheet)
 schematic/    schematic PDF
 bom/          BOM CSV and HTML (KiBot)
@@ -169,7 +175,7 @@ the commit hash.
 
 ```
 action.yml                  the action
-scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py
+scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py, visual_diff.py
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
