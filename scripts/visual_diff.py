@@ -40,6 +40,7 @@ CELL = 16            # px; changes closer than a few cells are boxed together
 MARGIN = 80          # px around the changed area in the cropped image
 PANEL_MAX = 900      # px; max width of each half of the before/after image
 PANEL_MIN = 700      # px; narrower crops are zoomed in
+COMPARE_MAX = 2400   # px; max width of the before/after pages for the portal
 MIN_CROP = {"sch": (500, 350), "pcb": (300, 210)}[args.kind]  # px around a single small change
 REMOVED, ADDED, BOX = (220, 30, 30), (0, 150, 60), (255, 140, 0)
 
@@ -179,8 +180,16 @@ def compare(stem, base_svg, head_svg, tmp):
     name = f"{args.kind}-{stem}"
     comp.save(os.path.join(args.out, name + ".png"), optimize=True)
     full_im.save(os.path.join(args.out, name + "-full.png"), optimize=True)
+    # Both versions, same crop and size as the overlay, for the portal's interactive
+    # compare (swipe / fade); scaled down so a page stays a few hundred KB
+    for arr, suffix in ((a, "before"), (b, "after")):
+        im = Image.fromarray(arr.astype(np.uint8)).crop((fx0, fy0, fx1, fy1))
+        if im.width > COMPARE_MAX:
+            im = im.resize((COMPARE_MAX, round(im.height * COMPARE_MAX / im.width)), Image.LANCZOS)
+        im.save(os.path.join(args.out, f"{name}-{suffix}.png"), optimize=True)
     return {"kind": args.kind, "page": stem, "title": page_title(stem), "areas": len(bxs),
             "image": name + ".png", "full": name + "-full.png",
+            "before": name + "-before.png", "after": name + "-after.png",
             "status": "added" if base_svg is None else "removed" if head_svg is None else "changed"}
 
 

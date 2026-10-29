@@ -56,7 +56,6 @@ with a warning instead of failing.
 
 ## Planned
 
-- **Visual diff** in the portal (before/after of the schematic and PCB, interactive).
 
 Mockups: [PR comment](docs/mockups/pull-request.png) ·
 [design portal](docs/mockups/portal.png). Details and progress:
@@ -183,7 +182,8 @@ Every push to a branch, tag and pull request publishes a page to the
 - each page has tabs: **Schematic** (sheet picker) and **PCB** (top/bottom, layer
   list with presets), both with pan, zoom and a side panel that shows the clicked
   part (value, footprint, nets, datasheet, best supplier offers); on pull requests,
-  **Changes vs <base>** (BOM changes and before/after images); then **Interactive
+  **Changes vs <base>** (BOM changes, and each changed sheet or layer in an interactive
+  compare: swipe, fade, side by side or red/green changes, with zoom and pan); then **Interactive
   BOM**, **BOM**, **Suppliers**, **Report**, **Datasheets** and **Downloads** (fab
   package, schematic PDF, BOM CSV, commit history);
 - a version picker in the top bar jumps between branches, releases and PRs.

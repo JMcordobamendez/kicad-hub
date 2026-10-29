@@ -246,8 +246,11 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
 ## Phase 4 — Visual diff (~1–2 days)
 - [x] Before/after images of the changed sheets and layers in the portal's
       "Changes" tab (same engine as 2b.7)
-- [ ] Interactive diff: the two versions overlaid in the viewer (KiCanvas), with a
-      slider or toggle, instead of static images
+- [x] Interactive compare in the "Changes" tab (2026-10-29): both versions of each changed
+      page (rendered by `visual_diff.py`, same crop) with Swipe, Fade, Side by side and
+      Changes (red/green) modes, wheel zoom and drag pan. Chosen over two synced KiCanvas
+      viewers: no more KiCanvas internals, works for schematic and every PCB layer
+- [ ] Overlay the two versions in the KiCanvas viewer itself (selectable parts)
 
 ## Phase 5 (optional) — Comments on the design
 The only piece no existing tool provides. A small web app on top of KiCanvas:

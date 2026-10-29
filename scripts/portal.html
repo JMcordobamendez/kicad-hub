@@ -58,6 +58,19 @@
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
   .presets .btn { padding: 2px 8px; font-size: 12px; }
   .diffimg { margin: 6px 0 18px; } .diffimg img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+  /* interactive compare of the two versions of a page */
+  .cmp { margin: 6px 0 22px; }
+  .cmp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+  .cmp-bar input[type=range] { flex: 1; min-width: 120px; max-width: 320px; }
+  .cmp-view { position: relative; height: 62vh; overflow: hidden; background: #fff; border: 1px solid var(--line);
+              border-radius: 8px; cursor: grab; touch-action: none; }
+  .cmp-view.drag { cursor: grabbing; }
+  .cmp-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .cmp-stage img { position: absolute; left: 0; top: 0; max-width: none !important; border: 0 !important;
+                   border-radius: 0 !important; user-select: none; -webkit-user-drag: none; }
+  .cmp-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--brand); pointer-events: none; }
+  .cmp-tag { position: absolute; top: 8px; font-size: 12px; background: rgba(0,0,0,.65); color: #fff; padding: 2px 8px;
+             border-radius: 10px; pointer-events: none; }
 
   main { flex: 1; padding: 16px 20px; display: flex; min-width: 0; }
   section { flex: 1; display: none; min-width: 0; }
@@ -245,6 +258,7 @@ function buildPage() {
       document.getElementById("s-" + id).innerHTML = S[id]();
       if (id === "schematic" || id === "pcb") hook(id === "pcb" ? "pcb" : "sch");
       if (id === "report") renderReport();
+      if (id === "changes") document.querySelectorAll(".cmp").forEach(compare);
       done.add(id);
     }
     document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "s-" + id));
@@ -296,11 +310,84 @@ function changesView(ch) {
   if (!v.length) out.push(`<p class="muted">No visual changes in the schematic or the board.</p>`);
   else {
     out.push(`<p class="muted">Removed in red, added in green, changed areas boxed in orange.</p>`);
-    for (const p of v) out.push(`<div class="diffimg"><b>${p.kind === "pcb" ? "PCB" : "Schematic"} · ${esc(p.title)}</b>` +
-      ` <span class="muted">${p.status === "changed" ? `${p.areas} area${p.areas !== 1 ? "s" : ""}` : esc(p.status)} · <a href="${esc(p.full)}" target="_blank">full page</a></span>` +
-      `<a href="${esc(p.full)}" target="_blank"><img src="${esc(p.image)}" alt="${esc(p.title)} before and after" loading="lazy"></a></div>`);
+    v.forEach((p, i) => {
+      const head = `<b>${p.kind === "pcb" ? "PCB" : "Schematic"} · ${esc(p.title)}</b>` +
+        ` <span class="muted">${p.status === "changed" ? `${p.areas} area${p.areas !== 1 ? "s" : ""}` : esc(p.status)} · <a href="${esc(p.full)}" target="_blank">full page</a></span>`;
+      if (!(p.before && p.after)) {  // older builds: the static before/after image only
+        out.push(`<div class="diffimg">${head}<a href="${esc(p.full)}" target="_blank"><img src="${esc(p.image)}" alt="${esc(p.title)} before and after" loading="lazy"></a></div>`);
+        return;
+      }
+      out.push(`<div class="cmp" data-cmp="${i}">${head}
+        <div class="cmp-bar"><span class="seg">${[["swipe", "Swipe"], ["fade", "Fade"], ["side", "Side by side"], ["diff", "Changes"]]
+          .map(([m, l], k) => `<button class="btn ${k === 0 ? "on" : ""}" data-mode="${m}">${l}</button>`).join("")}</span>
+          <input type="range" min="0" max="100" value="50" aria-label="Before / after">
+          <button class="btn" data-fit>Fit</button><span class="muted" style="font-size:12px">scroll to zoom · drag to pan</span></div>
+        <div class="cmp-view"><div class="cmp-stage">
+          <img class="a" src="${esc(p.before)}" alt="${esc(p.title)} on ${esc(ch.base || "base")}">
+          <img class="b" src="${esc(p.after)}" alt="${esc(p.title)} in this pull request">
+          <img class="d" src="${esc(p.full)}" alt="${esc(p.title)} changes" hidden>
+        </div><div class="cmp-line"></div>
+        <span class="cmp-tag" style="left:8px">Before · ${esc(ch.base || "base")}</span><span class="cmp-tag" style="right:8px">After · this PR</span></div></div>`);
+    });
   }
   return out.join("") + `</div>`;
+}
+
+/* Interactive compare: both versions of a page stacked; swipe, fade, side by side or
+   the red/green overlay; wheel zooms around the cursor, drag pans. */
+function compare(root) {
+  const view = root.querySelector(".cmp-view"), stage = root.querySelector(".cmp-stage");
+  const A = root.querySelector("img.a"), B = root.querySelector("img.b"), Dif = root.querySelector("img.d");
+  const line = root.querySelector(".cmp-line"), range = root.querySelector("input[type=range]");
+  const tags = root.querySelectorAll(".cmp-tag");
+  let mode = "swipe", W = 0, H = 0, s = 1, x = 0, y = 0;
+  const GAP = 24;
+  const apply = () => {
+    stage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+    const pct = +range.value;
+    B.style.left = mode === "side" ? `${W + GAP}px` : "0";
+    B.style.clipPath = mode === "swipe" ? `inset(0 0 0 ${pct}%)` : "none";
+    B.style.opacity = mode === "fade" ? pct / 100 : 1;
+    A.hidden = mode === "diff"; B.hidden = mode === "diff"; Dif.hidden = mode !== "diff";
+    range.hidden = !(mode === "swipe" || mode === "fade");
+    line.hidden = mode !== "swipe";
+    line.style.left = `${x + s * W * pct / 100}px`;
+    tags.forEach(t => { t.hidden = mode === "diff"; });
+  };
+  const fit = () => {
+    if (!view.clientWidth || !W) { requestAnimationFrame(fit); return; }  // tab not laid out yet
+    const vw = view.clientWidth, vh = view.clientHeight, w = mode === "side" ? 2 * W + GAP : W;
+    s = Math.min(vw / w, vh / H) * 0.98;
+    x = (vw - w * s) / 2; y = (vh - H * s) / 2;
+    apply();
+  };
+  const ready = () => {
+    W = A.naturalWidth; H = A.naturalHeight;
+    [A, B, Dif].forEach(im => { im.style.width = W + "px"; });  // the overlay is larger: same box
+    fit();
+  };
+  if (A.complete && A.naturalWidth) ready(); else A.addEventListener("load", ready, {once: true});
+  root.querySelector(".cmp-bar").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.mode) {
+      mode = b.dataset.mode;
+      root.querySelectorAll("[data-mode]").forEach(o => o.classList.toggle("on", o === b));
+      fit();
+    } else if (b.hasAttribute("data-fit")) fit();
+  });
+  range.addEventListener("input", apply);
+  view.addEventListener("wheel", e => {
+    e.preventDefault();
+    const r = view.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const k = Math.exp(-e.deltaY * 0.0015), ns = Math.min(Math.max(s * k, 0.05), 20);
+    x = mx - (mx - x) * ns / s; y = my - (my - y) * ns / s; s = ns;
+    apply();
+  }, {passive: false});
+  let drag = null;
+  view.addEventListener("pointerdown", e => { drag = {px: e.clientX, py: e.clientY, x, y}; view.setPointerCapture(e.pointerId); view.classList.add("drag"); });
+  view.addEventListener("pointermove", e => { if (!drag) return; x = drag.x + e.clientX - drag.px; y = drag.y + e.clientY - drag.py; apply(); });
+  const end = () => { drag = null; view.classList.remove("drag"); };
+  view.addEventListener("pointerup", end); view.addEventListener("pointercancel", end);
 }
 
 function renderReport() {
