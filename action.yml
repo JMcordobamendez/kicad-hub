@@ -7,7 +7,9 @@ inputs:
     description: Directory that contains the .kicad_pro file, relative to the repository root.
     required: true
   strict:
-    description: Fail the job when ERC or DRC report errors. Keep false while the design is in progress.
+    description: >-
+      Fail the job when ERC or DRC report errors, or a requirement fails. Keep false while
+      the design is in progress.
     default: "false"
   required-fields:
     description: >-
@@ -66,6 +68,11 @@ inputs:
   digikey-client-secret:
     description: DigiKey API client secret (pass a secret).
     default: ""
+  requirements:
+    description: >-
+      Requirements file (YAML), relative to project-dir, checked against ERC, DRC, BOM and
+      prices. Missing file = no requirements checked.
+    default: kicad-hub-requirements.yaml
   pages:
     description: >-
       Publish a design portal page per branch, release and pull request (schematic and
@@ -113,6 +120,9 @@ outputs:
   missing-fields:
     description: Number of fitted parts missing a required field.
     value: ${{ steps.report.outputs.missing_fields }}
+  requirements-failed:
+    description: Number of failed requirements ("-" when there is no requirements file).
+    value: ${{ steps.report.outputs.requirements_failed }}
 
 runs:
   using: composite
@@ -481,7 +491,7 @@ runs:
 
         # Fab notes from the board (KiCad's Python, inside the image)
         cp "$GITHUB_ACTION_PATH/scripts/fabnotes.py" "$OUT/.fabnotes.py"
-        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" "$PROFILE" > "$OUT/reports/fab-warnings.txt"
+        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" "$OUT/reports/board.json" "$PROFILE" > "$OUT/reports/fab-warnings.txt"
         rm "$OUT/.fabnotes.py"
         if [ -n "$variant_lines" ]; then
           printf '\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n%s' "$variant_lines" >> "$pkg/README.txt"
@@ -494,6 +504,26 @@ runs:
         echo "board_rev=$board_rev" >> "$GITHUB_OUTPUT"
         echo "zip=$OUT/package/$base-fab.zip" >> "$GITHUB_OUTPUT"
         echo "name=$base-fab.zip" >> "$GITHUB_OUTPUT"
+
+    - name: Requirements
+      id: requirements
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        OUT: ${{ inputs.output-dir }}
+        REQ: ${{ inputs.requirements }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -uo pipefail
+        file="$PROJECT_DIR/$REQ"
+        if [ -z "$REQ" ] || [ ! -f "$file" ]; then
+          echo "No requirements file ($file): skipped"
+          exit 0
+        fi
+        # In the KiBot image, which has PyYAML (the runner's Python may not)
+        cp "$GITHUB_ACTION_PATH/scripts/requirements.py" "$OUT/.requirements.py"
+        docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$IMAGE"           python3 "$OUT/.requirements.py" "$file" "$OUT/reports" "$OUT/reports/requirements.json"           || echo "::warning::Requirements check failed to run: skipped"
+        rm -f "$OUT/.requirements.py"
 
     - name: Portal address
       id: portal
@@ -542,12 +572,12 @@ runs:
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
+          --variants "$r/variants.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
           --portal-url "$PORTAL_URL" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
-        for k in erc_errors drc_errors missing_fields; do
+        for k in erc_errors drc_errors missing_fields requirements_failed; do
           echo "$k=$(jq -r ".$k // \"-\"" "$r/counts.json")" >> "$GITHUB_OUTPUT"
         done
 
@@ -685,8 +715,10 @@ runs:
       env:
         ERC: ${{ steps.report.outputs.erc_errors }}
         DRC: ${{ steps.report.outputs.drc_errors }}
+        REQS: ${{ steps.report.outputs.requirements_failed }}
       run: |
         fail=0
         [ "$ERC" = 0 ] || { echo "::error::ERC reports $ERC errors"; fail=1; }
         [ "$DRC" = 0 ] || [ "$DRC" = - ] || [ "$DRC" = null ] || { echo "::error::DRC reports $DRC errors"; fail=1; }
+        [ "$REQS" = 0 ] || [ "$REQS" = - ] || [ "$REQS" = null ] || { echo "::error::$REQS requirements failed"; fail=1; }
         exit $fail

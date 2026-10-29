@@ -2,9 +2,12 @@
 """Fabrication notes (README.txt) for the fab package, read from the board itself.
 
 Runs with KiCad's Python (pcbnew), so the numbers don't depend on the UI language.
-Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt> [fab profile]
+Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt> [board.json] [fab profile]
+The optional JSON has the same measurements for later steps (requirements.py);
+pass "" to skip it. The fab profile (default generic) is described in README.txt.
 """
 import datetime
+import json
 import os
 import re
 import sys
@@ -12,7 +15,7 @@ import sys
 import pcbnew
 
 pcb_path, rev, out = sys.argv[1:4]
-profile = sys.argv[4] if len(sys.argv) > 4 else "generic"
+profile = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else "generic"
 b = pcbnew.LoadBoard(pcb_path)
 mm = pcbnew.ToMM
 ds = b.GetDesignSettings()
@@ -132,5 +135,12 @@ FAB PROFILE: {profile}
 """
 with open(out, "w", encoding="utf-8", newline="\n") as f:
     f.write(lines)
+if len(sys.argv) > 4 and sys.argv[4]:
+    drills = [d for d in (min_via_drill, min_hole) if d is not None]
+    with open(sys.argv[4], "w", encoding="utf-8") as f:
+        json.dump({"size_mm": [round(mm(bbox.GetWidth()), 3), round(mm(bbox.GetHeight()), 3)],
+                   "copper_layers": b.GetCopperLayerCount(), "min_track": min_track,
+                   "min_via_drill": min_via_drill, "min_pad_hole": min_hole,
+                   "min_drill": min(drills) if drills else None}, f)
 for w in warnings:
     print(w)  # the action turns these into CI warnings

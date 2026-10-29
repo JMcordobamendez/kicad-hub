@@ -32,6 +32,7 @@ ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
 ap.add_argument("--portal-url", default="", help="this build's page in the design portal")
+ap.add_argument("--requirements", help="JSON from requirements.py")
 ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
 ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
 ap.add_argument("--package", default="", help="file name of the fab package zip")
@@ -115,6 +116,22 @@ if drc_fab and args.fab_profile != "generic":
             kinds[k] = kinds.get(k, 0) + 1
         md += [table(["Fab rule violated", "Count"],
                      [[k, str(n)] for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])]), ""]
+
+# --- Requirements ---------------------------------------------------------------
+if args.requirements and os.path.exists(args.requirements):
+    reqs = json.load(open(args.requirements, encoding="utf-8"))
+    icon = {"pass": "✅ pass", "fail": "❌ fail", "unknown": "❔ unknown"}
+    n = {s: sum(1 for r in reqs if r["status"] == s) for s in icon}
+    counts.update(requirements_total=len(reqs), requirements_passed=n["pass"],
+                  requirements_failed=n["fail"], requirements_unknown=n["unknown"])
+    md += ["### Requirements",
+           f"**{n['pass']} of {len(reqs)} met**" + (f" · {n['fail']} failed" if n["fail"] else "")
+           + (f" · {n['unknown']} unknown (no data to check them)" if n["unknown"] else "") + ".", "",
+           table(["ID", "Requirement", "Result", "Measured"],
+                 [[r["id"], r["text"], icon[r["status"]], r["measured"]] for r in reqs]), ""]
+    why = [f"- **{r['id']}**: {r['detail']}" for r in reqs if r["status"] != "pass" and r["detail"]]
+    if why:
+        md += why[:MAX_ROWS] + [""]
 
 # --- BOM diff ----------------------------------------------------------------
 head = load_bom(args.bom) or {}

@@ -1,0 +1,46 @@
+name: Design review
+description: Request a review of a board revision
+title: "[Review] "
+labels: ["design-review"]
+body:
+  - type: input
+    id: revision
+    attributes:
+      label: Revision or branch
+      placeholder: "A, or feat/power-stage"
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: What changed
+    validations:
+      required: true
+  - type: textarea
+    id: areas
+    attributes:
+      label: Sheets and board areas to check
+      description: Name the sheets, nets or board regions where a second pair of eyes matters most.
+    validations:
+      required: true
+  - type: input
+    id: deadline
+    attributes:
+      label: Deadline
+      placeholder: "YYYY-MM-DD"
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before asking for the review
+      options:
+        - label: ERC and DRC pass, or every remaining warning is justified
+          required: true
+        - label: The CI report of the pull request has been read
+          required: true
+        - label: The pull request is open and linked below
+          required: true
+  - type: input
+    id: pr
+    attributes:
+      label: Pull request
+      placeholder: "#12"

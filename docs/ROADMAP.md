@@ -53,15 +53,34 @@ flowchart LR
 
   PUB(["Go public · v1"]):::done
 
+  subgraph P6["6 · Ideas from commercial platforms"]
+    direction TB
+    i1["Fab profiles + fab DRC"]:::doing
+    i2["Timeline, compare<br/>any two versions"]:::doing
+    i3["Requirements in the repo"]:::done
+    i4["Approval flows"]:::doing
+    i5["Net navigation, measuring"]:::todo
+    i6["Sharing private boards"]:::todo
+    i7["Target price"]:::todo
+  end
+
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
   P4 --> P5
+  PUB --> P6
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phases 1–4 done and public (CI, BOM review, suppliers, before/after
-images, design portal on GitHub Pages, interactive compare). Next: release v1.1.0
-(the `v1` tag predates the portal), fab profiles, then the portal timeline
-(see "Ideas from commercial platforms").
+**Now:** phases 1–4 done and released as v1.1.0 (`v1` moved to it, 2026-10-29).
+In progress, one branch and PR each, worked in parallel (2026-10-29):
+
+- Fab profiles with fab DRC rules (`feat/fab-profiles`)
+- Timeline in the portal and compare any two versions (`feat/timeline`)
+- Comments pinned on the board, phase 5 prototype (`feat/pinned-comments`)
+- Requirements in the repo (`feat/requirements`, PR #18)
+- Approval flows in the template (`feat/approval-flows`, PR #17)
+
+Next batch: net navigation and measuring in the viewer (after phase 5, same code),
+sharing private boards, target price last.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -286,12 +305,16 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
 
 - [ ] **Timeline in the portal**: a page per commit on `main` (or a listed range), and
       compare any two versions (e.g. release 1.0 vs 1.2), not only a PR against its base
-- [ ] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
+- [x] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
       voltage rating, part count, cost per board…) checked by CI against ERC, DRC,
-      BOM and sourcing, with a pass/fail table in the report
-- [ ] **Approval flows on GitHub**: part requests and design reviews as Issue forms,
+      BOM and sourcing, with a pass/fail table in the report. Done 2026-10-29:
+      `kicad-hub-requirements.yaml` (13 check types, see README), `scripts/requirements.py`,
+      table in the report, count in the portal's Checks panel; failures fail the job
+      only with `strict`. Electrical limits (max current…) need data we don't produce yet.
+- [x] **Approval flows on GitHub**: part requests and design reviews as Issue forms,
       PR review rules and environments (documented recipes in the template, no engine
-      of our own)
+      of our own). Done 2026-10-29: issue forms, `CODEOWNERS.example`, opt-in
+      release environment and `template/docs/approvals.md`
 - [ ] **Net navigation and measuring in the viewer**: highlight a net, jump between
       its pads, measure distances. Depends on KiCanvas (alpha)
 - [ ] **Sharing private boards**: a way to show a private repo's portal to people
@@ -356,4 +379,7 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
   target price are planned; component library under study; BOM health score, STEP
   diff, paid compliance data, MCAD and PLM integration dropped. Fab comments on releases (a Discussion per
   release) dropped too.
-- **Mockups** of the PR comment and the portal: `docs/mockups/`.
+- **Screenshots instead of mockups** (2026-10-29): `docs/screenshots/` holds real
+  screenshots of the example board's portal and PR comment, taken in GitHub Actions
+  by the "Docs screenshots" workflow (Playwright) on a PR with visual changes; the
+  first mockups are gone. Rerun it by hand with a PR number after UI changes.
