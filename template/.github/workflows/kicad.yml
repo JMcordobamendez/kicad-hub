@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: JMcordobamendez/kicad-hub@main
+      - uses: JMcordobamendez/kicad-hub@v1
         with:
           project-dir: .                 # folder with the .kicad_pro
           # strict: true                 # fail on ERC/DRC errors

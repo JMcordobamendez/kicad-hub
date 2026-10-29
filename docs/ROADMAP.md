@@ -238,11 +238,18 @@ it's clear the feature is actually missed.
 - [ ] 3D render output (slow, low value per push: maybe only on releases)
 
 ## Before going public
-- [ ] Choose license
-- [ ] Documentation and a working example board
-- [ ] Avoid third-party trademarks in names and descriptions
+- [x] License: MIT (2026-10-29)
+- [x] Documentation and a working example board
+- [x] Third-party trademarks: no other vendors' names in the repo or its About; the
+      name kicad-hub is kept with a "not affiliated with the KiCad project" note
+- [x] Tags `v1.0.0` and moving `v1`; examples use `@v1`
+- [ ] Owner switches the repository to public (Settings → General → Danger Zone)
 
 ## Decisions so far
+- **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation
+  note. Versions: `vX.Y.Z` tags plus a moving major tag (`v1`) that users pin;
+  `main` is development. Tags `v*` run the tests but don't attach the example's fab
+  package to a release (only `example-*` tags do, to test releases).
 - **Build on GitHub, not on a custom server.** Actions + Pages are free for public
   repos; nothing to host or maintain.
 - **Two kinds of repositories.** This repo is the platform (reusable action +

@@ -7,9 +7,12 @@ The goal is the collaboration experience of commercial PCB cloud platforms
 projects, using only free and open-source tools on top of plain git, GitHub Actions
 and GitHub Pages. No extra server to maintain.
 
-> **Status:** the CI part works and is tested on every push with a real board
-> (see [what works today](#what-works-today)). The web portal and visual diffs are
-> next — see the [roadmap](docs/ROADMAP.md).
+kicad-hub is an independent project, not affiliated with or endorsed by the KiCad
+project. KiCad is a trademark of its respective owners.
+
+> **Status:** v1 — the CI part works and is tested on every push with a real board
+> (see [what works today](#what-works-today)). The web portal is next — see the
+> [roadmap](docs/ROADMAP.md).
 
 ## What works today
 
@@ -113,7 +116,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: JMcordobamendez/kicad-hub@main
+      - uses: JMcordobamendez/kicad-hub@v1
         with:
           project-dir: hardware/my-board   # folder with the .kicad_pro
 ```
@@ -124,9 +127,9 @@ Ready-made workflows are in [`template/.github/workflows/`](template/.github/wor
 `kicad-hub-images` branch when it is closed (or by hand, *Run workflow* with a PR
 number). Copy both to `.github/workflows/` in your board repository.
 
-While kicad-hub is private, enable *Settings → Actions → General → Access →
-"Accessible from repositories owned by the user"* in kicad-hub so your other repos
-can use it.
+**Versions:** `@v1` always points to the latest 1.x release (no breaking changes);
+pin a full tag such as `@v1.0.0` to freeze it, or use `@main` for the development
+version.
 
 ### Inputs
 
@@ -201,7 +204,7 @@ Secrets and variables → Actions → New repository secret*, one per value:
 **3. Pass them to the action** in your workflow:
 
 ```yaml
-      - uses: JMcordobamendez/kicad-hub@main
+      - uses: JMcordobamendez/kicad-hub@v1
         with:
           project-dir: hardware/my-board
           currency: EUR
@@ -287,7 +290,8 @@ workflows.
 
 - Every push to `main`, every PR and every `v*` tag runs the action on
   `examples/royalblue54l-feather` (`.github/workflows/test.yml`). A PR shows the
-  report comment, a tag publishes a release.
+  report comment. Version tags (`v*`) run the tests only; an `example-*` tag also
+  publishes the example's fab package as a release, to test that step.
 - The Python scripts can be run locally against files exported with a local
   `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` needs
   KiCad's own Python (`pcbnew`); on Windows it may open a "font not found" dialog
@@ -302,5 +306,5 @@ workflows.
 
 ## License
 
-To be decided before going public (probably MIT). The example board keeps its own
-license (CERN-OHL-P, see [examples/README.md](examples/README.md)).
+[MIT](LICENSE). The example board keeps its own license (CERN-OHL-P, see
+[examples/README.md](examples/README.md)).
