@@ -347,4 +347,7 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
   target price are planned; component library under study; BOM health score, STEP
   diff, paid compliance data, MCAD and PLM integration dropped. Fab comments on releases (a Discussion per
   release) dropped too.
-- **Mockups** of the PR comment and the portal: `docs/mockups/`.
+- **Screenshots instead of mockups** (2026-10-29): `docs/screenshots/` holds real
+  screenshots of the example board's portal and PR comment, taken in GitHub Actions
+  by the "Docs screenshots" workflow (Playwright) on a PR with visual changes; the
+  first mockups are gone. Rerun it by hand with a PR number after UI changes.
