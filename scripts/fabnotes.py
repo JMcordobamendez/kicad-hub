@@ -2,9 +2,11 @@
 """Fabrication notes (README.txt) for the fab package, read from the board itself.
 
 Runs with KiCad's Python (pcbnew), so the numbers don't depend on the UI language.
-Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt>
+Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt> [board.json]
+The optional JSON has the same measurements for later steps (requirements.py).
 """
 import datetime
+import json
 import os
 import re
 import sys
@@ -124,5 +126,12 @@ FILES
 """
 with open(out, "w", encoding="utf-8", newline="\n") as f:
     f.write(lines)
+if len(sys.argv) > 4:
+    drills = [d for d in (min_via_drill, min_hole) if d is not None]
+    with open(sys.argv[4], "w", encoding="utf-8") as f:
+        json.dump({"size_mm": [round(mm(bbox.GetWidth()), 3), round(mm(bbox.GetHeight()), 3)],
+                   "copper_layers": b.GetCopperLayerCount(), "min_track": min_track,
+                   "min_via_drill": min_via_drill, "min_pad_hole": min_hole,
+                   "min_drill": min(drills) if drills else None}, f)
 for w in warnings:
     print(w)  # the action turns these into CI warnings

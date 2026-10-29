@@ -25,6 +25,7 @@ jobs:
           project-dir: .                 # folder with the .kicad_pro
           # strict: true                 # fail on ERC/DRC errors
           # boards: "1,5,10,100"         # batch sizes to price
+          # requirements: kicad-hub-requirements.yaml   # checked when the file exists (template/ has a commented one)
           # currency: EUR
           # Optional suppliers, with your own free API keys stored as repository
           # secrets (Settings → Secrets and variables → Actions). Unset = skipped.

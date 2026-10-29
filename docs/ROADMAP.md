@@ -277,9 +277,12 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
 
 - [ ] **Timeline in the portal**: a page per commit on `main` (or a listed range), and
       compare any two versions (e.g. release 1.0 vs 1.2), not only a PR against its base
-- [ ] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
+- [x] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
       voltage rating, part count, cost per board…) checked by CI against ERC, DRC,
-      BOM and sourcing, with a pass/fail table in the report
+      BOM and sourcing, with a pass/fail table in the report. Done 2026-10-29:
+      `kicad-hub-requirements.yaml` (13 check types, see README), `scripts/requirements.py`,
+      table in the report, count in the portal's Checks panel; failures fail the job
+      only with `strict`. Electrical limits (max current…) need data we don't produce yet.
 - [ ] **Approval flows on GitHub**: part requests and design reviews as Issue forms,
       PR review rules and environments (documented recipes in the template, no engine
       of our own)
