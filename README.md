@@ -242,6 +242,7 @@ Every push to a branch, tag and pull request publishes a page to the
   build stores in `renders/` (same export options and resolution, no crop, so any two
   builds line up). Pages identical in both are collapsed as "no changes". Builds
   published before this feature have no renders until their next publish.
+- on pull request pages, **comments pinned on the board** (see below).
 
 The viewer is a pinned copy of KiCanvas (`scripts/vendor/`, see its README), not
 loaded from a third-party site, so published pages don't change under you.
@@ -251,6 +252,50 @@ Source: Deploy from a branch → `kicad-hub-site` / `(root)` → Save*. The PR c
 links to the PR's page. The branch keeps a single commit, replaced on every
 publish, so it doesn't grow; the cleanup workflow removes a PR's page when it is
 closed. Pull requests from forks aren't published (they can't write to the repo).
+
+#### Comments on the board
+
+On a pull request's page, the **PCB** and **Schematic** tabs have a **Comment** button.
+Press it, click a part or any point of the board (or type the coordinates), write the
+note and post it: it becomes a normal comment in the pull request's conversation,
+
+```
+📍 **U12** (x 23.40, y 41.10 mm, F.Cu) — missing decoupling
+
+[Open on the board](https://<owner>.github.io/<repo>/pr-7/?at=23.4,41.1&ref=U12#pcb)
+<!-- kicad-hub-pin {"ref":"U12","x":23.4,"y":41.1,"layer":"F.Cu","page":"pcb","sha":"…"} -->
+```
+
+with a hidden marker that the portal reads back. The **Comments** card in the side
+panel lists the pins of that tab (author, part, text, link to the GitHub comment);
+click one to select and zoom to the part (or the point), and numbered markers are
+drawn over the viewer and follow pan and zoom. The link in the comment opens the page
+on that spot. Anyone can also write such a comment by hand: the marker is all it needs.
+Branch and release pages don't show comments.
+
+Reading the pins needs nothing (public repositories, 60 anonymous requests per hour).
+**Posting** from the page needs a token; without one, **Comment** copies the formatted
+comment to the clipboard and opens the pull request, where you paste it.
+
+*Make the token once* (GitHub, in the browser):
+
+1. Click your profile photo, top right → **Settings**.
+2. Left sidebar, at the bottom → **Developer settings**.
+3. **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+4. **Token name**: `kicad-hub comments`. **Expiration**: 30 days is plenty.
+5. **Resource owner**: the owner of the board repository (an organization may need to
+   allow fine-grained tokens, or approve the request).
+6. **Repository access** → **Only select repositories** → pick the board repository.
+7. **Permissions** → **Repository permissions** → **Pull requests** → *Access:*
+   **Read and write** (Metadata: Read-only is added by itself). Nothing else.
+8. **Generate token**, copy it (`github_pat_…`) and paste it in the **GitHub token**
+   box at the bottom of the Comments card → **Save**.
+
+The token is kept in this browser's `localStorage` and sent only to `api.github.com`,
+never in a URL or to any other site. **Forget token** (same box) removes it. Comments
+are posted under your GitHub account. `localStorage` is shared by every page under
+`<owner>.github.io`, so keep the expiry short and the permission to that one
+repository.
 
 ### Supplier API keys
 
@@ -406,7 +451,8 @@ scripts/                    fab_assembly.py, report.py, requirements.py, datashe
                             variant_cpl.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
-                            compare.js, the compare page and its shared widget)
+                            compare.js, the compare page and its shared widget;
+                            pins.js, comments pinned on the board)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
@@ -444,7 +490,10 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
 - **GitHub Pages is free only for public repositories** (private ones need a paid
   plan); without Pages the portal branch is still published but not served.
 - The viewer is KiCanvas, still in alpha: some KiCad features may not display.
-- Comments pinned to a location on the board are not there yet (planned, phase 5).
+- Pinned comments are a prototype (phase 5): conversation comments only (no replies or
+  resolving from the page, no review comments on the diff), a pin keeps the position
+  where it was made even if the part moves in a later commit, and the viewer's clicks
+  rely on KiCanvas internals. Only on pull request pages of github.com repositories.
 
 ## License
 

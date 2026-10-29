@@ -189,6 +189,9 @@ function buildPage() {
     `<span>${where} · commit <a class="mono" href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a>` +
     ` · <a href="${history}">history</a></span>${status(c)}`) + `<nav id="tabs"></nav>`;
   versions();
+  // comments pinned on the board: pull request pages on github.com only (scripts/pins.js)
+  if (D.kind === "pr" && D.pr && D.server === "https://github.com")
+    load("pins.js").then(() => KHPins.init({D, viewers, findProject})).catch(() => {});
 
   const ch = D.changes;
   const nChanges = ch ? (ch.visual || []).length + (ch.bom ? ch.bom.added.length + ch.bom.removed.length + ch.bom.changed.length : 0) : 0;
@@ -375,6 +378,7 @@ function hook(kind) {
       v.addEventListener("kicanvas:select", e => showPart(kind, e.detail && e.detail.item));
       if (kind === "pcb") setTimeout(() => { try { v.zoom_to_board(); v.draw(); } catch (e) {} layerPanel(v); }, 150);
       if (kind === "sch") sheetPicker(findProject(root));
+      document.dispatchEvent(new CustomEvent("kh:viewer", {detail: {kind, viewer: v}}));  // pins.js
     }
     if (++tries > 200) clearInterval(timer);
   }, 300);

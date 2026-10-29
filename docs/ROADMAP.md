@@ -48,7 +48,7 @@ flowchart LR
 
   subgraph P5["5 · Pinned comments"]
     direction TB
-    p5["Click a part → PR comment"]:::todo
+    p5["Click a part → PR comment"]:::doing
   end
 
   PUB(["Go public · v1"]):::done
@@ -287,7 +287,23 @@ The only piece no existing tool provides. A small web app on top of KiCanvas:
 clicking a component creates a PR review comment through the GitHub API
 (e.g. "U12 (x, y): missing decoupling").
 
-- [ ] Prototype
+- [x] Prototype (2026-10-29, `scripts/pins.js`, loaded by the portal on PR pages only):
+      **Comment** button on the PCB and Schematic tabs, click a part (its position) or
+      any point (camera `screen_to_world`) and write a note. Posted as a PR conversation
+      comment through the REST API with a hidden `kicad-hub-pin` marker
+      (`ref, x, y, layer, page, sheet, sha`) and an `?at=x,y&ref=…#pcb` link back to the
+      page; fine-grained token (Pull requests: write) kept in `localStorage`, "Forget
+      token" button, sent only to `api.github.com`; without a token the comment is
+      copied and the PR opened. The PR's comments are read on load (paginated, token
+      optional) and listed in a "Comments" card (author, part, text, GitHub link);
+      clicking one selects the part or zooms to the point and turns the board to the
+      pin's side. Numbered markers are drawn over the viewer (`world_to_screen`,
+      repositioned when the camera changes). Comment text is escaped, never rendered
+      as HTML. Written from KiCanvas's source and not yet confirmed in a browser:
+      owner to test posting.
+- [ ] After the prototype: replies and resolve from the page, review comments on the
+      Changes diff, pins on releases (read-only), follow a part that moves between
+      commits
 
 Wanted (owner, 2026-10-29), no longer optional. It is a software project in its own
 right: start with a prototype on the PR portal page.
