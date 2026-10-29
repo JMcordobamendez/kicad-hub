@@ -6232,7 +6232,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10kR"
+		(property "Value" "4k7"
 			(at 176.53 63.4999 0)
 			(effects
 				(font
