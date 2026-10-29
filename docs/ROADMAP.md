@@ -48,13 +48,13 @@ flowchart LR
 
   subgraph P5["5 · Pinned comments"]
     direction TB
-    p5["Click a part → PR comment"]:::optional
+    p5["Click a part → PR comment"]:::todo
   end
 
   PUB(["Go public · v1"]):::done
 
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
-  P4 -.-> P5
+  P4 --> P5
   b7 -. same diff engine .- p4
 ```
 
@@ -254,15 +254,15 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
       viewers: no more KiCanvas internals, works for schematic and every PCB layer
 - [ ] Overlay the two versions in the KiCanvas viewer itself (selectable parts)
 
-## Phase 5 (optional) — Comments on the design
+## Phase 5 — Comments pinned on the design
 The only piece no existing tool provides. A small web app on top of KiCanvas:
 clicking a component creates a PR review comment through the GitHub API
 (e.g. "U12 (x, y): missing decoupling").
 
 - [ ] Prototype
 
-This is a software project in its own right. Leave it until phases 1–4 work and
-it's clear the feature is actually missed.
+Wanted (owner, 2026-10-29), no longer optional. It is a software project in its own
+right: start with a prototype on the PR portal page.
 
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
@@ -323,8 +323,8 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
 - **Developed as a personal project**, with personal designs only.
 - **Usefulness over copying commercial platforms** (2026-10-28): BOM diff, cost,
   ready-to-order packages, extra checks, variants and datasheets (phase 2b) come
-  before the web viewer polish. Pinned comments on the board (phase 5) stay
-  optional: too much work for a one-person team.
+  before the web viewer polish. Pinned comments on the board (phase 5) were
+  optional at first; planned since 2026-10-29 at the owner's request.
 - **Fab-house agnostic** (2026-10-28): the release package uses standard formats
   (Gerber X2, Excellon, IPC-D-356, CSV BOM/CPL, fab notes) that any fab accepts.
   Vendor formats (JLCPCB, PCBWay…) are optional profiles, never the default.

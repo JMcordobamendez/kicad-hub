@@ -335,7 +335,7 @@ workflows.
 - **GitHub Pages is free only for public repositories** (private ones need a paid
   plan); without Pages the portal branch is still published but not served.
 - The viewer is KiCanvas, still in alpha: some KiCad features may not display.
-- Comments pinned to a location on the board are an optional later phase.
+- Comments pinned to a location on the board are not there yet (planned, phase 5).
 
 ## License
 
