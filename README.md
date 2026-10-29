@@ -10,9 +10,20 @@ and GitHub Pages. No extra server to maintain.
 kicad-hub is an independent project, not affiliated with or endorsed by the KiCad
 project. KiCad is a trademark of its respective owners.
 
-> **Status:** v1 — the CI part works and is tested on every push with a real board
-> (see [what works today](#what-works-today)). The web portal is next — see the
+> **Status:** v1.1 — CI checks, BOM review, suppliers, fab package and the design
+> portal with interactive compare work and are tested on every push with a real
+> board (see [what works today](#what-works-today)). Next steps: the
 > [roadmap](docs/ROADMAP.md).
+
+![Design portal: PCB viewer with layers and checks](docs/screenshots/portal-pcb.png)
+
+| Changed sheet, swipe between before and after | The report posted on the pull request |
+|---|---|
+| ![Interactive compare](docs/screenshots/portal-compare.png) | ![PR comment](docs/screenshots/pull-request.png) |
+
+More: [schematic](docs/screenshots/portal-schematic.png) ·
+[BOM](docs/screenshots/portal-bom.png). Real screenshots of the example board's
+portal and PR comment, taken by the "Docs screenshots" workflow.
 
 ## What works today
 
@@ -56,10 +67,7 @@ with a warning instead of failing.
 
 ## Planned
 
-
-Mockups: [PR comment](docs/mockups/pull-request.png) ·
-[design portal](docs/mockups/portal.png). Details and progress:
-[roadmap](docs/ROADMAP.md).
+Details and progress: [roadmap](docs/ROADMAP.md).
 
 ## How the pieces fit together
 
@@ -309,7 +317,7 @@ template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
 .github/workflows/test.yml  runs the action on the example board on every push/PR/tag
 .github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
-docs/                       roadmap and mockups
+docs/                       roadmap and screenshots
 ```
 
 New board repositories start from [`template/`](template/): folder layout,
