@@ -11,7 +11,7 @@ max(needed, minimum order) and takes the price break for that quantity.
 
 Writes a JSON for the report and a CSV with one line per LCSC part.
 
-Usage: sourcing.py --bom BOM.csv [--variants variants.json] --boards 1,10,100
+Usage: sourcing.py --bom BOM.csv [--variants variants.json] --boards 1,5,10,100
                    --json OUT.json --csv OUT.csv
 """
 import argparse
@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 ap = argparse.ArgumentParser()
 ap.add_argument("--bom", required=True, help="per-part BOM of the default build")
 ap.add_argument("--variants", help="variants.json from the action (per-part BOM of each variant)")
-ap.add_argument("--boards", default="1,10,100", help="batch sizes, comma-separated")
+ap.add_argument("--boards", default="1,5,10,100", help="batch sizes, comma-separated")
 ap.add_argument("--json", required=True)
 ap.add_argument("--csv", required=True)
 args = ap.parse_args()

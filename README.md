@@ -23,7 +23,7 @@ On every push and pull request of a KiCad project, the action:
   removed and changed (`Value: 10uF → 22uF`).
 - **Resolves the datasheets**: links checked (broken vs. unverifiable), local PDFs
   found by MPN or value in the datasheet folders and bundled for offline use.
-- **Prices the BOM**: cost per board and per batch (1, 10, 100 boards), for every
+- **Prices the BOM**: cost per board and per batch (1, 5, 10, 100 boards), for every
   variant, from LCSC by part number (no API key); warns on parts out of stock,
   not active, not found, or whose LCSC code doesn't match the MPN.
 - **Builds a fab package** in standard formats any fab house accepts (Gerber X2,
@@ -131,7 +131,7 @@ can use it.
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
 | `variants` | `auto` | Design variants to build: `auto` (all in the project), a list, or `none` |
 | `sourcing` | `lcsc` | Price and stock from LCSC by the `LCSC` field (no API key), or `none` |
-| `boards` | `1,10,100` | Batch sizes to price (components only) |
+| `boards` | `1,5,10,100` | Batch sizes to price (components only) |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |

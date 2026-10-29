@@ -116,7 +116,7 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          by the `LCSC` field with no API key (`scripts/sourcing.py`, the JSON behind
          LCSC's product pages: unofficial, so failures are reported, never fatal).
          Checked from GitHub runners on 2026-10-29
-   - [x] Total per board and per batch (`boards: 1,10,100`), per build (default and
+   - [x] Total per board and per batch (`boards: 1,5,10,100`), per build (default and
          each variant), minimum order quantities and price breaks included
    - [x] Warn on not found, out of stock for the largest batch, lifecycle other than
          normal, and an LCSC code that doesn't match the schematic MPN

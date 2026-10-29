@@ -41,7 +41,7 @@ inputs:
     default: lcsc
   boards:
     description: Batch sizes to price, comma-separated (components only).
-    default: "1,10,100"
+    default: "1,5,10,100"
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
