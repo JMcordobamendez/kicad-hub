@@ -45,6 +45,8 @@ Open `<board>.kicad_pro` in KiCad.
 
 ## CI
 
+New to kicad-hub? Read the [manual](https://github.com/JMcordobamendez/kicad-hub/blob/main/docs/manual.md).
+
 `.github/workflows/kicad.yml` runs [kicad-hub](https://github.com/JMcordobamendez/kicad-hub)
 on every push and pull request: ERC/DRC, BOM checks and diff, prices and stock,
 before/after images in the PR comment and the fab package (artifact

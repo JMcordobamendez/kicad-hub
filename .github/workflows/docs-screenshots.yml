@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: Pull request number whose portal page and comment to capture
+        description: 'Pull request number (portal page + comment), a site path like main, or none'
         required: true
       extra:
         description: 'Extra pages to capture, "name=url name=url" (optional)'
@@ -35,8 +35,8 @@ jobs:
         env:
           SITE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
           REPO: ${{ github.repository }}
-          PR: ${{ inputs.pr || '24' }}
-          EXTRA: ${{ inputs.extra || 'compare=https://jmcordobamendez.github.io/kicad-hub/compare.html?a=pr-23/&b=pr-24/ pins=https://jmcordobamendez.github.io/kicad-hub/pr-21/#pcb' }}
+          PR: ${{ inputs.pr || 'main' }}
+          EXTRA: ${{ inputs.extra || 'activity=https://jmcordobamendez.github.io/kicad-hub/activity.html' }}
         run: |
           SITE=$(echo "$SITE" | sed 's#//\([^.]*\)#//\L\1#')
           mkdir -p shots && SITE="$SITE" node .github/scripts/screenshots.mjs

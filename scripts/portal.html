@@ -248,8 +248,8 @@ function buildPage() {
   document.getElementById("main").innerHTML = tabs.map(([id]) => `<section id="s-${id}"></section>`).join("");
   const done = new Set();
   function show() {
-    const want = location.hash.slice(1);
-    const id = S[want] ? want : tabs[0][0];
+    const want = location.hash.slice(1).split("&")[0];
+    const id = tabs.some(t => t[0] === want) ? want : tabs[0][0];  // e.g. #changes on a page without it
     if (!done.has(id)) {
       document.getElementById("s-" + id).innerHTML = S[id]();
       if (id === "schematic" || id === "pcb") hook(id === "pcb" ? "pcb" : "sch");

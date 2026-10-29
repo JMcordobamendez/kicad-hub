@@ -15,6 +15,8 @@ project. KiCad is a trademark of its respective owners.
 > board (see [what works today](#what-works-today)). Next steps: the
 > [roadmap](docs/ROADMAP.md).
 
+New here? Read the [manual](docs/manual.md).
+
 ![Design portal: PCB viewer with layers and checks](docs/screenshots/portal-pcb.png)
 
 | Changed sheet, swipe between before and after | The report posted on the pull request |

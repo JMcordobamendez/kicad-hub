@@ -361,6 +361,7 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       name kicad-hub is kept with a "not affiliated with the KiCad project" note
 - [x] Tags `v1.0.0` and moving `v1`; examples use `@v1`
 - [x] Repository public (2026-10-29)
+- [x] User manual: docs/manual.md (2026-10-29)
 
 ## Decisions so far
 - **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation
