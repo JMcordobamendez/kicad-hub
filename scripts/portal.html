@@ -187,7 +187,7 @@ function buildPage() {
       (D.rev ? `<span class="pill">rev ${esc(D.rev)}</span>` : ""),
     `<select id="version" title="Other versions of this design" hidden></select>` +
     `<span>${where} · commit <a class="mono" href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a>` +
-    ` · <a href="${history}">history</a></span>${status(c)}`) + `<nav id="tabs"></nav>`;
+    ` · <a href="${history}">history</a>${D.activity ? ` · <a href="${HOME}activity.html">activity</a>` : ""}</span>${status(c)}`) + `<nav id="tabs"></nav>`;
   versions();
   // comments pinned on the board: pull request pages on github.com only (scripts/pins.js)
   if (D.kind === "pr" && D.pr && D.server === "https://github.com")
@@ -494,8 +494,9 @@ function showPart(kind, item) {
 function indexPage() {
   document.title = `${repoName} · designs`;
   document.getElementById("head").innerHTML = topbar(`<span>${esc(repoName)}</span><span class="pill">KiCad designs</span>`,
-    `<a href="compare.html">Compare versions</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a>`) +
-    `<nav id="tabs"><a href="#builds" data-tab="builds">Builds</a><a href="#history" data-tab="history">History</a><a href="compare.html">Compare versions</a></nav>`;
+    `${D.activity ? `<a href="activity.html">Activity</a>` : ""}<a href="compare.html">Compare versions</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a>`) +
+    `<nav id="tabs"><a href="#builds" data-tab="builds">Builds</a><a href="#history" data-tab="history">History</a>` +
+    `${D.activity ? `<a href="activity.html">Activity</a>` : ""}<a href="compare.html">Compare versions</a></nav>`;
   document.getElementById("main").innerHTML = `<div class="doc"><p class="muted">Loading…</p></div>`;
   // builds.json is rewritten on every publish and by the cleanup workflow
   fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {

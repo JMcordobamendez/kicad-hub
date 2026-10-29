@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --brand: #e8622c; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e; --merged: #8250df;
+    --bar: #1c2128; --bar-fg: #e6edf3; --bar-muted: #9198a1; --hl: #fff4c2;
+    --l0: #0969da; --l1: #e8622c; --l2: #1a7f37; --l3: #8250df; --l4: #bf3989; --l5: #0a8a8a; --l6: #9a6700; --l7: #cf222e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --card: #151b23; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #1c2128;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --merged: #a371f7; --bar: #010409; --hl: #3a3210;
+      --l0: #4493f8; --l1: #f0883e; --l2: #3fb950; --l3: #a371f7; --l4: #db61a2; --l5: #39c5cf; --l6: #d29922; --l7: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
+  a { color: var(--accent); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* top bar, same as compare.html */
+  .bar { background: var(--bar); color: var(--bar-fg); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 20px; }
+  .logo { width: 30px; height: 30px; border-radius: 7px; background: var(--brand); color: #fff; font-weight: 700;
+          display: grid; place-items: center; font-size: 13px; flex: none; text-decoration: none; }
+  .crumb { min-width: 0; font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .crumb a { color: var(--bar-fg); text-decoration: none; }
+  .crumb .sep { color: var(--bar-muted); font-weight: 400; }
+  .bar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--bar-muted); font-size: 13px; }
+  .bar .right a { color: var(--bar-muted); }
+
+  main { flex: 1; padding: 16px 20px; min-width: 0; }
+  .wrap { max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .pad { padding: 12px 16px; }
+  h2 { font-size: 15px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 4px 12px; border-radius: 6px; cursor: pointer;
+         font: inherit; font-size: 13px; text-decoration: none; display: inline-block; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+  select, input[type=date] { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 13px; max-width: 100%; }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .tools label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+  .notes { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .notes div + div { margin-top: 2px; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 14px; align-items: start; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } main { padding: 12px 16px; } }
+  .scroll { overflow: auto; max-height: min(78vh, 900px); }
+
+  /* graph table */
+  .tbl { min-width: 720px; --gw: 80px; }
+  .row { display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) 176px 136px 68px; height: 28px; line-height: 28px;
+         align-items: center; border-bottom: 1px solid transparent; cursor: pointer; }
+  .row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+  .row.head { position: sticky; top: 0; z-index: 3; background: var(--soft); border-bottom: 1px solid var(--line); cursor: default;
+              font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .row.head > span:first-child { padding-left: 12px; }
+  .body { position: relative; }
+  .body > svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  .row:not(.head):hover { background: var(--soft); }
+  .row.hl, .feed li.hl { background: var(--hl); }
+  .row.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+  .row .au { display: flex; align-items: center; gap: 6px; }
+  .row .au span { overflow: hidden; text-overflow: ellipsis; }
+  .row .dt, .row .sh { color: var(--muted); font-size: 12.5px; }
+  .ref { display: inline-flex; align-items: center; gap: 4px; height: 20px; line-height: 18px; padding: 0 7px 0 3px; margin-right: 5px; border-radius: 10px;
+         border: 1.5px solid var(--c, var(--line)); font-size: 12px; font-weight: 600; vertical-align: middle; background: var(--card); }
+  .ref.nopic { padding-left: 7px; }
+  .ref.def { background: var(--c); color: #fff; }
+  .ref.tag { border-radius: 4px; }
+  .dot { stroke: var(--card); stroke-width: 2; }
+  .dot.merge { fill: var(--card); stroke: var(--c); stroke-width: 2.5; }
+  .dot.hl { stroke: var(--fg); stroke-width: 3; }
+  .av { width: 20px; height: 20px; border-radius: 50%; flex: none; object-fit: cover; }
+  span.av { display: inline-grid; place-items: center; color: #fff; font-size: 9.5px; font-weight: 700; line-height: 1; }
+  .ref .av { width: 16px; height: 16px; font-size: 8px; }
+
+  .detail { position: sticky; bottom: 0; z-index: 4; background: var(--card); border-top: 2px solid var(--accent); padding: 10px 14px; }
+  .detail .subj { font-weight: 600; overflow-wrap: anywhere; }
+  .detail .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+  .detail .x { float: right; }
+
+  /* feed */
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .feed li:hover { background: var(--soft); }
+  .feed li.sel { box-shadow: inset 3px 0 0 var(--accent); }
+  .feed .t { font-size: 12px; color: var(--muted); }
+  .feed .what { overflow-wrap: anywhere; }
+  .feed .quote { margin-top: 3px; padding-left: 8px; border-left: 3px solid var(--line); color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .kind { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); white-space: nowrap; margin-right: 3px; }
+  .kind.good { color: var(--good); border-color: var(--good); } .kind.bad { color: var(--bad); border-color: var(--bad); }
+  .kind.merged { color: var(--merged); border-color: var(--merged); } .kind.open { color: var(--accent); border-color: var(--accent); }
+  .empty { padding: 18px 16px; color: var(--muted); }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
+</style>
+</head>
+<body>
+<header id="head"></header>
+<main><div class="wrap" id="wrap"><div class="card pad muted">Loading…</div></div></main>
+<footer>Made with <a href="https://github.com/JMcordobamendez/kicad-hub">kicad-hub</a> · not affiliated with the KiCad project</footer>
+<script>
+const D = /*KICAD_HUB_DATA*/null;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const $ = id => document.getElementById(id);
+const repoUrl = `${D.server}/${D.repo}`;
+const repoName = D.repo.split("/")[1];
+
+$("head").innerHTML = `<div class="bar"><a class="logo" href="./" title="All builds">kh</a>` +
+  `<div class="crumb"><a href="./">${esc(repoName)}</a><span class="sep">/</span><span>Activity</span></div>` +
+  `<div class="right"><a href="./#history">History</a><a href="compare.html">Compare versions</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a></div></div>`;
+document.title = `Activity · ${repoName}`;
+
+/* ---------- small helpers ---------- */
+const PAL = 8, LW = 16, H = 28;                       // lane colours, lane width, row height
+const s10 = sha => (sha || "").slice(0, 10);
+const utc = t => { const d = new Date(t); return isNaN(d) ? "" : d.toISOString().slice(0, 16).replace("T", " "); };
+function ago(t) {
+  const s = (Date.now() - Date.parse(t)) / 1000;
+  if (isNaN(s)) return "";
+  if (s < 90) return "just now";
+  if (s < 3600) return Math.round(s / 60) + " min ago";
+  if (s < 86400) return Math.round(s / 3600) + " h ago";
+  if (s < 86400 * 30) return Math.round(s / 86400) + " d ago";
+  return utc(t).slice(0, 10);
+}
+let A = null, builds = [], users = {};
+const bySha = new Map();
+// only GitHub's own avatar host is ever used as an image source
+function avatarUrl(name) {
+  try { const u = new URL(users[name] || ""); return u.protocol === "https:" && u.hostname === "avatars.githubusercontent.com" ? u.href : ""; } catch (e) { return ""; }
+}
+function initials(name) {
+  const w = String(name || "?").replace(/\[bot\]$/, "").split(/[\s._-]+/).filter(Boolean);
+  return ((w[0] || "?")[0] + (w.length > 1 ? w[1][0] : "")).toUpperCase();
+}
+function avatar(name, size = 20, noPic = false) {
+  const url = noPic ? "" : avatarUrl(name), sz = `width:${size}px;height:${size}px`;
+  if (url) return `<img class="av" src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-n="${esc(name)}" data-sz="${size}" style="${sz}">`;
+  let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `<span class="av" aria-hidden="true" style="${sz};background:hsl(${h},45%,38%)">${esc(initials(name))}</span>`;
+}
+// a picture that fails to load becomes initials
+document.addEventListener("error", e => {
+  const im = e.target;
+  if (im.tagName === "IMG" && im.classList.contains("av")) im.outerHTML = avatar(im.dataset.n, +im.dataset.sz || 20, true);
+}, true);
+const who = c => c.login || c.author;                  // GitHub login if known, else the git author name
+const builtPath = sha => {                              // the portal page of a commit, if one was published
+  const rank = {release: 0, history: 1, branch: 2, pr: 3};
+  const b = builds.filter(b => b.sha === sha).sort((x, y) => rank[x.kind] - rank[y.kind])[0];
+  return b ? {path: b.path, label: b.kind === "history" ? "snapshot " + sha.slice(0, 7) : b.label} : null;
+};
+const prHref = n => { const b = builds.find(b => b.path === `pr-${n}/`); return b ? b.path : `${repoUrl}/pull/${n}`; };
+
+/* ---------- filters ---------- */
+const F = {branch: "", author: "", from: "", to: "", main: false};
+const sel = {c: null, e: null};   // selected commit (full sha) / feed item id
+let hover = null;
+
+function reach(tips) {          // every commit reachable from the given shas
+  const seen = new Set(), stack = [...tips];
+  while (stack.length) {
+    const s = stack.pop();
+    if (seen.has(s) || !bySha.has(s)) continue;
+    seen.add(s);
+    for (const p of bySha.get(s).parents) stack.push(p);
+  }
+  return seen;
+}
+const branchTip = name => (A.branches.find(b => b.name === name) || {}).tip;
+function shownSet() {
+  let ok = null;
+  const narrow = s => { ok = ok ? new Set([...ok].filter(x => s.has(x))) : s; };
+  if (F.branch) narrow(reach([branchTip(F.branch)].filter(Boolean)));
+  if (F.main) {
+    const tips = [branchTip(A.default_branch)];
+    for (const p of A.prs) if (p.state === "OPEN") tips.push(branchTip(p.head) || p.head_sha);
+    narrow(reach(tips.filter(Boolean)));
+  }
+  const from = F.from ? Date.parse(F.from + "T00:00:00Z") : 0, to = F.to ? Date.parse(F.to + "T00:00:00Z") + 864e5 : Infinity;
+  const out = new Set();
+  for (const c of A.commits) {
+    if (ok && !ok.has(c.sha)) continue;
+    if (F.author && who(c) !== F.author) continue;
+    const t = Date.parse(c.date);
+    if (t < from || t >= to) continue;
+    out.add(c.sha);
+  }
+  return out;
+}
+
+/* ---------- lanes ---------- */
+/* Newest first, children before parents. A commit with no child opens a column; otherwise it takes
+   the leftmost column that was heading to it; a merge's other parents reuse a column already
+   heading to them or take the first free one. Each parent link is an edge: straight in its
+   column, bending into it right after the child and out of it right before the parent. */
+function layout(rows, defaultTip) {
+  const slots = [], pend = new Map(), edges = [];
+  let next = 0, maxCol = 0;
+  const free = () => { let i = 0; while (slots[i]) i++; return i; };
+  if (defaultTip && rows.some(r => r.sha === defaultTip)) slots[0] = {sha: defaultTip, color: next++};   // main keeps the first column
+  const pos = [];
+  rows.forEach((r, i) => {
+    const heading = [];
+    slots.forEach((s, j) => { if (s && s.sha === r.sha) heading.push(j); });
+    let k, color;
+    if (heading.length) { k = heading[0]; color = slots[k].color; } else { k = free(); color = next++; }
+    for (const e of pend.get(r.sha) || []) { e.r2 = i; e.c2 = k; }
+    pend.delete(r.sha);
+    heading.forEach(j => { slots[j] = null; });
+    pos.push({col: k, color});
+    maxCol = Math.max(maxCol, k);
+    r.vp.forEach((p, n) => {
+      let edge;
+      if (n === 0) { slots[k] = {sha: p, color}; edge = {r1: i, c1: k, rc: k, color}; }
+      else {
+        let j = slots.findIndex(s => s && s.sha === p);
+        if (j < 0) { j = free(); slots[j] = {sha: p, color: next++}; }
+        edge = {r1: i, c1: k, rc: j, color: slots[j].color};
+      }
+      maxCol = Math.max(maxCol, edge.rc);
+      if (!pend.has(p)) pend.set(p, []);
+      pend.get(p).push(edge);
+      edges.push(edge);
+    });
+  });
+  for (const e of edges) if (e.r2 == null) { e.r2 = rows.length; e.c2 = e.rc; e.open = true; }   // parent beyond the shown commits
+  return {pos, edges, maxCol};
+}
+const X = c => 12 + c * LW + LW / 2, Y = r => r * H + H / 2;
+function edgePath(e) {
+  const x1 = X(e.c1), y1 = Y(e.r1), x2 = X(e.c2), y2 = e.open ? e.r2 * H : Y(e.r2), xr = X(e.rc);
+  if (x1 === x2 && xr === x1) return `M${x1} ${y1}V${y2}`;
+  if (e.r2 - e.r1 === 1 && !e.open) { const m = (y1 + y2) / 2; return `M${x1} ${y1}C${x1} ${m} ${x2} ${m} ${x2} ${y2}`; }
+  let d = `M${x1} ${y1}`;
+  if (xr !== x1) { const m = y1 + H / 2; d += `C${x1} ${m} ${xr} ${m} ${xr} ${y1 + H}`; }
+  if (xr !== x2) { const yb = y2 - H, m = yb + H / 2; d += `L${xr} ${yb}C${xr} ${m} ${x2} ${m} ${x2} ${y2}`; }
+  else d += `L${xr} ${y2}`;
+  return d;
+}
+
+/* ---------- render ---------- */
+let shown = [], rowEls = new Map(), feedEls = new Map(), evBy = new Map(), prById = new Map();
+const isRelease = tag => A.releaseTags.has(tag) || (!A.github && /^v?\d/.test(tag));
+const relOf = e => e.rel && e.rel.length ? e.rel : e.pr && prById.has(e.pr) ? prRel(prById.get(e.pr)) : [];
+const prRel = p => [s10(p.head_sha), s10(p.merge_sha), ...(p.commits || [])].filter(Boolean);
+
+function chipsFor(c, color) {
+  const out = [];
+  for (const n of c.branches || []) {
+    const b = A.branches.find(x => x.name === n) || {};
+    const how = {pr: "author of its pull request", commit: "author of its first commit", push: "first push recorded"}[b.how];
+    const pic = b.creator ? avatar(b.creator, 16) : "";
+    out.push(`<span class="ref ${b.default ? "def" : ""} ${pic ? "" : "nopic"}" style="--c:var(--l${color % PAL})" title="${esc(n)}${b.creator ? " · created by " + esc(b.creator) + " (" + how + ")" : ""}">${pic}${esc(n)}</span>`);
+  }
+  for (const n of c.tags || [])
+    out.push(`<span class="ref tag nopic" style="--c:var(--l${color % PAL})" title="${isRelease(n) ? "release " : "tag "}${esc(n)}">${isRelease(n) ? "&#9733; " : ""}${esc(n)}</span>`);
+  return out.join("");
+}
+
+function render() {
+  const S = shownSet();
+  // nearest shown ancestors, through the commits that are filtered out
+  const memo = new Map();
+  const vis = sha => {
+    if (S.has(sha)) return [sha];
+    if (memo.has(sha)) return memo.get(sha);
+    memo.set(sha, []);
+    const out = [];
+    for (const p of (bySha.get(sha) || {parents: []}).parents) for (const v of vis(p)) if (!out.includes(v)) out.push(v);
+    memo.set(sha, out);
+    return out;
+  };
+  shown = A.commits.filter(c => S.has(c.sha)).map(c => ({c, sha: c.sha, vp: [...new Set(c.parents.flatMap(vis))]}));
+  const L = layout(shown, A.default_branch ? branchTip(A.default_branch) : null);
+  const gw = Math.max(48, 24 + (L.maxCol + 1) * LW);
+  $("count").textContent = `${shown.length} of ${A.commits.length} commits`;
+
+  let svg = `<svg width="${gw}" height="${shown.length * H}" aria-hidden="true">`;
+  for (const e of L.edges) svg += `<path d="${edgePath(e)}" fill="none" stroke="var(--l${e.color % PAL})" stroke-width="2" stroke-linecap="round"${e.open ? ' stroke-dasharray="3 4"' : ""}/>`;
+  let rows = "";
+  shown.forEach((r, i) => {
+    const c = r.c, p = L.pos[i], x = X(p.col), y = Y(i), col = `var(--l${p.color % PAL})`;
+    const merge = c.parents.length > 1, rel = (c.tags || []).some(isRelease);
+    svg += rel ? `<path class="dot" data-s="${s10(c.sha)}" d="M${x} ${y - 7}L${x + 7} ${y}L${x} ${y + 7}L${x - 7} ${y}Z" fill="${col}"/>`
+      : `<circle class="dot ${merge ? "merge" : ""}" data-s="${s10(c.sha)}" cx="${x}" cy="${y}" r="${merge ? 4.5 : 5}" ${merge ? `style="--c:${col}"` : `fill="${col}"`}/>`;
+    const snap = builtPath(c.sha), a = who(c);
+    rows += `<div class="row" tabindex="0" data-s="${s10(c.sha)}" data-i="${i}">` +
+      `<span class="g"></span><span class="sub" title="${esc(c.subject)}">${chipsFor(c, p.color)}${esc(c.subject)}</span>` +
+      `<span class="au" title="${esc(a)}">${avatar(a, 18)}<span>${esc(a)}</span></span>` +
+      `<span class="dt" title="${esc(c.date)}">${esc(utc(c.date))}</span>` +
+      `<span class="sh"><a class="mono" href="${esc(snap ? snap.path : repoUrl + "/commit/" + c.sha)}">${esc(c.sha.slice(0, 7))}</a></span></div>`;
+  });
+  svg += "</svg>";
+  $("tbl").style.setProperty("--gw", gw + "px");
+  $("body").innerHTML = svg + rows;
+  rowEls = new Map();
+  $("body").querySelectorAll(".row").forEach(el => rowEls.set(el.dataset.s, {row: el}));
+  $("body").querySelectorAll(".dot").forEach(el => { (rowEls.get(el.dataset.s) || {}).dot = el; });
+  if (!shown.length) $("body").innerHTML = `<div class="empty">No commits match the filters.</div>`;
+  renderFeed();
+  paint();
+  detail();
+}
+
+function feedText(e) {
+  const pr = prById.get(e.pr), link = e.pr ? `<a href="${esc(prHref(e.pr))}">#${e.pr}${pr ? " " + esc(pr.title) : ""}</a>` : "";
+  const name = e.who ? `<b>${esc(e.who)}</b> ` : "";
+  const k = (cls, t) => `<span class="kind ${cls}">${t}</span>`;
+  switch (e.type) {
+    case "pr_opened": return `${name}${k("open", pr && pr.draft ? "draft" : "opened")} ${link}`;
+    case "review": {
+      const s = {approved: ["good", "approved"], changes_requested: ["bad", "changes requested"], commented: ["", "reviewed"], dismissed: ["", "review dismissed"]}[e.state] || ["", e.state];
+      return `${name}${k(s[0], s[1])} ${link}`;
+    }
+    case "comment": return `${name}${k("", "commented")} ${link}`;
+    case "merged": return `${name}${k("merged", "merged")} ${link}`;
+    case "closed": return `${k("bad", "closed")} ${link}`;
+    case "push": return `${name}${k("", "pushed")}${e.commits != null ? ` ${e.commits} commit${e.commits === 1 ? "" : "s"} to` : " to"} <span class="ref nopic">${esc(e.ref)}</span>`;
+    case "release": return `${name}${k("merged", "&#9733; released")} <span class="ref tag nopic">${esc(e.tag)}</span>${e.prerelease ? " (pre-release)" : ""}`;
+  }
+  return esc(e.type);
+}
+
+function renderFeed() {
+  const S = new Set(shown.map(r => s10(r.sha)));
+  const from = F.from ? Date.parse(F.from + "T00:00:00Z") : 0, to = F.to ? Date.parse(F.to + "T00:00:00Z") + 864e5 : Infinity;
+  const evs = A.events.filter(e => {
+    const t = Date.parse(e.at);
+    if (t < from || t >= to) return false;
+    if (F.author && e.who !== F.author) return false;
+    if (F.branch || F.main) {
+      if (relOf(e).some(s => S.has(s))) return true;
+      const pr = prById.get(e.pr);
+      if (F.branch) return (pr && pr.head === F.branch) || (e.type === "push" && e.ref === F.branch);
+      return (pr && pr.state === "OPEN") || (e.type === "push" && e.ref === A.default_branch);
+    }
+    return true;
+  });
+  evBy = new Map();
+  for (const e of A.events) for (const s of relOf(e)) { if (!evBy.has(s)) evBy.set(s, []); evBy.get(s).push(e.id); }
+  $("feed").innerHTML = evs.length ? evs.map(e => `<li tabindex="0" data-e="${e.id}" aria-label="${esc(e.type)}">${e.who ? avatar(e.who, 24) : "<span></span>"}<div>` +
+      `<div class="what">${feedText(e)}</div>${e.text ? `<div class="quote">${esc(e.text)}</div>` : ""}<div class="t" title="${esc(utc(e.at))} UTC">${esc(ago(e.at))}</div></div></li>`).join("")
+    : `<li class="empty" style="display:block;cursor:default">No activity matches the filters.</li>`;
+  feedEls = new Map();
+  $("feed").querySelectorAll("li[data-e]").forEach(li => feedEls.set(+li.dataset.e, li));
+  $("feed-count").textContent = evs.length ? `${evs.length}` : "";
+}
+
+/* hover or focus highlights what is related; the selection stays highlighted otherwise */
+let lit = [];
+function paint() {
+  lit.forEach(el => el.classList.remove("hl"));
+  lit = [];
+  document.querySelectorAll(".sel").forEach(el => { el.classList.remove("sel"); el.removeAttribute("aria-current"); });
+  const src = hover || selSource();
+  if (src) {
+    for (const s of src.cs) { const o = rowEls.get(s); if (o) { lit.push(o.row); if (o.dot) lit.push(o.dot); } }
+    for (const id of src.es) { const li = feedEls.get(id); if (li) lit.push(li); }
+    lit.forEach(el => el.classList.add("hl"));
+  }
+  if (sel.c) { const o = rowEls.get(s10(sel.c)); if (o) { o.row.classList.add("sel"); o.row.setAttribute("aria-current", "true"); } }
+  if (sel.e != null) { const li = feedEls.get(sel.e); if (li) li.classList.add("sel"); }
+}
+const fromCommit = sha => ({cs: [s10(sha)], es: evBy.get(s10(sha)) || []});
+const fromEvent = id => { const e = A.events.find(x => x.id === id); return {cs: e ? relOf(e) : [], es: [id]}; };
+const selSource = () => sel.e != null ? fromEvent(sel.e) : sel.c ? fromCommit(sel.c) : null;
+
+function pick(sha, eventId) {
+  sel.c = sha; sel.e = eventId ?? null;
+  paint(); detail();
+}
+function detail() {
+  const box = $("detail"), c = sel.c && bySha.get(sel.c);
+  if (!c || !rowEls.has(s10(c.sha))) { box.hidden = true; return; }
+  const snap = builtPath(c.sha), par = c.parents[0] ? builtPath(c.parents[0]) : null;
+  const prs = A.prs.filter(p => prRel(p).includes(s10(c.sha)));
+  const acts = [];
+  if (snap) acts.push(`<a class="btn pri" href="${esc(snap.path)}">Open design (${esc(snap.label)})</a>`);
+  if (snap && par) acts.push(`<a class="btn" href="compare.html?a=${encodeURIComponent(par.path)}&amp;b=${encodeURIComponent(snap.path)}">Compare with parent</a>`);
+  acts.push(`<a class="btn ${snap ? "" : "pri"}" href="${esc(repoUrl)}/commit/${esc(c.sha)}" rel="noopener">Commit on GitHub</a>`);
+  for (const p of prs) acts.push(`<a class="btn" href="${esc(prHref(p.number))}">PR #${p.number}</a>`);
+  box.hidden = false;
+  box.innerHTML = `<button class="btn x" id="close" aria-label="Close details">Close</button><div class="subj">${esc(c.subject)}</div>` +
+    `<div class="muted">${esc(who(c))}${c.committer && c.committer !== c.author ? " (committed by " + esc(c.committer) + ")" : ""} · ${esc(utc(c.date))} UTC · ` +
+    `<span class="mono">${esc(c.sha.slice(0, 10))}</span>${c.parents.length > 1 ? " · merge" : ""}</div>` +
+    `<div class="acts">${acts.join("")}${snap ? "" : `<span class="muted">No portal snapshot of this commit (only the last commits of main, releases and open PRs are published).</span>`}</div>`;
+  $("close").onclick = () => { sel.c = null; sel.e = null; paint(); detail(); };
+}
+
+/* ---------- events ---------- */
+function wire() {
+  const body = $("body"), feed = $("feed");
+  const rowOf = t => t.closest && t.closest(".row[data-s]");
+  const liOf = t => t.closest && t.closest("li[data-e]");
+  const over = e => {
+    const r = rowOf(e.target), li = liOf(e.target);
+    const next = r ? fromCommit(A.bySha10.get(r.dataset.s)) : li ? fromEvent(+li.dataset.e) : null;
+    if (next || hover) { hover = next; paint(); }
+  };
+  for (const box of [body, feed]) {
+    box.addEventListener("mouseover", over);
+    box.addEventListener("focusin", over);
+    box.addEventListener("mouseleave", () => { hover = null; paint(); });
+    box.addEventListener("focusout", e => { if (!box.contains(e.relatedTarget)) { hover = null; paint(); } });
+  }
+  body.addEventListener("click", e => {
+    const r = rowOf(e.target);
+    if (r && !e.target.closest("a")) pick(A.bySha10.get(r.dataset.s));
+  });
+  feed.addEventListener("click", e => {
+    const li = liOf(e.target);
+    if (!li || e.target.closest("a")) return;
+    const ev = A.events.find(x => x.id === +li.dataset.e);
+    const first = ev && relOf(ev).map(s => A.bySha10.get(s)).find(s => s && rowEls.has(s10(s)));
+    if (first) { pick(first, ev.id); rowEls.get(s10(first)).row.scrollIntoView({block: "center", behavior: "smooth"}); }
+    else { sel.c = null; sel.e = ev ? ev.id : null; paint(); detail(); }
+  });
+  const key = e => {
+    const r = rowOf(e.target), li = liOf(e.target), t = r || li;
+    if (!t) return;
+    if (e.key === "Enter" || e.key === " ") { if (!e.target.closest("a")) { e.preventDefault(); t.click(); } }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = e.key === "ArrowDown" ? t.nextElementSibling : t.previousElementSibling;
+      if (n && n.tabIndex === 0) n.focus();
+    }
+  };
+  body.addEventListener("keydown", key);
+  feed.addEventListener("keydown", key);
+}
+
+/* ---------- page ---------- */
+function syncQuery() {
+  const q = new URLSearchParams();
+  for (const k of ["branch", "author", "from", "to"]) if (F[k]) q.set(k, F[k]);
+  if (F.main) q.set("main", "1");
+  history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : ""));
+}
+function build() {
+  const names = A.branches.slice().sort((a, b) => (b.default - a.default) || (Date.parse(bySha.get(b.tip).date) - Date.parse(bySha.get(a.tip).date))).map(b => b.name);
+  const authors = [...new Set(A.commits.map(who).concat(A.events.map(e => e.who).filter(Boolean)))].sort((a, b) => a.localeCompare(b));
+  const note = [];
+  note.push(`Graph of the last ${A.commits.length} commits${A.truncated ? ` (older ones are not shown; input <code>activity</code> sets the number)` : ""} of ${A.branches.length} branches.`);
+  note.push(A.github ? `Pull requests, reviews, comments and releases come from GitHub (the last ${A.prs.length} pull requests), refreshed on every publish: ${esc(utc(A.generated))} UTC.`
+    : `GitHub data (pull requests, reviews, comments) is not available${A.github_note ? ": " + esc(A.github_note) : ""}: this is the git history alone.`);
+  note.push(A.pushes_since ? `Who pushed is recorded since <b>${esc(utc(A.pushes_since).slice(0, 10))}</b>, when this page was set up: earlier pushes are not known.`
+    : `Who pushed is recorded from the next push on: GitHub doesn't keep it, so earlier pushes are not known.`);
+  note.push(`No e-mail addresses are published: the GitHub login is shown when known, else the author's name.`);
+  $("wrap").innerHTML = `<div class="card pad"><div class="tools">` +
+    `<label>Branch <select id="f-branch"><option value="">All branches</option>${names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select></label>` +
+    `<label>Author <select id="f-author"><option value="">Everyone</option>${authors.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select></label>` +
+    `<label>From <input type="date" id="f-from"></label><label>To <input type="date" id="f-to"></label>` +
+    `<label><input type="checkbox" id="f-main"> Only main + open PRs</label>` +
+    `<button class="btn" id="f-reset">Reset</button><span class="muted" id="count"></span></div>` +
+    `<div class="notes">${note.map(n => `<div>${n}</div>`).join("")}</div></div>` +
+    `<div class="cols"><div class="card"><div class="scroll" id="scroll"><div class="tbl" id="tbl">` +
+    `<div class="row head"><span>Graph</span><span>Commit</span><span>Author</span><span>Date (UTC)</span><span>Sha</span></div>` +
+    `<div class="body" id="body"></div><div class="detail" id="detail" hidden></div></div></div></div>` +
+    `<div class="card"><h2>Activity <span class="muted" id="feed-count" style="font-weight:400"></span></h2><div class="scroll"><ul class="feed" id="feed"></ul></div></div></div>`;
+  const q = new URLSearchParams(location.search);
+  F.branch = names.includes(q.get("branch")) ? q.get("branch") : "";
+  F.author = authors.includes(q.get("author")) ? q.get("author") : "";
+  F.from = /^\d{4}-\d{2}-\d{2}$/.test(q.get("from") || "") ? q.get("from") : "";
+  F.to = /^\d{4}-\d{2}-\d{2}$/.test(q.get("to") || "") ? q.get("to") : "";
+  F.main = q.get("main") === "1";
+  const set = () => { $("f-branch").value = F.branch; $("f-author").value = F.author; $("f-from").value = F.from; $("f-to").value = F.to; $("f-main").checked = F.main; };
+  set();
+  const change = () => {
+    F.branch = $("f-branch").value; F.author = $("f-author").value; F.from = $("f-from").value; F.to = $("f-to").value; F.main = $("f-main").checked;
+    syncQuery(); render();
+  };
+  ["f-branch", "f-author", "f-from", "f-to", "f-main"].forEach(id => $(id).addEventListener("change", change));
+  $("f-reset").onclick = () => { Object.assign(F, {branch: "", author: "", from: "", to: "", main: false}); set(); syncQuery(); render(); };
+  wire();
+  render();
+}
+
+function start(data, list) {
+  if (!data || !Array.isArray(data.commits)) {
+    $("wrap").innerHTML = `<div class="card pad"><b>No activity data yet.</b><p class="muted">It is collected on every publish when the action's <code>activity</code> input is above 0, ` +
+      `so it appears after the next run. <a href="./">Back to the builds</a>.</p></div>`;
+    return;
+  }
+  A = data; builds = list || []; users = A.users || {};
+  A.commits.forEach(c => bySha.set(c.sha, c));
+  A.bySha10 = new Map(A.commits.map(c => [s10(c.sha), c.sha]));
+  A.prs = A.prs || []; A.events = A.events || []; A.branches = A.branches || [];
+  A.prs.forEach(p => prById.set(p.number, p));
+  A.events.forEach((e, i) => { if (e.id == null) e.id = i; });
+  A.releaseTags = new Set(A.events.filter(e => e.type === "release").map(e => e.tag));
+  build();
+}
+const getJson = u => fetch(u, {cache: "no-store"}).then(r => r.ok ? r.json() : null).catch(() => null);
+Promise.all([getJson("activity.json"), getJson("builds.json")]).then(([a, b]) => start(a, b));
+</script>
+</body>
+</html>

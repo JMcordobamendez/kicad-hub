@@ -62,6 +62,7 @@ flowchart LR
     i5["Net navigation, measuring"]:::todo
     i6["Sharing private boards"]:::todo
     i7["Target price"]:::todo
+    i8["Activity page<br/>branches, PRs, pushes"]:::doing
   end
 
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
@@ -332,6 +333,13 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
       PR review rules and environments (documented recipes in the template, no engine
       of our own). Done 2026-10-29: issue forms, `CODEOWNERS.example`, opt-in
       release environment and `template/docs/approvals.md`
+- [x] **Activity page** (visual branch history, PRs, reviews, comments, pushes): `activity.html`,
+      a dependency-free SVG lane graph of the last `activity` (default 500) commits of all
+      branches and tags next to a feed of PRs, reviews, comments, merges, pushes and releases,
+      with filters and links to the portal's snapshots and compare page. Data from git and the
+      GitHub GraphQL API (`scripts/activity.py`); who pushed comes from a push log kept in the
+      site branch, so it only covers pushes since it was installed. No e-mail address is ever
+      published (owner decision). Done 2026-10-29, awaiting a check on a real push to `main`
 - [ ] **Net navigation and measuring in the viewer**: highlight a net, jump between
       its pads, measure distances. Depends on KiCanvas (alpha)
 - [ ] **Sharing private boards**: a way to show a private repo's portal to people
