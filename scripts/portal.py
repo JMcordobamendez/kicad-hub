@@ -223,12 +223,14 @@ def build():
             cost = {"boards": n, "total": totals.get(str(n)), "currency": s["currency"]}
 
     parts = part_info(out, site)
+    pr = re.match(r"PR #(\d+)$", args.label) if args.kind == "pr" else None
     info = {"mode": "build", "name": args.name, "rev": args.rev, "label": args.label, "kind": args.kind,
             "sha": args.sha, "repo": args.repo, "server": args.server, "run_url": args.run_url,
             "title": args.title, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sheets": [f"design/{s}" for s in sheets], "pcb": pcb, "views": views, "downloads": downloads,
             "report": md, "counts": counts, "cost": cost, "parts": parts,
-            "changes": changes(out, site) if args.kind == "pr" else None}
+            "changes": changes(out, site) if args.kind == "pr" else None,
+            "pr": int(pr.group(1)) if pr else None}
     page(info, os.path.join(site, "index.html"))
     summary = {k: info[k] for k in ("name", "rev", "label", "kind", "sha", "date", "title", "counts", "cost")}
     with open(os.path.join(site, "build.json"), "w", encoding="utf-8") as f:
@@ -248,9 +250,9 @@ def index():
     # the front page reads builds.json, so the cleanup workflow only has to rewrite that
     with open(os.path.join(args.root, "builds.json"), "w", encoding="utf-8") as f:
         json.dump(builds, f, indent=1)
-    assets = os.path.join(args.root, "assets")  # viewer libraries shared by every page
+    assets = os.path.join(args.root, "assets")  # viewer libraries and pins.js shared by every page
     os.makedirs(assets, exist_ok=True)
-    for js in glob.glob(os.path.join(HERE, "vendor", "*.js")):
+    for js in glob.glob(os.path.join(HERE, "vendor", "*.js")) + [os.path.join(HERE, "pins.js")]:
         shutil.copy2(js, assets)
     page({"mode": "index", "repo": args.repo, "server": args.server}, os.path.join(args.root, "index.html"))
     open(os.path.join(args.root, ".nojekyll"), "w").close()  # serve files as they are, no Jekyll
