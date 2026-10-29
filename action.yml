@@ -34,6 +34,12 @@ inputs:
       KiCad design variants to build: "auto" (all defined in the project), a
       comma-separated list of names, or "none".
     default: auto
+  visual-diff:
+    description: >-
+      On pull requests, before/after images of the changed schematic sheets and PCB
+      layers, shown in the PR comment (images are kept in the kicad-hub-images branch,
+      needs contents write).
+    default: "true"
   extra-formats:
     description: Extra board formats for the fab package, comma-separated (odb, ipc2581).
     default: ""
@@ -196,6 +202,87 @@ runs:
           fi
         fi
 
+    - name: Visual diff (pull requests)
+      if: github.event_name == 'pull_request' && inputs.visual-diff == 'true'
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
+        OUT: ${{ inputs.output-dir }}
+        IMAGE: ${{ inputs.image }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -uo pipefail
+        run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
+        vis="$OUT/visual"; svg="$OUT/.visual-svg"; base_dir=.kicad-hub-base
+        mkdir -p "$vis" "$svg"
+        echo "[]" > "$OUT/reports/visual.json"
+        if ! git worktree add --detach "$base_dir" "$BASE_SHA"; then
+          echo "::warning::Could not check out the PR base: visual diff skipped"
+          exit 0
+        fi
+
+        # Same export options for both sides, so unchanged pages give identical pixels
+        sch_svg() { [ -f "$1/$PROJECT_DIR/$NAME.kicad_sch" ] && run kicad-cli sch export svg -o "$2" "$1/$PROJECT_DIR/$NAME.kicad_sch"; }
+        # Copper layers of this board (from its layer table), silkscreen and outline
+        layers=$(grep -oP '^\s*\(\d+ "\K[^"]*\.Cu(?=" )' "$PROJECT_DIR/$NAME.kicad_pcb" 2>/dev/null | paste -sd, -)
+        layers="${layers:+$layers,}F.Silkscreen,B.Silkscreen,Edge.Cuts"
+        pcb_svg() {
+          [ -f "$1/$PROJECT_DIR/$NAME.kicad_pcb" ] && run kicad-cli pcb export svg --mode-multi --layers "$layers" \
+            --exclude-drawing-sheet --page-size-mode 0 -o "$2" "$1/$PROJECT_DIR/$NAME.kicad_pcb"
+        }
+        cp "$GITHUB_ACTION_PATH/scripts/visual_diff.py" "$OUT/.visual_diff.py"
+        diff_kind() {  # $1 sch|pcb
+          mkdir -p "$svg/$1-base" "$svg/$1-head"
+          "${1}_svg" "$base_dir" "$svg/$1-base/" > /dev/null || true
+          "${1}_svg" . "$svg/$1-head/" > /dev/null || true
+          run python3 "$OUT/.visual_diff.py" --kind "$1" --base "$svg/$1-base" --head "$svg/$1-head" \
+            --prefix "$NAME" --out "$vis" --json "$OUT/reports/visual.json"
+        }
+        diff_kind sch
+        [ "$HAS_PCB" != true ] || diff_kind pcb
+        rm -rf "$svg" "$OUT/.visual_diff.py"
+        git worktree remove --force "$base_dir"
+
+        if [ "$(jq length "$OUT/reports/visual.json")" = 0 ]; then
+          rmdir "$vis" 2>/dev/null || true
+          exit 0
+        fi
+        # A PR comment can only show images that have a URL: keep them in a branch of
+        # this repo (one folder per PR, replaced on every push) and link them by commit,
+        # so older versions of the comment keep working.
+        branch=kicad-hub-images
+        wt="$RUNNER_TEMP/kicad-hub-images"
+        sha=""
+        for try in 1 2 3; do
+          git worktree remove --force "$wt" 2>/dev/null || true
+          if git fetch --no-tags --depth=1 origin "$branch" 2>/dev/null; then
+            git worktree add --detach "$wt" FETCH_HEAD > /dev/null
+          else
+            git worktree add --detach "$wt" > /dev/null && git -C "$wt" checkout -q --orphan "images-$try" &&git -C "$wt" rm -rqf .
+          fi
+          rm -rf "$wt/pr-$PR" && mkdir -p "$wt/pr-$PR" && cp "$vis"/*.png "$wt/pr-$PR/"
+          git -C "$wt" add -A
+          git -C "$wt" -c user.name="github-actions[bot]" \
+            -c user.email="41898699+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "PR #$PR: visual diff of ${HEAD_SHA:0:7}"
+          if git -C "$wt" push -q origin "HEAD:refs/heads/$branch"; then
+            sha=$(git -C "$wt" rev-parse HEAD)
+            break
+          fi
+        done
+        git worktree remove --force "$wt" 2>/dev/null || true
+        if [ -n "$sha" ]; then
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/raw/$sha/pr-$PR"
+          jq --arg u "$url" 'map(.url = "\($u)/\(.image)" | .full_url = "\($u)/\(.full)")' \
+            "$OUT/reports/visual.json" > "$OUT/reports/visual.tmp" && mv "$OUT/reports/visual.tmp" "$OUT/reports/visual.json"
+        else
+          echo "::warning::Could not push the visual diff images (the workflow needs 'contents: write'): they are in the artifact only"
+        fi
+
     - name: Datasheets
       shell: bash
       env:
@@ -302,7 +389,7 @@ runs:
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" \
+          --variants "$r/variants.json" --visual "$r/visual.json" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
