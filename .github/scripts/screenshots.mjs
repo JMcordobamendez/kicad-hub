@@ -13,15 +13,31 @@ async function open(url, wait = 8000) {
   await page.waitForTimeout(wait);  // KiCanvas parses the design after load
 }
 
-// PCB with a part selected (click the middle of the board)
+// KiCanvas shows "Click or tap to interact" until the first click: click once on an
+// empty spot, then on a point given as a fraction of the viewer (fx, fy)
+async function clickIn(sel, fx, fy) {
+  const box = await page.locator(sel).boundingBox();
+  if (!box) return;
+  await page.mouse.click(box.x + 8, box.y + box.height - 8);
+  await page.waitForTimeout(800);
+  if (fx != null) await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+  await page.waitForTimeout(1500);
+  await page.mouse.move(box.x + box.width + 20, box.y + 20);  // no hover box in the shot
+}
+
+// PCB with a part selected (the nPM1300 PMIC, left of centre on the example board)
 await open(page_url + "#pcb");
-const pcb = page.locator("#kc-pcb");
-const box = await pcb.boundingBox();
-if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-await page.waitForTimeout(1500);
+await clickIn("#kc-pcb", 0.336, 0.568);
 await page.screenshot({ path: `${OUT}/portal-pcb.png` });
 
 await open(page_url + "#schematic");
+const sheet = page.locator("select").filter({ hasText: "nRF54L15" }).first();
+if (await sheet.count()) {
+  const opt = await sheet.locator("option", { hasText: "nRF54L15" }).first().getAttribute("value");
+  await sheet.selectOption(opt);
+  await page.waitForTimeout(3000);
+}
+await clickIn("#kc-sch");
 await page.screenshot({ path: `${OUT}/portal-schematic.png` });
 
 // Interactive compare of the first changed page, swipe at the middle
