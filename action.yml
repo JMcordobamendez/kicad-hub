@@ -227,12 +227,13 @@ runs:
 
         # Same export options for both sides, so unchanged pages give identical pixels
         sch_svg() { [ -f "$1/$PROJECT_DIR/$NAME.kicad_sch" ] && run kicad-cli sch export svg -o "$2" "$1/$PROJECT_DIR/$NAME.kicad_sch"; }
-        # Copper layers of this board (from its layer table), silkscreen and outline
+        # Copper layers of this board (from its layer table), silkscreen and outline.
+        # Black and white: theme colours like the cream silkscreen vanish on white.
         layers=$(grep -oP '^\s*\(\d+ "\K[^"]*\.Cu(?=" )' "$PROJECT_DIR/$NAME.kicad_pcb" 2>/dev/null | paste -sd, -)
         layers="${layers:+$layers,}F.Silkscreen,B.Silkscreen,Edge.Cuts"
         pcb_svg() {
           [ -f "$1/$PROJECT_DIR/$NAME.kicad_pcb" ] && run kicad-cli pcb export svg --mode-multi --layers "$layers" \
-            --exclude-drawing-sheet --page-size-mode 0 -o "$2" "$1/$PROJECT_DIR/$NAME.kicad_pcb"
+            --black-and-white --exclude-drawing-sheet --page-size-mode 0 -o "$2" "$1/$PROJECT_DIR/$NAME.kicad_pcb"
         }
         cp "$GITHUB_ACTION_PATH/scripts/visual_diff.py" "$OUT/.visual_diff.py"
         diff_kind() {  # $1 sch|pcb
