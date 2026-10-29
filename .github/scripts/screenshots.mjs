@@ -17,8 +17,7 @@ page.on("pageerror", e => errors.push(`[${page.url()}] ${e.message}`));
 
 // One screenshot step: a failure (missing page, changed layout) is logged, not fatal
 async function step(name, fn) {
-  try { await fn(); } catch (e) { errors.push(`[step ${name}] ${e.message.split("
-")[0]}`); }
+  try { await fn(); } catch (e) { errors.push(`[step ${name}] ${e.message.split("\n")[0]}`); }
 }
 
 async function open(url, wait = 8000) {
