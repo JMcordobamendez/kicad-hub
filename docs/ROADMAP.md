@@ -306,6 +306,20 @@ clicking a component creates a PR review comment through the GitHub API
 Wanted (owner, 2026-10-29), no longer optional. It is a software project in its own
 right: start with a prototype on the PR portal page.
 
+## Improvements to what's done
+Picked by the owner (2026-10-29):
+
+- [ ] **DigiKey**: run it with real keys (Product Information V4) and fix what the
+      real answers show (Mouser and Farnell confirmed with real keys on 2026-10-29)
+- [ ] **Pinned comments**: reply and resolve from the portal, read-only pins on
+      releases, pins that follow a part when it moves between commits
+- [ ] **Activity**: rebuild the snapshots of older commits (a manual workflow over a
+      commit range), so they also get "Open design" and "Compare with parent"
+- [ ] **Electrical requirements** (max current, voltage derating…): need data the CI
+      doesn't produce yet
+- [ ] **Template repository**: make the board template a GitHub template repository
+      ("Use this template" button)
+
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
 - [ ] Microcontroller pin map from the schematic (GPIO → net) as a table and a
