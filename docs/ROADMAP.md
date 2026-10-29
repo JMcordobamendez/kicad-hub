@@ -62,7 +62,7 @@ flowchart LR
     i5["Net navigation, measuring"]:::done
     i6["Sharing private boards"]:::todo
     i7["Target price"]:::done
-    i8["Activity page<br/>branches, PRs, pushes"]:::doing
+    i8["Activity page<br/>branches, PRs, pushes"]:::done
   end
 
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
