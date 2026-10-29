@@ -203,7 +203,9 @@ runs:
           case ",$labels," in *",$f,"*) ;; *) labels="$labels,$f" ;; esac
         done < <(echo "$REQUIRED" | tr ',|' '\n\n' | sed 's/^ *//;s/ *$//')
         fields=$(echo "$labels" | sed 's/\bDNP\b/${DNP}/')
-        bom() { kicad sch export bom --fields "$fields" --labels "$labels" --group-by "" --ref-range-delimiter "" -o "$2" "$1"; }
+        # PWR_FLAG and other virtual symbols are dropped from every per-part BOM
+        virtual() { python3 "$GITHUB_ACTION_PATH/scripts/bom_virtual.py" "$@"; }
+        bom() { kicad sch export bom --fields "$fields" --labels "$labels" --group-by "" --ref-range-delimiter "" -o "$2" "$1" && virtual "$2"; }
 
         bom "$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts.csv"
 
@@ -221,6 +223,7 @@ runs:
           vbom="$OUT/reports/bom-parts-variant-$safe.csv"
           kicad sch export bom --variant "$v" --fields "$fields" --labels "$labels" \
             --group-by "" --ref-range-delimiter "" -o "$vbom" "$PROJECT_DIR/$NAME.kicad_sch"
+          virtual "$vbom"
           desc=$(jq -r --arg v "$v" '.schematic.variants[]? | select(.name == $v) | .description // ""' "$pro")
           jq --arg n "$v" --arg d "$desc" --arg b "$vbom" --arg s "$safe" \
              '. + [{name: $n, description: $d, bom: $b, dir: $s}]' "$OUT/reports/variants.json" > "$OUT/reports/v.tmp"
@@ -402,6 +405,7 @@ runs:
               --labels 'References,Qty,Value,Footprint,MPN,Manufacturer,LCSC' \
               --group-by 'Value,Footprint,MPN,Manufacturer,LCSC' \
               -o "$1/$2-bom.csv" "$sch"
+          python3 "$GITHUB_ACTION_PATH/scripts/bom_virtual.py" "$1/$2-bom.csv"
           python3 "$GITHUB_ACTION_PATH/scripts/variant_cpl.py" "$3" "$OUT/reports/cpl-all.csv" "$1/$2-cpl.csv"
         }
         assembly "$pkg/assembly" "$base" "$OUT/reports/bom-parts.csv" ""

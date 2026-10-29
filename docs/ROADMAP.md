@@ -80,7 +80,12 @@ Lives in `template/`.
       clearances, fiducials…)
 - [x] CI workflows in `template/.github/workflows/`: `kicad.yml` (every option,
       supplier keys from secrets) and `kicad-hub-cleanup.yml` (2026-10-29)
-- [ ] Try it on a real personal board and adjust
+- [ ] Try it on a real personal board and adjust. First run on the owner's board in progress
+      (2026-10-29) found and fixed: KiBot failing on an unannotated part stopped the whole
+      job (now a warning, the rest is published); PWR_FLAG symbols annotated without `#`
+      counted as parts (now dropped from every BOM); no warning for unannotated parts or
+      `TBD` values (new "Design to finish" section); an empty price table when nothing has
+      an LCSC code or MPN (now a short hint)
 - [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
 ## Phase 2 — CI (~1–2 days)
