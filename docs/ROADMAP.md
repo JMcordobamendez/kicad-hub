@@ -60,8 +60,8 @@ flowchart LR
 
 **Now:** phases 1–4 done and public (CI, BOM review, suppliers, before/after
 images, design portal on GitHub Pages, interactive compare). Next: release v1.1.0
-(the `v1` tag predates the portal), fab profiles, then the portal timeline and
-fab comments on releases (see "Ideas from commercial platforms").
+(the `v1` tag predates the portal), fab profiles, then the portal timeline
+(see "Ideas from commercial platforms").
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -277,9 +277,6 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
 
 - [ ] **Timeline in the portal**: a page per commit on `main` (or a listed range), and
       compare any two versions (e.g. release 1.0 vs 1.2), not only a PR against its base
-- [ ] **Fab house comments on a release**: a Discussion or Issue opened per release,
-      linked from the release page and the portal, so the fab's questions stay with
-      that snapshot
 - [ ] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
       voltage rating, part count, cost per board…) checked by CI against ERC, DRC,
       BOM and sourcing, with a pass/fail table in the report
@@ -296,7 +293,7 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
       with tags, a lifecycle field (planned / production / obsolete) and a where-used
       index across board repos
 
-Not planned: BOM health score, STEP comparison between revisions, compliance and
+Not planned: fab house comments on a release, BOM health score, STEP comparison between revisions, compliance and
 end-of-life data (paid sources), MCAD plugins, PLM integration.
 
 ## Before going public
@@ -346,7 +343,8 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
   show images with a URL; a `kicad-hub-images` branch needs no extra service and
   works in private repos for anyone who can read the repo.
 - **Commercial-platform features, picked by usefulness** (2026-10-29): timeline,
-  fab comments, requirements, approval flows, net navigation, private sharing and
+  requirements, approval flows, net navigation, private sharing and
   target price are planned; component library under study; BOM health score, STEP
-  diff, paid compliance data, MCAD and PLM integration dropped.
+  diff, paid compliance data, MCAD and PLM integration dropped. Fab comments on releases (a Discussion per
+  release) dropped too.
 - **Mockups** of the PR comment and the portal: `docs/mockups/`.
