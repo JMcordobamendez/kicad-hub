@@ -82,6 +82,12 @@ inputs:
   pages-branch:
     description: Branch the portal is published to (Settings → Pages → Deploy from a branch).
     default: kicad-hub-site
+  history:
+    description: >-
+      Timeline of the default branch: keep a light snapshot (design files, per-page renders,
+      parts BOM, commit info) of the last N commits under history/<sha>/ in the portal, to
+      browse and compare them (compare.html). 0 = off. Needs pages.
+    default: "10"
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
@@ -536,6 +542,8 @@ runs:
         REF_TYPE: ${{ github.ref_type }}
         REF_NAME: ${{ github.ref_name }}
         PR: ${{ github.event.pull_request.number }}
+        HISTORY: ${{ inputs.history }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         set -euo pipefail
         if [ -n "$PR" ]; then
@@ -548,7 +556,44 @@ runs:
         fi
         owner=${GITHUB_REPOSITORY%%/*}; repo=${GITHUB_REPOSITORY#*/}
         if [ "${repo,,}" = "${owner,,}.github.io" ]; then base="https://${repo,,}"; else base="https://${owner,,}.github.io/$repo"; fi
-        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; } >> "$GITHUB_OUTPUT"
+        # a light snapshot of every push to the default branch, for the timeline
+        hist_dest=""
+        if [ "$kind" = branch ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ] && [ "${HISTORY:-0}" -gt 0 ] 2>/dev/null; then
+          hist_dest="history/${GITHUB_SHA:0:7}"
+        fi
+        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; echo "history_dest=$hist_dest"; } >> "$GITHUB_OUTPUT"
+
+    - name: Page renders (compare)
+      if: steps.portal.outputs.dest != ''
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -uo pipefail
+        # Every published build stores a full-page PNG of each schematic sheet and PCB layer,
+        # made with the same export options and resolution (scripts/renders.py, no crop that
+        # depends on the content), so the portal's compare page can diff any two builds.
+        r="$RUNNER_TEMP/kicad-hub-renders"
+        rm -rf "$r" && mkdir -p "$r/png" "$r/svg/sch" "$r/svg/pcb" || exit 0
+        run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -v "$r:/r" -w /w "$IMAGE" "$@"; }
+        cp "$GITHUB_ACTION_PATH/scripts/renders.py" "$r/renders.py"
+        # same export options as the visual diff (see that step)
+        run kicad-cli sch export svg -o /r/svg/sch/ "$PROJECT_DIR/$NAME.kicad_sch" > /dev/null \
+          && run python3 /r/renders.py --kind sch --svg /r/svg/sch --prefix "$NAME" --out /r/png \
+          || echo "::warning::Schematic renders for the compare page skipped"
+        if [ "$HAS_PCB" = true ]; then
+          layers=$(grep -oP '^\s*\(\d+ "\K[^"]*\.Cu(?=" )' "$PROJECT_DIR/$NAME.kicad_pcb" 2>/dev/null | paste -sd, -)
+          layers="${layers:+$layers,}F.Silkscreen,B.Silkscreen,Edge.Cuts"
+          run kicad-cli pcb export svg --mode-multi --layers "$layers" --black-and-white --exclude-drawing-sheet \
+            --page-size-mode 0 -o /r/svg/pcb/ "$PROJECT_DIR/$NAME.kicad_pcb" > /dev/null \
+            && run python3 /r/renders.py --kind pcb --svg /r/svg/pcb --prefix "$NAME" --out /r/png \
+            || echo "::warning::PCB renders for the compare page skipped"
+        fi
+        rm -rf "$r/svg" "$r/renders.py"
+        du -sh "$r/png" 2>/dev/null || true
 
     - name: Report
       id: report
@@ -648,14 +693,35 @@ runs:
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         TITLE: ${{ github.event.pull_request.title }}
+        REF_NAME: ${{ github.ref_name }}
+        HISTORY: ${{ inputs.history }}
+        HIST_DEST: ${{ steps.portal.outputs.history_dest }}
       run: |
         set -uo pipefail
         site="$RUNNER_TEMP/kicad-hub-portal"
         rm -rf "$site"
-        python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --site "$site" --out "$OUT" \
-          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --label "$LABEL" --kind "$KIND" \
-          --sha "$SHA" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --title "$TITLE" \
-          --base-ref "$BASE_REF" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        # commit of this build (a PR is checked out as a merge commit: nothing to say there)
+        commit=()
+        if [ "$KIND" != pr ]; then
+          # (--opt=value: a message starting with "-" is still a value)
+          commit=(--commit-date="$(git log -1 --format=%cI)" --commit-author="$(git log -1 --format=%an)" --commit-message="$(git log -1 --format=%s)")
+        fi
+        renders=()
+        [ -f "$RUNNER_TEMP/kicad-hub-renders/png/renders.json" ] && renders=(--renders "$RUNNER_TEMP/kicad-hub-renders/png")
+        branch=""; [ "$KIND" = branch ] && branch="$REF_NAME"
+        portal() { python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --out "$OUT" \
+          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
+          --server "$GITHUB_SERVER_URL" --title "$TITLE" --base-ref "$BASE_REF" --branch "$branch" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "${commit[@]}" "${renders[@]}" "$@"; }
+        portal --site "$site" --label "$LABEL" --kind "$KIND"
+        # light snapshot of this commit for the timeline (default branch only)
+        hist=""
+        if [ -n "$HIST_DEST" ]; then
+          hist="$RUNNER_TEMP/kicad-hub-portal-history"
+          rm -rf "$hist"
+          portal --site "$hist" --label "${SHA:0:7}" --kind history --light || hist=""
+        fi
+        case "$HISTORY" in ''|*[!0-9]*) keep=-1 ;; *) keep=$HISTORY ;; esac
         # The site branch is one commit, replaced on every publish (no history of zips and
         # PDFs piling up). --force-with-lease keeps concurrent runs from losing each other's
         # pages: the loser retries on top of the winner.
@@ -670,7 +736,11 @@ runs:
             git worktree add -q --detach "$wt" && git -C "$wt" rm -rqf . > /dev/null
           fi
           rm -rf "${wt:?}/$DEST" && mkdir -p "$(dirname "$wt/$DEST")" && cp -r "$site" "$wt/$DEST"
-          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL"
+          if [ -n "$hist" ]; then
+            rm -rf "${wt:?}/$HIST_DEST" && mkdir -p "$(dirname "$wt/$HIST_DEST")" && cp -r "$hist" "$wt/$HIST_DEST"
+          fi
+          # index also prunes history/ to the newest $keep snapshots (-1 = leave it alone)
+          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --keep-history "$keep"
           git -C "$wt" checkout -q --orphan "site-$try"
           git -C "$wt" add -A
           git -C "$wt" -c user.name="github-actions[bot]" \

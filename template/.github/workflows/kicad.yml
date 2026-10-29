@@ -28,6 +28,8 @@ jobs:
           # boards: "1,5,10,100"         # batch sizes to price
           # requirements: kicad-hub-requirements.yaml   # checked when the file exists (template/ has a commented one)
           # currency: EUR
+          # history: 10                  # light snapshots of the last N commits of main (timeline and
+          #                              # compare page in the portal); 0 = off
           # Optional suppliers, with your own free API keys stored as repository
           # secrets (Settings → Secrets and variables → Actions). Unset = skipped.
           # How to get them: https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys
