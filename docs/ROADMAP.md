@@ -181,7 +181,10 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          changed fields
    - [x] Example board: variant `lite` (no debugger: U5, U6, Y2, C18, C20 DNP; C10
          10uF as a field-change test)
-   - [ ] Variant as a dimension in the PR BOM diff (today the diff is on the default build)
+   - [x] Variant as a dimension in the PR BOM diff: each variant compared with the same
+         variant on the base (when the base has it), table per variant in the PR comment
+   - [x] Warn when a variant changes a part's value but keeps its MPN or LCSC code (the
+         order would bring the old part; example: lite's C10)
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)
