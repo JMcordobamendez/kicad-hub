@@ -40,3 +40,20 @@ git clone <repo-url>
 ```
 
 Open `<board>.kicad_pro` in KiCad.
+
+## CI
+
+`.github/workflows/kicad.yml` runs [kicad-hub](https://github.com/JMcordobamendez/kicad-hub)
+on every push and pull request: ERC/DRC, BOM checks and diff, prices and stock,
+before/after images in the PR comment and the fab package (artifact
+`<board>-fab`). Tag `vX.Y` to publish the fab package as a release.
+
+- Set `project-dir` in the workflow if the `.kicad_pro` isn't at the repo root.
+- Prices come from LCSC and JLCPCB out of the box. For Mouser, Farnell and DigiKey,
+  add your own API keys as repository secrets (`MOUSER_API_KEY`,
+  `FARNELL_API_KEY`, `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`):
+  [how to get them](https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys).
+- Supplier picked per part: open `sourcing.html` from the artifact, choose, and
+  commit the downloaded `kicad-hub-sourcing.csv` next to the `.kicad_pro`.
+- `.github/workflows/kicad-hub-cleanup.yml` removes a PR's images from the
+  `kicad-hub-images` branch when the PR is closed.

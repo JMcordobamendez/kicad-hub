@@ -29,6 +29,7 @@ ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
+ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
 ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
 ap.add_argument("--package", default="", help="file name of the fab package zip")
 ap.add_argument("--package-warnings", help="text file, one warning per line, from fabnotes.py")
@@ -226,6 +227,43 @@ if ds is not None:
         md += [f"<details><summary>{len(unver)} link{'s' if len(unver) != 1 else ''} could not be verified (the site blocks automated "
                f"checks or timed out)</summary>", "", table(["Part", "Value", "Datasheet", "Reason"], unver),
                "", "</details>", ""]
+
+# --- Cost and stock -------------------------------------------------------------
+if args.sourcing and os.path.exists(args.sourcing):
+    src = json.load(open(args.sourcing, encoding="utf-8"))
+    sym = {"USD": "$", "EUR": "€", "GBP": "£"}.get(src["currency"], src["currency"] + " ")
+    money = lambda v: f"{sym}{v:,.2f}"
+    d = src["builds"][0]
+    gaps = []
+    if d["unpriceable"]:
+        gaps.append(f"no MPN or LCSC code: {', '.join(sorted(d['unpriceable'], key=ref_key))}")
+    if d["unpriced"]:
+        gaps.append(f"not found: {', '.join(sorted(d['unpriced'], key=ref_key))}")
+    used = [s["name"] for s in src["suppliers"] if s["status"] == "ok"]
+    other = [f"{s['name']} ({s['status'].split(' (')[0]})" for s in src["suppliers"] if s["status"] != "ok"]
+    md += ["### Cost and stock",
+           f"Components only, prices in {src['currency']} at the time of this run, from {', '.join(used) or 'no supplier'}"
+           + (f"; not used: {', '.join(other)}" if other else "") + ". "
+           f"**{d['priced']} of {d['fitted']} fitted parts priced**" + (f" ({'; '.join(gaps)})" if gaps else "") + ".", ""]
+    head_row = ["Build"] + [f"{n} board{'s' if n != 1 else ''}" for n in src["batches"]]
+    rows = []
+    for b in src["builds"]:
+        cells = [f"**{b['name']}**"]
+        for n in src["batches"]:
+            t = b["totals"].get(str(n))
+            cells.append("—" if t is None else money(t) if n == 1 else f"{money(t)} ({money(t / n)} each)")
+        rows.append(cells)
+    by = d["by_supplier"].get(str(src["batches"][0]), {})
+    md += [table(head_row, rows), "",
+           ("Supplier picked per part in `kicad-hub-sourcing.csv`, the rest" if src["choices_file"] else "Each part")
+           + " from the cheapest supplier with enough stock for the batch"
+           + (f" (for {src['batches'][0]} board{'s' if src['batches'][0] != 1 else ''}: {', '.join(f'{k} {v}' for k, v in sorted(by.items(), key=lambda kv: -kv[1]))})" if by else "")
+           + ". Minimum orders count, so small batches cost more per board.", ""]
+    if src["warnings"]:
+        md += ["**Check before buying:**", ""] + [f"- ⚠️ {w['part']} · {w['message']}" for w in src["warnings"][:MAX_ROWS]] + [""]
+    md += ["Compare suppliers per part and choose: `sourcing.html` in the artifact. "
+           "Every offer: `reports/sourcing.csv`.", ""]
+    counts["sourcing_warnings"] = len(src["warnings"])
 
 # --- Fab package ----------------------------------------------------------------
 if args.package:

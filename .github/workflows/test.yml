@@ -7,7 +7,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write        # publish the fab package as a release asset on tags
+  contents: write        # release asset on tags, before/after images on PRs
   pull-requests: write   # the action comments its report on PRs
 
 jobs:
@@ -20,3 +20,10 @@ jobs:
       - uses: ./
         with:
           project-dir: examples/royalblue54l-feather
+          currency: EUR
+          # Optional suppliers: set these secrets in this repo to test them
+          mouser-api-key: ${{ secrets.MOUSER_API_KEY }}
+          farnell-api-key: ${{ secrets.FARNELL_API_KEY }}
+          farnell-store: es.farnell.com
+          digikey-client-id: ${{ secrets.DIGIKEY_CLIENT_ID }}
+          digikey-client-secret: ${{ secrets.DIGIKEY_CLIENT_SECRET }}

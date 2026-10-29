@@ -32,7 +32,7 @@ flowchart LR
     b6["6 · Datasheets"]:::done
     b5["5 · Variants"]:::done
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::done
-    b2["2 · Cost and stock"]:::doing
+    b2["2 · Cost and stock<br/>multi-supplier, choose per part"]:::done
     b7["7 · Before/after images<br/>changes highlighted"]:::done
   end
 
@@ -58,9 +58,9 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phase 2 done; 2b has BOM diff, field checks, datasheets, the fab
-package, variants and before/after images working. Next: cost and stock
-(without distributor API keys, see 2b.2), then the web portal.
+**Now:** phases 2 and 2b done (BOM diff, field checks, datasheets, fab package,
+variants, before/after images, cost and stock from LCSC). Left in 2b: small
+extras (variant BOM diff, fab profiles, other distributors). Next: web portal.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -78,6 +78,8 @@ Lives in `template/`.
 - [x] Project libraries referenced with `${KIPRJMOD}` paths
 - [x] Pull request template with a design review checklist (decoupling,
       clearances, fiducials…)
+- [x] CI workflows in `template/.github/workflows/`: `kicad.yml` (every option,
+      supplier keys from secrets) and `kicad-hub-cleanup.yml` (2026-10-29)
 - [ ] Try it on a real personal board and adjust
 - [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
@@ -112,13 +114,30 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (`Value: 10k → 4k7`), one sticky comment per board updated on each push
    - [x] Confirmed on a real PR on GitHub (kicad-hub #1, 2026-10-28)
 2. **Cost and availability**
-   - [ ] Unit price and stock per part from LCSC / Mouser / DigiKey (KiBot + KiCost)
-   - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
-   - [ ] Warn on obsolete, not-recommended or out-of-stock parts
-   - [ ] API keys as repository secrets; skip gracefully when they are missing
-   - [ ] The owner has no distributor API keys (2026-10-29): start with sources that
-         need none (LCSC part numbers already in the BOM), and treat Mouser /
-         DigiKey / Nexar keys (free to register) as optional extras
+   - [x] Offers per part from several suppliers (`scripts/sourcing.py`): unit price
+         breaks, stock, minimum order / multiple, lifecycle, link
+     - LCSC and JLCPCB by the `LCSC` field, no API key (the JSON behind their web
+       pages: unofficial, so failures are reported, never fatal). Checked from
+       GitHub runners on 2026-10-29
+     - Mouser, Farnell and DigiKey by MPN (or the MPN LCSC reports), each user with
+       their own free API keys as repository secrets, passed as action inputs; a
+       missing key skips that supplier. **Written from the APIs' docs, not yet run
+       with real keys** — test when the owner adds keys to this repo (`test.yml`
+       already passes the secrets)
+   - [x] One currency for everything (`currency`, ECB rates from frankfurter.app)
+   - [x] Total per board and per batch (`boards: 1,5,10,100`), per build (default and
+         each variant), minimum orders, multiples and price breaks included. Per part
+         and batch: the supplier chosen by the user, else the cheapest with stock
+   - [x] Comparison page `sourcing.html` in the artifact: all offers per part, pick
+         one, totals update; downloads the selection file and a purchase list per
+         supplier. The selection lives in the board repo as `kicad-hub-sourcing.csv`
+         (`Part,Supplier,SKU`), read by the CI
+   - [x] Warn on not found, out of stock for the largest batch, bad lifecycle, an
+         LCSC code that doesn't match the MPN, and a chosen offer no longer available
+   - [x] Example board (EUR, LCSC + JLCPCB): 47 of 48 parts priced, €26.06 for one
+         board, €8.09 each for 100. R5/R7 are out of stock at LCSC but JLCPCB has 17M
+   - [ ] Run Mouser / Farnell / DigiKey with real keys and fix what the real
+         answers show
 3. **Ready-to-order package — generic, any fab house**
    - [x] One zip in standard formats every fab accepts, no vendor lock-in, built on
          every run and attached to a GitHub Release on tag `vX.Y`:
@@ -186,7 +205,9 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (e.g. PRs from forks) they stay in the artifact only (`visual/`)
    - [x] Confirmed on GitHub with a demo PR (kicad-hub #3, 2026-10-29: R5 value and
          position → nRF54L15 sheet, F.Cu and F.Silkscreen)
-   - [ ] Clean up `kicad-hub-images` folders of closed PRs
+   - [x] Clean up `kicad-hub-images` folders of closed PRs: workflow
+         `kicad-hub-cleanup.yml` (on PR close, or by hand with a PR number), in the
+         template and in this repo
    - [ ] Reuse the engine for phase 4 (visual diff in the portal)
 
 ## Phase 3 — Web portal (~2–3 days)
@@ -243,6 +264,12 @@ it's clear the feature is actually missed.
   Vendor formats (JLCPCB, PCBWay…) are optional profiles, never the default.
 - **Web portal needs public repos** (or GitHub Pro): GitHub Pages is free only
   for public repositories.
+- **Prices: keyless suppliers by default, users bring their own keys** (2026-10-29):
+  LCSC and JLCPCB need no key. Mouser, Farnell and DigiKey use each user's own free
+  keys from their repository secrets; the tool never ships or shares keys. RS has no
+  public API.
+- **Supplier choice lives in a file in the board repo** (2026-10-29):
+  `kicad-hub-sourcing.csv`, made with the comparison page, reviewable in PRs.
 - **PR images live in a branch of the board repo** (2026-10-29): a comment can only
   show images with a URL; a `kicad-hub-images` branch needs no extra service and
   works in private repos for anyone who can read the repo.

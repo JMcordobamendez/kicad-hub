@@ -34,6 +34,38 @@ inputs:
       KiCad design variants to build: "auto" (all defined in the project), a
       comma-separated list of names, or "none".
     default: auto
+  sourcing:
+    description: >-
+      Price and stock of the fitted parts from several suppliers, and a page to compare
+      them. LCSC and JLCPCB need no key (looked up by the LCSC field); Mouser, Farnell
+      and DigiKey are used when their keys are given (looked up by MPN).
+    default: "true"
+  boards:
+    description: Batch sizes to price, comma-separated (components only).
+    default: "1,5,10,100"
+  currency:
+    description: Currency for all prices (ISO code; converted with ECB rates).
+    default: USD
+  sourcing-choices:
+    description: >-
+      Supplier picked per part (CSV: Part,Supplier,SKU), relative to project-dir.
+      Download it from the comparison page; parts not in it use the cheapest offer.
+    default: kicad-hub-sourcing.csv
+  mouser-api-key:
+    description: Mouser Search API key (pass a secret). Empty = Mouser not used.
+    default: ""
+  farnell-api-key:
+    description: Farnell / element14 API key (pass a secret). Empty = Farnell not used.
+    default: ""
+  farnell-store:
+    description: Farnell store to price from (e.g. uk.farnell.com, es.farnell.com, www.newark.com).
+    default: uk.farnell.com
+  digikey-client-id:
+    description: DigiKey API client ID (pass a secret). Empty = DigiKey not used.
+    default: ""
+  digikey-client-secret:
+    description: DigiKey API client secret (pass a secret).
+    default: ""
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
@@ -156,7 +188,7 @@ runs:
         kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
 
         # Fields to export: fixed ones + every alternative named in required-fields
-        labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,Voltage"
+        labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage"
         while IFS= read -r f; do
           [ -n "$f" ] || continue
           case ",$labels," in *",$f,"*) ;; *) labels="$labels,$f" ;; esac
@@ -297,6 +329,27 @@ runs:
           --project-dir "$PROJECT_DIR" --dirs "$DIRS" --check-urls "$CHECK" \
           --out-dir "$OUT" --json "$OUT/reports/datasheets.json"
 
+    - name: Cost and stock
+      if: inputs.sourcing == 'true'
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        OUT: ${{ inputs.output-dir }}
+        BOARDS: ${{ inputs.boards }}
+        CURRENCY: ${{ inputs.currency }}
+        CHOICES: ${{ inputs.sourcing-choices }}
+        MOUSER_API_KEY: ${{ inputs.mouser-api-key }}
+        FARNELL_API_KEY: ${{ inputs.farnell-api-key }}
+        FARNELL_STORE: ${{ inputs.farnell-store }}
+        DIGIKEY_CLIENT_ID: ${{ inputs.digikey-client-id }}
+        DIGIKEY_CLIENT_SECRET: ${{ inputs.digikey-client-secret }}
+      run: |
+        python3 "$GITHUB_ACTION_PATH/scripts/sourcing.py" --bom "$OUT/reports/bom-parts.csv" \
+          --variants "$OUT/reports/variants.json" --choices "$PROJECT_DIR/$CHOICES" \
+          --boards "$BOARDS" --currency "$CURRENCY" \
+          --json "$OUT/reports/sourcing.json" --csv "$OUT/reports/sourcing.csv" --html "$OUT/sourcing.html" \
+          || echo "::warning::Cost and stock lookup failed: skipped"
+
     - name: Fab package
       id: package
       if: steps.detect.outputs.has_pcb == 'true'
@@ -390,7 +443,7 @@ runs:
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" --visual "$r/visual.json" \
+          --variants "$r/variants.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
