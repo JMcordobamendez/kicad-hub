@@ -317,6 +317,12 @@ New board repositories start from [`template/`](template/): folder layout,
 project libraries through `${KIPRJMOD}`, a PR design review checklist and the CI
 workflows.
 
+### Approval flows
+
+The template includes issue forms (part request, design review, fab release), a
+`CODEOWNERS.example` and an opt-in approval step for releases, all plain GitHub
+features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/approvals.md).
+
 ## Development
 
 - Every push to `main`, every PR and every `v*` tag runs the action on

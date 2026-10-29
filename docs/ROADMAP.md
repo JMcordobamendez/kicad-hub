@@ -280,9 +280,10 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
 - [ ] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
       voltage rating, part count, cost per board…) checked by CI against ERC, DRC,
       BOM and sourcing, with a pass/fail table in the report
-- [ ] **Approval flows on GitHub**: part requests and design reviews as Issue forms,
+- [x] **Approval flows on GitHub**: part requests and design reviews as Issue forms,
       PR review rules and environments (documented recipes in the template, no engine
-      of our own)
+      of our own). Done 2026-10-29: issue forms, `CODEOWNERS.example`, opt-in
+      release environment and `template/docs/approvals.md`
 - [ ] **Net navigation and measuring in the viewer**: highlight a net, jump between
       its pads, measure distances. Depends on KiCanvas (alpha)
 - [ ] **Sharing private boards**: a way to show a private repo's portal to people
