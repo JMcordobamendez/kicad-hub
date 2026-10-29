@@ -440,7 +440,7 @@ a paid plan.
 | No PR comment | `pull-requests: write` missing, or the PR comes from a **fork** (forks can't write and get no secrets or portal page) |
 | KiBot warnings in the log | Usually non-fatal (e.g. an unannotated part is a warning; the rest is published). A board with no outline on `Edge.Cuts` skips DRC and PCB outputs with a warning |
 | Parts or 3D models missing | Libraries not in the project tables with `${KIPRJMOD}`, or 3D models not pushed/LFS missing (`actions/checkout` needs `lfs: true`, set in the template) |
-| "Click or tap to interact" (or a viewer that does not scroll/zoom) | Click once inside the viewer to give it focus, then scroll to zoom and drag to pan. (Not reproduced here; if it persists, try another browser and report it as an issue) |
+| "Click or tap to interact" over the viewer | Normal: KiCanvas waits for a first click before it takes the mouse wheel, so the page can scroll. Click once inside the viewer, then scroll to zoom and drag to pan |
 | Private repository | Checks, PR comment, artifacts and releases work; portal needs Pages on a paid plan (or download the artifact) |
 | Prices missing | Part has no `LCSC` (or `MPN` for Mouser/Farnell/DigiKey), or the secret is not set. Mouser: use a **Search API** key. Mouser limit 1,000 requests/day |
 | Pinned comments do not load | Anonymous GitHub API limit is 60 requests per hour per IP: wait, or save a token (5.10) |
