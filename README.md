@@ -23,9 +23,12 @@ On every push and pull request of a KiCad project, the action:
   removed and changed (`Value: 10uF → 22uF`).
 - **Resolves the datasheets**: links checked (broken vs. unverifiable), local PDFs
   found by MPN or value in the datasheet folders and bundled for offline use.
-- **Prices the BOM**: cost per board and per batch (1, 5, 10, 100 boards), for every
-  variant, from LCSC by part number (no API key); warns on parts out of stock,
-  not active, not found, or whose LCSC code doesn't match the MPN.
+- **Prices the BOM from several suppliers**: price and stock of every part at LCSC
+  and JLCPCB (no API key needed) and at Mouser, Farnell and DigiKey (with your own
+  free API keys); cost per board and per batch (1, 5, 10, 100 boards) for every
+  variant; a page to compare offers part by part and choose the supplier, saved in
+  the repo. Warns on parts out of stock, not active, not found, or whose LCSC code
+  doesn't match the MPN.
 - **Builds a fab package** in standard formats any fab house accepts (Gerber X2,
   Excellon, IPC-D-356, BOM and pick & place CSV) with fab notes read from the
   board, which warn about features below the project rules.
@@ -68,7 +71,8 @@ Mockups: [PR comment](docs/mockups/pull-request.png) ·
                           │               IPC-D-356, BOM, pick & place
                           ├─ Python ──── scripts/datasheets.py  resolve, check, bundle
                           │            ── scripts/fabnotes.py    fab notes from the board
-                          │            ── scripts/sourcing.py    cost and stock (LCSC)
+                          │            ── scripts/sourcing.py    cost and stock (LCSC, JLCPCB,
+                          │                                      Mouser, Farnell, DigiKey)
                           │            ── scripts/visual_diff.py before/after images
                           │            ── scripts/report.py      markdown report
                           ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
@@ -130,8 +134,15 @@ can use it.
 | `datasheet-optional-refs` | `R,C,TP,H,MH,FID,JP,NT,LOGO` | Prefixes that don't need a datasheet |
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
 | `variants` | `auto` | Design variants to build: `auto` (all in the project), a list, or `none` |
-| `sourcing` | `lcsc` | Price and stock from LCSC by the `LCSC` field (no API key), or `none` |
+| `sourcing` | `true` | Price and stock per supplier, and the comparison page |
 | `boards` | `1,5,10,100` | Batch sizes to price (components only) |
+| `currency` | `USD` | Currency for all prices (converted with ECB rates) |
+| `sourcing-choices` | `kicad-hub-sourcing.csv` | Supplier picked per part, relative to `project-dir` (see [choosing suppliers](#choosing-suppliers)) |
+| `mouser-api-key` | — | Mouser Search API key, from a secret ([how](#supplier-api-keys)) |
+| `farnell-api-key` | — | Farnell / element14 API key, from a secret |
+| `farnell-store` | `uk.farnell.com` | Farnell store to price from (`es.farnell.com`, `de.farnell.com`, `www.newark.com`…) |
+| `digikey-client-id` | — | DigiKey API client ID, from a secret |
+| `digikey-client-secret` | — | DigiKey API client secret, from a secret |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
@@ -147,6 +158,74 @@ project, and `datasheet(s)/` one level up. A file is used when its name contains
 the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 `S-82A2AAA-A8T2U`).
 
+### Supplier API keys
+
+LCSC and JLCPCB work out of the box: parts are looked up by their `LCSC` field
+(e.g. `C25744`), no account needed. Mouser, Farnell and DigiKey need an API key,
+which each user gets for free with their own account — kicad-hub has no shared
+keys. Parts are looked up there by their `MPN` field, or by the manufacturer part
+number LCSC reports when the MPN is empty. Add only the suppliers you want; the
+others are skipped and listed as "no API key" in the report.
+
+**1. Get the keys**
+
+- **Mouser** — sign in at [mouser.com](https://www.mouser.com) (create an account if
+  needed), open the [API Hub](https://www.mouser.com/api-hub/) and sign up for the
+  **Search API**. The key is shown under *My Account → APIs* and sent by email.
+  Limits: 30 requests per minute, 1,000 per day (one request per part).
+- **Farnell / element14** — register at
+  [partner.element14.com](https://partner.element14.com/), then *Register an
+  application* / *Get API Keys* for the **Product Search API (REST)**. Copy the key.
+  Pick your store with `farnell-store` (prices come in that store's currency).
+- **DigiKey** — sign in at [developer.digikey.com](https://developer.digikey.com/)
+  with a DigiKey account, create an organization, then a **Production App** with
+  the **ProductInformation V4** API enabled (the OAuth callback can be
+  `https://localhost`, it isn't used). Copy its **Client ID** and **Client Secret**.
+
+**2. Store them as secrets of your board repository** (never in a file): *Settings →
+Secrets and variables → Actions → New repository secret*, one per value:
+
+| Secret name | Value |
+|---|---|
+| `MOUSER_API_KEY` | Mouser Search API key |
+| `FARNELL_API_KEY` | element14 API key |
+| `DIGIKEY_CLIENT_ID` | DigiKey Client ID |
+| `DIGIKEY_CLIENT_SECRET` | DigiKey Client Secret |
+
+**3. Pass them to the action** in your workflow:
+
+```yaml
+      - uses: JMcordobamendez/kicad-hub@main
+        with:
+          project-dir: hardware/my-board
+          currency: EUR
+          mouser-api-key: ${{ secrets.MOUSER_API_KEY }}
+          farnell-api-key: ${{ secrets.FARNELL_API_KEY }}
+          farnell-store: es.farnell.com
+          digikey-client-id: ${{ secrets.DIGIKEY_CLIENT_ID }}
+          digikey-client-secret: ${{ secrets.DIGIKEY_CLIENT_SECRET }}
+```
+
+A secret that isn't set arrives empty and that supplier is skipped, so the same
+workflow works with any subset. GitHub masks secrets in the logs. Pull requests
+from forks don't get secrets: they are priced with LCSC and JLCPCB only.
+
+### Choosing suppliers
+
+By default each part is bought from the cheapest supplier that has enough stock for
+the batch. To choose yourself:
+
+1. Download the artifact of a run and open **`sourcing.html`**: one row per part,
+   with every supplier's stock, minimum order, unit price and line total for the
+   batch you select, and totals per build and batch.
+2. Pick an offer per part (or *Use the cheapest for every part* to freeze the
+   current choice). **Download purchase list** gives one CSV per batch, sorted by
+   supplier, ready to paste into each supplier's cart.
+3. **Download selection file** and commit it as `kicad-hub-sourcing.csv` next to
+   the `.kicad_pro`. From then on the report's totals use your picks; parts not in
+   the file stay automatic. It's a plain CSV (`Part,Supplier,SKU`, where `Part` is
+   the MPN or the LCSC code), so it can also be edited by hand and reviewed in PRs.
+
 ### What you get
 
 **Report** — job summary and PR comment:
@@ -158,7 +237,8 @@ fab package warnings.
 
 ```
 reports/      erc/drc (.rpt, .json), per-part BOMs, report.md, datasheets.json,
-              sourcing.csv (price per part and batch)
+              sourcing.csv (every supplier offer per part and batch)
+sourcing.html supplier comparison: choose per part, download selection and purchase list
 package/      <board>-<rev>-fab.zip  ← send this to the fab
   <board>-<rev>/
     gerber/       Gerber X2 + .gbrjob (layers as set in the board's plot settings)
@@ -183,7 +263,7 @@ the commit hash.
 ```
 action.yml                  the action
 scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py,
-                            visual_diff.py, sourcing.py
+                            visual_diff.py, sourcing.py (+ sourcing.html, the comparison page)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)

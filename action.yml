@@ -36,12 +36,36 @@ inputs:
     default: auto
   sourcing:
     description: >-
-      Price and stock of the fitted parts: "lcsc" (looked up by the LCSC field, no API
-      key needed) or "none".
-    default: lcsc
+      Price and stock of the fitted parts from several suppliers, and a page to compare
+      them. LCSC and JLCPCB need no key (looked up by the LCSC field); Mouser, Farnell
+      and DigiKey are used when their keys are given (looked up by MPN).
+    default: "true"
   boards:
     description: Batch sizes to price, comma-separated (components only).
     default: "1,5,10,100"
+  currency:
+    description: Currency for all prices (ISO code; converted with ECB rates).
+    default: USD
+  sourcing-choices:
+    description: >-
+      Supplier picked per part (CSV: Part,Supplier,SKU), relative to project-dir.
+      Download it from the comparison page; parts not in it use the cheapest offer.
+    default: kicad-hub-sourcing.csv
+  mouser-api-key:
+    description: Mouser Search API key (pass a secret). Empty = Mouser not used.
+    default: ""
+  farnell-api-key:
+    description: Farnell / element14 API key (pass a secret). Empty = Farnell not used.
+    default: ""
+  farnell-store:
+    description: Farnell store to price from (e.g. uk.farnell.com, es.farnell.com, www.newark.com).
+    default: uk.farnell.com
+  digikey-client-id:
+    description: DigiKey API client ID (pass a secret). Empty = DigiKey not used.
+    default: ""
+  digikey-client-secret:
+    description: DigiKey API client secret (pass a secret).
+    default: ""
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
@@ -306,15 +330,24 @@ runs:
           --out-dir "$OUT" --json "$OUT/reports/datasheets.json"
 
     - name: Cost and stock
-      if: inputs.sourcing == 'lcsc'
+      if: inputs.sourcing == 'true'
       shell: bash
       env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
         OUT: ${{ inputs.output-dir }}
         BOARDS: ${{ inputs.boards }}
+        CURRENCY: ${{ inputs.currency }}
+        CHOICES: ${{ inputs.sourcing-choices }}
+        MOUSER_API_KEY: ${{ inputs.mouser-api-key }}
+        FARNELL_API_KEY: ${{ inputs.farnell-api-key }}
+        FARNELL_STORE: ${{ inputs.farnell-store }}
+        DIGIKEY_CLIENT_ID: ${{ inputs.digikey-client-id }}
+        DIGIKEY_CLIENT_SECRET: ${{ inputs.digikey-client-secret }}
       run: |
         python3 "$GITHUB_ACTION_PATH/scripts/sourcing.py" --bom "$OUT/reports/bom-parts.csv" \
-          --variants "$OUT/reports/variants.json" --boards "$BOARDS" \
-          --json "$OUT/reports/sourcing.json" --csv "$OUT/reports/sourcing.csv" \
+          --variants "$OUT/reports/variants.json" --choices "$PROJECT_DIR/$CHOICES" \
+          --boards "$BOARDS" --currency "$CURRENCY" \
+          --json "$OUT/reports/sourcing.json" --csv "$OUT/reports/sourcing.csv" --html "$OUT/sourcing.html" \
           || echo "::warning::Cost and stock lookup failed: skipped"
 
     - name: Fab package

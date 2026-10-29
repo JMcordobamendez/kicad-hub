@@ -32,7 +32,7 @@ flowchart LR
     b6["6 · Datasheets"]:::done
     b5["5 · Variants"]:::done
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::done
-    b2["2 · Cost and stock (LCSC)"]:::done
+    b2["2 · Cost and stock<br/>multi-supplier, choose per part"]:::done
     b7["7 · Before/after images<br/>changes highlighted"]:::done
   end
 
@@ -112,18 +112,30 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (`Value: 10k → 4k7`), one sticky comment per board updated on each push
    - [x] Confirmed on a real PR on GitHub (kicad-hub #1, 2026-10-28)
 2. **Cost and availability**
-   - [x] Unit price, stock, minimum order and lifecycle per part from LCSC, looked up
-         by the `LCSC` field with no API key (`scripts/sourcing.py`, the JSON behind
-         LCSC's product pages: unofficial, so failures are reported, never fatal).
-         Checked from GitHub runners on 2026-10-29
+   - [x] Offers per part from several suppliers (`scripts/sourcing.py`): unit price
+         breaks, stock, minimum order / multiple, lifecycle, link
+     - LCSC and JLCPCB by the `LCSC` field, no API key (the JSON behind their web
+       pages: unofficial, so failures are reported, never fatal). Checked from
+       GitHub runners on 2026-10-29
+     - Mouser, Farnell and DigiKey by MPN (or the MPN LCSC reports), each user with
+       their own free API keys as repository secrets, passed as action inputs; a
+       missing key skips that supplier. **Written from the APIs' docs, not yet run
+       with real keys** — test when the owner adds keys to this repo (`test.yml`
+       already passes the secrets)
+   - [x] One currency for everything (`currency`, ECB rates from frankfurter.app)
    - [x] Total per board and per batch (`boards: 1,5,10,100`), per build (default and
-         each variant), minimum order quantities and price breaks included
-   - [x] Warn on not found, out of stock for the largest batch, lifecycle other than
-         normal, and an LCSC code that doesn't match the schematic MPN
-   - [x] Example board: 46 of 48 parts priced, $24.81 for one board, $8.95 each for
-         100; R5/R7 and U2 out of stock, U1's code not found at LCSC
-   - [ ] Optional Mouser / DigiKey / Nexar lookups by MPN for parts without an LCSC
-         code (free API keys as repository secrets; the owner has none today)
+         each variant), minimum orders, multiples and price breaks included. Per part
+         and batch: the supplier chosen by the user, else the cheapest with stock
+   - [x] Comparison page `sourcing.html` in the artifact: all offers per part, pick
+         one, totals update; downloads the selection file and a purchase list per
+         supplier. The selection lives in the board repo as `kicad-hub-sourcing.csv`
+         (`Part,Supplier,SKU`), read by the CI
+   - [x] Warn on not found, out of stock for the largest batch, bad lifecycle, an
+         LCSC code that doesn't match the MPN, and a chosen offer no longer available
+   - [x] Example board (EUR, LCSC + JLCPCB): 47 of 48 parts priced, €26.06 for one
+         board, €8.09 each for 100. R5/R7 are out of stock at LCSC but JLCPCB has 17M
+   - [ ] Run Mouser / Farnell / DigiKey with real keys and fix what the real
+         answers show
 3. **Ready-to-order package — generic, any fab house**
    - [x] One zip in standard formats every fab accepts, no vendor lock-in, built on
          every run and attached to a GitHub Release on tag `vX.Y`:
@@ -248,8 +260,12 @@ it's clear the feature is actually missed.
   Vendor formats (JLCPCB, PCBWay…) are optional profiles, never the default.
 - **Web portal needs public repos** (or GitHub Pro): GitHub Pages is free only
   for public repositories.
-- **Prices without API keys first** (2026-10-29): LCSC by part number, keyless.
-  Distributor APIs that need keys (Mouser, DigiKey, Nexar) are optional extras.
+- **Prices: keyless suppliers by default, users bring their own keys** (2026-10-29):
+  LCSC and JLCPCB need no key. Mouser, Farnell and DigiKey use each user's own free
+  keys from their repository secrets; the tool never ships or shares keys. RS has no
+  public API.
+- **Supplier choice lives in a file in the board repo** (2026-10-29):
+  `kicad-hub-sourcing.csv`, made with the comparison page, reviewable in PRs.
 - **PR images live in a branch of the board repo** (2026-10-29): a comment can only
   show images with a URL; a `kicad-hub-images` branch needs no extra service and
   works in private repos for anyone who can read the repo.

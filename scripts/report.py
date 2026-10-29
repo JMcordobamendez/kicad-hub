@@ -231,16 +231,19 @@ if ds is not None:
 # --- Cost and stock -------------------------------------------------------------
 if args.sourcing and os.path.exists(args.sourcing):
     src = json.load(open(args.sourcing, encoding="utf-8"))
-    sym = "$" if src["currency"] == "USD" else src["currency"] + " "
+    sym = {"USD": "$", "EUR": "€", "GBP": "£"}.get(src["currency"], src["currency"] + " ")
     money = lambda v: f"{sym}{v:,.2f}"
     d = src["builds"][0]
     gaps = []
-    if d["no_code"]:
-        gaps.append(f"no LCSC code: {', '.join(sorted(d['no_code'], key=ref_key))}")
+    if d["unpriceable"]:
+        gaps.append(f"no MPN or LCSC code: {', '.join(sorted(d['unpriceable'], key=ref_key))}")
     if d["unpriced"]:
-        gaps.append(f"no price: {', '.join(sorted(d['unpriced'], key=ref_key))}")
+        gaps.append(f"not found: {', '.join(sorted(d['unpriced'], key=ref_key))}")
+    used = [s["name"] for s in src["suppliers"] if s["status"] == "ok"]
+    other = [f"{s['name']} ({s['status'].split(' (')[0]})" for s in src["suppliers"] if s["status"] != "ok"]
     md += ["### Cost and stock",
-           f"Components only, {src['source']} prices in {src['currency']} at the time of this run. "
+           f"Components only, prices in {src['currency']} at the time of this run, from {', '.join(used) or 'no supplier'}"
+           + (f"; not used: {', '.join(other)}" if other else "") + ". "
            f"**{d['priced']} of {d['fitted']} fitted parts priced**" + (f" ({'; '.join(gaps)})" if gaps else "") + ".", ""]
     head_row = ["Build"] + [f"{n} board{'s' if n != 1 else ''}" for n in src["batches"]]
     rows = []
@@ -250,11 +253,16 @@ if args.sourcing and os.path.exists(args.sourcing):
             t = b["totals"].get(str(n))
             cells.append("—" if t is None else money(t) if n == 1 else f"{money(t)} ({money(t / n)} each)")
         rows.append(cells)
+    by = d["by_supplier"].get(str(src["batches"][0]), {})
     md += [table(head_row, rows), "",
-           "_Minimum order quantities count, so small batches cost more per board._", ""]
+           ("Supplier picked per part in `kicad-hub-sourcing.csv`, the rest" if src["choices_file"] else "Each part")
+           + " from the cheapest supplier with enough stock for the batch"
+           + (f" (for {src['batches'][0]} board{'s' if src['batches'][0] != 1 else ''}: {', '.join(f'{k} {v}' for k, v in sorted(by.items(), key=lambda kv: -kv[1]))})" if by else "")
+           + ". Minimum orders count, so small batches cost more per board.", ""]
     if src["warnings"]:
-        md += ["**Check before buying:**", ""] + [f"- ⚠️ {w['lcsc']} · {w['message']}" for w in src["warnings"][:MAX_ROWS]] + [""]
-    md += ["Price per part and batch: `reports/sourcing.csv` in the artifact.", ""]
+        md += ["**Check before buying:**", ""] + [f"- ⚠️ {w['part']} · {w['message']}" for w in src["warnings"][:MAX_ROWS]] + [""]
+    md += ["Compare suppliers per part and choose: `sourcing.html` in the artifact. "
+           "Every offer: `reports/sourcing.csv`.", ""]
     counts["sourcing_warnings"] = len(src["warnings"])
 
 # --- Fab package ----------------------------------------------------------------
