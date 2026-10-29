@@ -3,7 +3,7 @@ name: Test action
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v*", "example-*"]   # v*: action versions · example-*: test the release step
   pull_request:
 
 permissions:
@@ -20,6 +20,8 @@ jobs:
       - uses: ./
         with:
           project-dir: examples/royalblue54l-feather
+          # Only example-* tags attach the example's fab package to a release
+          release: ${{ startsWith(github.ref_name, 'example-') }}
           currency: EUR
           # Optional suppliers: set these secrets in this repo to test them
           mouser-api-key: ${{ secrets.MOUSER_API_KEY }}
