@@ -7,6 +7,10 @@ const page_url = `${SITE}/pr-${PR}/`;
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2, colorScheme: "light" });
 const page = await ctx.newPage();
+// Console errors of every page, to catch broken JS without a local browser
+const errors = [];
+page.on("console", m => { if (m.type() === "error") errors.push(`[${page.url()}] ${m.text()}`); });
+page.on("pageerror", e => errors.push(`[${page.url()}] ${e.message}`));
 
 async function open(url, wait = 8000) {
   await page.goto(url, { waitUntil: "networkidle" });
@@ -59,4 +63,15 @@ const comment = page.locator(".timeline-comment, .react-issue-comment, [data-tes
 if (await comment.count()) await comment.screenshot({ path: `${OUT}/pull-request.png` });
 else await page.screenshot({ path: `${OUT}/pull-request.png`, fullPage: true });
 
+// Extra pages to check, from EXTRA="name=url name=url" (e.g. a compare page)
+for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
+  const [name, ...rest] = item.split("=");
+  await open(rest.join("="), 10000);
+  await page.screenshot({ path: `${OUT}/extra-${name}.png`, fullPage: true });
+}
+
+const fs = await import("node:fs");
+fs.writeFileSync(`${OUT}/console-errors.txt`, errors.join("
+") + "
+");
 await browser.close();

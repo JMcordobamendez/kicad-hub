@@ -8,6 +8,9 @@ on:
       pr:
         description: Pull request number whose portal page and comment to capture
         required: true
+      extra:
+        description: 'Extra pages to capture, "name=url name=url" (optional)'
+        default: ""
   push:
     branches: [docs/screenshots]
     paths: [.github/workflows/docs-screenshots.yml, .github/scripts/screenshots.mjs]
@@ -32,7 +35,8 @@ jobs:
         env:
           SITE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
           REPO: ${{ github.repository }}
-          PR: ${{ inputs.pr || '22' }}
+          PR: ${{ inputs.pr || '24' }}
+          EXTRA: ${{ inputs.extra || 'compare=https://jmcordobamendez.github.io/kicad-hub/compare.html?a=pr-23/&b=pr-24/ pins=https://jmcordobamendez.github.io/kicad-hub/pr-21/#pcb' }}
         run: |
           SITE=$(echo "$SITE" | sed 's#//\([^.]*\)#//\L\1#')
           mkdir -p shots && SITE="$SITE" node .github/scripts/screenshots.mjs
