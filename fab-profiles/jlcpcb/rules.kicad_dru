@@ -7,6 +7,9 @@
 #   annular ring:     0.18 mm 2-layer minimum, 0.15 mm multilayer (0.25 / 0.20 recommended)
 # Not checked (no KiCad constraint): silkscreen line width 0.15 mm, mask bridge 0.10 mm,
 # PTH-to-track 0.28 mm.
+# Not checked on purpose: silkscreen to pad 0.15 mm. The fab clips silkscreen off pads
+# and mask openings itself, and the rule flooded the report (hundreds of findings on the
+# example board) without anything that would stop an order.
 # Later rules win over earlier ones in KiCad, so specific rules come after general ones.
 
 (rule "JLC min track width"
@@ -43,6 +46,3 @@
   (constraint text_thickness (min 0.15mm))
   (constraint text_height (min 1.0mm))
   (condition "A.Layer == 'F.Silkscreen' || A.Layer == 'B.Silkscreen'"))
-
-(rule "JLC silkscreen to pad"
-  (constraint silk_clearance (min 0.15mm)))

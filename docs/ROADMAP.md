@@ -167,6 +167,8 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
        rules only (no BOM template or class-independent limits we could verify)
      - 2026-10-29: written from the fabs' pages; exercised by CI on the example
        board with `fab-profile: jlcpcb`
+     - JLCPCB silkscreen-to-pad rule dropped (owner decision, 2026-10-29): the fab clips
+       silkscreen itself and the rule alone gave ~200 findings on the example board
 4. **Checks the ERC doesn't do** (cheap — do with 1)
    - [x] Every part has MPN, footprint and datasheet (except `DNP` / not-in-BOM);
          configurable with `required-fields`, `A|B` alternatives (`MPN|LCSC`)
