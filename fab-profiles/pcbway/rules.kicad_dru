@@ -1,0 +1,48 @@
+(version 1)
+# PCBWay standard ("normal") process, 1 oz copper (35 um).
+# Source: https://www.pcbway.com/capabilities.html  (read 2026-10-29)
+# Only the values the page states. Outer vs inner layers are told apart with
+# (layer outer|inner); KiCad rules can't test the layer count, and the page gives no
+# per-layer-count limits except the inner isolation ring (4L 7 mil, 6L 8 mil...), not checked.
+#   outer, 1 oz: track >= 5 mil (0.127 mm), space >= 6 mil (0.152 mm)
+#   inner, 1 oz: track >= 4 mil (0.102 mm), space >= 5 mil (0.127 mm)
+# Min drill: 0.15 mm standard CNC (the page lists 0.20 mm for the "advanced normal" tier).
+# Not checked (no KiCad constraint): solder mask bridge 4 mil, silkscreen line width.
+# Later rules win over earlier ones in KiCad, so specific rules come after general ones.
+
+(rule "PCBWay outer track width"
+  (layer outer)
+  (constraint track_width (min 0.127mm)))
+
+(rule "PCBWay inner track width"
+  (layer inner)
+  (constraint track_width (min 0.102mm)))
+
+(rule "PCBWay outer clearance"
+  (layer outer)
+  (constraint clearance (min 0.152mm)))
+
+(rule "PCBWay inner clearance"
+  (layer inner)
+  (constraint clearance (min 0.127mm)))
+
+(rule "PCBWay min drill"
+  (constraint hole_size (min 0.15mm)))
+
+(rule "PCBWay min annular ring"
+  (constraint annular_width (min 0.15mm)))
+
+(rule "PCBWay hole to hole (component holes)"
+  (constraint hole_to_hole (min 0.406mm)))
+
+(rule "PCBWay hole to hole (vias)"
+  (constraint hole_to_hole (min 0.279mm))
+  (condition "A.Type == 'Via' && B.Type == 'Via'"))
+
+(rule "PCBWay copper to board edge"
+  (constraint edge_clearance (min 0.25mm)))
+
+(rule "PCBWay silkscreen text"
+  (constraint text_thickness (min 0.15mm))
+  (constraint text_height (min 0.8mm))
+  (condition "A.Layer == 'F.Silkscreen' || A.Layer == 'B.Silkscreen'"))

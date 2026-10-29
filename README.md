@@ -157,6 +157,7 @@ version.
 | `pages` | `true` | Publish the design portal (see [design portal](#design-portal)) |
 | `pages-branch` | `kicad-hub-site` | Branch the portal is published to |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
+| `fab-profile` | `generic` | Optional fab layer: `jlcpcb`, `pcbway` or `eurocircuits` (see [fab profiles](#fab-profiles)) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
 | `comment` | `true` | Post the report on the PR |
@@ -170,6 +171,29 @@ Datasheet folders searched by default: `datasheet(s)/` and `docs/` next to the
 project, and `datasheet(s)/` one level up. A file is used when its name contains
 the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 `S-82A2AAA-A8T2U`).
+
+### Fab profiles
+
+The package and the checks are generic by default. `fab-profile` adds an optional
+layer for one fab, without changing the project's own DRC or `strict`:
+
+- **DRC vs the fab's rules**: a second DRC on a copy of the project, with the fab's
+  published capabilities (`fab-profiles/<name>/rules.kicad_dru`) appended to the
+  project's own `.kicad_dru`. Shown as its own line in the report, the PR comment and
+  the portal; the artifact has `reports/drc-fab.rpt|json`. It never fails the build.
+- **Assembly files** in the fab's column layout, next to the generic ones
+  (`assembly/jlcpcb/`: BOM `Comment, Designator, Footprint, LCSC Part #` from the
+  `LCSC` field, and CPL `Designator, Mid X, Mid Y, Layer, Rotation`).
+- A note in the package's `README.txt`.
+
+| Profile | Rules | Assembly files |
+|---|---|---|
+| `jlcpcb` | standard 2-layer/multilayer, 1 oz | yes |
+| `pcbway` | standard process, 1 oz | no (generic files) |
+| `eurocircuits` | only limits independent of the pattern class | no (generic files) |
+
+Each `rules.kicad_dru` cites its source page and date. KiCad rules can't test the
+layer count, so where 2-layer and multilayer limits differ the safer value is used.
 
 ### Design portal
 
@@ -284,6 +308,7 @@ package/      <board>-<rev>-fab.zip  ← send this to the fab
     drill/        Excellon PTH and NPTH, drill maps (PDF)
     assembly/     BOM (CSV, grouped, no DNP) and pick & place (CSV, mm, both sides)
       <variant>/  the same for each design variant
+      <fab>/      with a fab-profile: BOM and pick & place in that fab's columns
     *.d356        IPC-D-356 netlist for electrical test
     README.txt    fab notes: size, layers, stackup, finish, smallest features, warnings
     SHA256SUMS.txt
@@ -301,7 +326,8 @@ the commit hash.
 
 ```
 action.yml                  the action
-scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py,
+fab-profiles/               optional per-fab DRC rules and assembly column layouts
+scripts/                    fab_assembly.py, report.py, datasheets.py, fabnotes.py, variant_cpl.py,
                             visual_diff.py, sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)

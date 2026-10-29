@@ -81,6 +81,12 @@ inputs:
       layers, shown in the PR comment (images are kept in the kicad-hub-images branch,
       needs contents write).
     default: "true"
+  fab-profile:
+    description: >-
+      Optional fab layer on top of the generic package: generic, jlcpcb, pcbway or eurocircuits.
+      Adds a DRC run with that fab's rules (the project's own DRC is unchanged) and, for
+      JLCPCB, BOM and pick & place in its column layout.
+    default: generic
   extra-formats:
     description: Extra board formats for the fab package, comma-separated (odb, ipc2581).
     default: ""
@@ -180,6 +186,37 @@ runs:
           kicad pcb drc --severity-all --schematic-parity --format json -o "$OUT/reports/drc.json" "$PROJECT_DIR/$NAME.kicad_pcb"
           kicad pcb drc --severity-all --schematic-parity --format report -o "$OUT/reports/drc.rpt" "$PROJECT_DIR/$NAME.kicad_pcb"
         fi
+
+    - name: DRC vs fab rules
+      id: fabdrc
+      if: inputs.fab-profile != 'generic' && steps.detect.outputs.has_pcb == 'true'
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        OUT: ${{ inputs.output-dir }}
+        IMAGE: ${{ inputs.image }}
+        PROFILE: ${{ inputs.fab-profile }}
+      run: |
+        set -uo pipefail
+        rules="$GITHUB_ACTION_PATH/fab-profiles/$PROFILE/rules.kicad_dru"
+        if [ ! -f "$rules" ]; then
+          echo "::error::Unknown fab-profile '$PROFILE' (use generic, jlcpcb, pcbway, eurocircuits)"
+          exit 1
+        fi
+        # DRC in a copy of the project with the fab's rules appended to its own .kicad_dru
+        tmp="$RUNNER_TEMP/fab-drc"; rm -rf "$tmp"; mkdir -p "$tmp"
+        excl=(--exclude=.git)
+        [ "$PROJECT_DIR" != . ] || excl+=(--anchored "--exclude=./$OUT")
+        tar -C "$PROJECT_DIR" "${excl[@]}" -cf - . | tar -C "$tmp" -xf -
+        dru="$tmp/$NAME.kicad_dru"
+        if [ -f "$dru" ]; then echo >> "$dru"; else echo "(version 1)" > "$dru"; fi
+        grep -v '^(version' "$rules" >> "$dru"
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$tmp:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+        kicad pcb drc --severity-all --schematic-parity --format json -o "$tmp/drc-fab.json" "$NAME.kicad_pcb"
+        kicad pcb drc --severity-all --schematic-parity --format report -o "$tmp/drc-fab.rpt" "$NAME.kicad_pcb"
+        cp "$tmp/drc-fab.json" "$tmp/drc-fab.rpt" "$OUT/reports/"
+        rm -rf "$tmp"
 
     - name: Per-part BOM (this commit and PR base)
       id: bom
@@ -388,6 +425,7 @@ runs:
         EXTRA: ${{ inputs.extra-formats }}
         REF_TYPE: ${{ github.ref_type }}
         REF_NAME: ${{ github.ref_name }}
+        PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
         run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
@@ -421,6 +459,10 @@ runs:
               -o "$1/$2-bom.csv" "$sch"
           python3 "$GITHUB_ACTION_PATH/scripts/bom_virtual.py" "$1/$2-bom.csv"
           python3 "$GITHUB_ACTION_PATH/scripts/variant_cpl.py" "$3" "$OUT/reports/cpl-all.csv" "$1/$2-cpl.csv"
+          if [ "$PROFILE" != generic ]; then  # the fab's own column layout, next to the generic files
+            python3 "$GITHUB_ACTION_PATH/scripts/fab_assembly.py" "$GITHUB_ACTION_PATH/fab-profiles/$PROFILE/profile.json" \
+                "$1/$2-bom.csv" "$1/$2-cpl.csv" "$1/$PROFILE" "$2"
+          fi
         }
         assembly "$pkg/assembly" "$base" "$OUT/reports/bom-parts.csv" ""
         variant_lines=""
@@ -439,7 +481,7 @@ runs:
 
         # Fab notes from the board (KiCad's Python, inside the image)
         cp "$GITHUB_ACTION_PATH/scripts/fabnotes.py" "$OUT/.fabnotes.py"
-        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" > "$OUT/reports/fab-warnings.txt"
+        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" "$PROFILE" > "$OUT/reports/fab-warnings.txt"
         rm "$OUT/.fabnotes.py"
         if [ -n "$variant_lines" ]; then
           printf '\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n%s' "$variant_lines" >> "$pkg/README.txt"
@@ -490,12 +532,13 @@ runs:
         PACKAGE: ${{ steps.package.outputs.name }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         PORTAL_URL: ${{ steps.portal.outputs.url }}
+        FAB_PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
         r="$OUT/reports"
         python3 "$GITHUB_ACTION_PATH/scripts/report.py" \
           --name "$NAME" --bom "$r/bom-parts.csv" --base-bom "$r/bom-parts-base.csv" --base-ref "${BASE_REF:-base}" \
-          --erc "$r/erc.json" --drc "$r/drc.json" \
+          --erc "$r/erc.json" --drc "$r/drc.json" --drc-fab "$r/drc-fab.json" --fab-profile "$FAB_PROFILE" \
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \

@@ -21,6 +21,8 @@ ap.add_argument("--bom", required=True, help="per-reference BOM CSV of this comm
 ap.add_argument("--base-bom", help="per-reference BOM CSV of the target branch")
 ap.add_argument("--base-ref", default="base")
 ap.add_argument("--erc")
+ap.add_argument("--drc-fab", help="DRC JSON run with the fab profile's rules added")
+ap.add_argument("--fab-profile", default="generic")
 ap.add_argument("--drc")
 ap.add_argument("--required", default="Footprint,Datasheet,MPN|LCSC",
                 help="comma-separated fields; 'A|B' means A or B is enough")
@@ -91,6 +93,25 @@ md += [table(["Check", "Errors", "Warnings", "Unconnected"], [
 ]), ""]
 if not drc:
     md += ["_No board outline yet: DRC and PCB outputs skipped._", ""]
+
+# DRC again with a fab's rules added (never fails the build: `strict` is the project DRC only)
+drc_fab = json.load(open(args.drc_fab, encoding="utf-8")) if args.drc_fab and os.path.exists(args.drc_fab) else None
+if drc_fab and args.fab_profile != "generic":
+    def vkey(v):
+        return (v.get("type"), tuple((i.get("description"), i.get("pos", {}).get("x"), i.get("pos", {}).get("y"))
+                                     for i in v.get("items", [])))
+    known = {vkey(v) for v in drc_v}
+    fab_v = [v for v in drc_fab["violations"] if v.get("severity") in ("error", "warning")]
+    new = [v for v in fab_v if vkey(v) not in known]
+    counts.update(fab_profile=args.fab_profile, drc_fab_violations=len(fab_v), drc_fab_new=len(new))
+    md += [f"**DRC vs {args.fab_profile} rules: {len(fab_v)} violations** "
+           f"({len(new)} beyond the project's own DRC)", ""]
+    if new:
+        kinds = {}
+        for v in new:
+            kinds[v["description"]] = kinds.get(v["description"], 0) + 1
+        md += [table(["Fab rule violated", "Count"],
+                     [[k, str(n)] for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])]), ""]
 
 # --- BOM diff ----------------------------------------------------------------
 head = load_bom(args.bom) or {}

@@ -23,6 +23,7 @@ jobs:
           # Only example-* tags attach the example's fab package to a release
           release: ${{ startsWith(github.ref_name, 'example-') }}
           currency: EUR
+          fab-profile: jlcpcb
           # Optional suppliers: set these secrets in this repo to test them
           mouser-api-key: ${{ secrets.MOUSER_API_KEY }}
           farnell-api-key: ${{ secrets.FARNELL_API_KEY }}
