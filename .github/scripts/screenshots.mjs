@@ -121,7 +121,6 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
     await page.getByRole("button", { name: "Clear" }).first().click();
     await page.fill(".kt-q", "GND");
     await page.locator(".kt-hit").first().click();
-    await page.getByRole("button", { name: "Fit" }).click();
     await shot("5-search-gnd");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Measure" }).click();

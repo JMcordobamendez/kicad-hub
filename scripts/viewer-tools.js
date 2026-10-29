@@ -228,7 +228,7 @@
     };
     view.q.addEventListener("input", search);
     view.q.addEventListener("keydown", e => {
-      if (e.key === "Enter") { const first = view.results.querySelector("[data-net]"); if (first) { e.preventDefault(); setNet(view, +first.dataset.net, {}); } }
+      if (e.key === "Enter") { const first = view.results.querySelector("[data-net]"); if (first) { e.preventDefault(); setNet(view, +first.dataset.net, {fit: true}); } }
       else if (e.key === "ArrowDown") { const first = view.results.querySelector("[data-net]"); if (first) { e.preventDefault(); first.focus(); } }
     });
     view.results.addEventListener("keydown", e => {
@@ -274,7 +274,9 @@
     dim(view);
     v.draw();
     view.layersRef = v.layers;
-    renderCard(view); changed(view);
+    renderCard(view);
+    if (opts.fit) fit(view);   // chosen from a list (not a click on a track): show the whole net
+    changed(view);
   }
   function clearNet(view, selectionTookOver) {
     if (view.net == null) return;
@@ -406,8 +408,11 @@
     svg.setAttribute("width", cr.width); svg.setAttribute("height", cr.height);
     svg.textContent = "";
 
-    // the pad being visited
+    // a ring on each pad of the net (the highlight alone is easy to miss on a thin net), the one being visited bigger
     const e = view.net != null && view.index && view.index.byNumber.get(view.net), cur = e && e.pads[view.pad];
+    if (e && e.pads.length <= 400) {
+      for (const p of e.pads) { const s = S(p); el("circle", {cx: s.x, cy: s.y, r: 6, class: "kt-padmark"}, svg); }
+    }
     if (cur) {
       const s = S(cur);
       el("circle", {cx: s.x, cy: s.y, r: 15, class: "kt-ring-halo"}, svg);
@@ -471,6 +476,7 @@
 .kt-legs { stroke: #ffd400; stroke-width: 1; stroke-dasharray: 3 3; fill: none; opacity: .75; }
 .kt-dot { fill: #ffd400; stroke: #000; stroke-width: 1.5; }
 .kt-snap { fill: none; stroke: #ffd400; stroke-width: 2; }
+.kt-padmark { fill: none; stroke: #ffd400; stroke-width: 1.5; opacity: .9; }
 .kt-ring { stroke: var(--brand, #e8622c); stroke-width: 3; fill: none; stroke-dasharray: 5 3; }
 .kt-label { position: absolute; transform: translate(-50%, -135%); background: rgba(20,24,30,.92); color: #fff; border: 1px solid #ffd400;
   border-radius: 6px; padding: 2px 8px; font: 600 12px/1.4 ui-monospace, Consolas, monospace; white-space: nowrap; }
@@ -500,7 +506,7 @@
       const b = e.target.closest && e.target.closest("[data-net]"); if (!b) return;
       const view = T.views.pcb; if (!view || !view.index) return;
       const n = +b.dataset.net; if (!Number.isFinite(n)) return;
-      setNet(view, n, {});
+      setNet(view, n, {fit: true});
     });
     document.addEventListener("keydown", e => {
       if (e.key !== "Escape") return;
