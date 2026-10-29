@@ -34,6 +34,14 @@ inputs:
       KiCad design variants to build: "auto" (all defined in the project), a
       comma-separated list of names, or "none".
     default: auto
+  sourcing:
+    description: >-
+      Price and stock of the fitted parts: "lcsc" (looked up by the LCSC field, no API
+      key needed) or "none".
+    default: lcsc
+  boards:
+    description: Batch sizes to price, comma-separated (components only).
+    default: "1,10,100"
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
@@ -156,7 +164,7 @@ runs:
         kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
 
         # Fields to export: fixed ones + every alternative named in required-fields
-        labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,Voltage"
+        labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage"
         while IFS= read -r f; do
           [ -n "$f" ] || continue
           case ",$labels," in *",$f,"*) ;; *) labels="$labels,$f" ;; esac
@@ -297,6 +305,18 @@ runs:
           --project-dir "$PROJECT_DIR" --dirs "$DIRS" --check-urls "$CHECK" \
           --out-dir "$OUT" --json "$OUT/reports/datasheets.json"
 
+    - name: Cost and stock
+      if: inputs.sourcing == 'lcsc'
+      shell: bash
+      env:
+        OUT: ${{ inputs.output-dir }}
+        BOARDS: ${{ inputs.boards }}
+      run: |
+        python3 "$GITHUB_ACTION_PATH/scripts/sourcing.py" --bom "$OUT/reports/bom-parts.csv" \
+          --variants "$OUT/reports/variants.json" --boards "$BOARDS" \
+          --json "$OUT/reports/sourcing.json" --csv "$OUT/reports/sourcing.csv" \
+          || echo "::warning::Cost and stock lookup failed: skipped"
+
     - name: Fab package
       id: package
       if: steps.detect.outputs.has_pcb == 'true'
@@ -390,7 +410,7 @@ runs:
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" --visual "$r/visual.json" \
+          --variants "$r/variants.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"

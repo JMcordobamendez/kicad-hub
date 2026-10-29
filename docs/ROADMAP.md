@@ -32,7 +32,7 @@ flowchart LR
     b6["6 · Datasheets"]:::done
     b5["5 · Variants"]:::done
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::done
-    b2["2 · Cost and stock"]:::doing
+    b2["2 · Cost and stock (LCSC)"]:::done
     b7["7 · Before/after images<br/>changes highlighted"]:::done
   end
 
@@ -58,9 +58,9 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phase 2 done; 2b has BOM diff, field checks, datasheets, the fab
-package, variants and before/after images working. Next: cost and stock
-(without distributor API keys, see 2b.2), then the web portal.
+**Now:** phases 2 and 2b done (BOM diff, field checks, datasheets, fab package,
+variants, before/after images, cost and stock from LCSC). Left in 2b: small
+extras (variant BOM diff, fab profiles, other distributors). Next: web portal.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -112,13 +112,18 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (`Value: 10k → 4k7`), one sticky comment per board updated on each push
    - [x] Confirmed on a real PR on GitHub (kicad-hub #1, 2026-10-28)
 2. **Cost and availability**
-   - [ ] Unit price and stock per part from LCSC / Mouser / DigiKey (KiBot + KiCost)
-   - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
-   - [ ] Warn on obsolete, not-recommended or out-of-stock parts
-   - [ ] API keys as repository secrets; skip gracefully when they are missing
-   - [ ] The owner has no distributor API keys (2026-10-29): start with sources that
-         need none (LCSC part numbers already in the BOM), and treat Mouser /
-         DigiKey / Nexar keys (free to register) as optional extras
+   - [x] Unit price, stock, minimum order and lifecycle per part from LCSC, looked up
+         by the `LCSC` field with no API key (`scripts/sourcing.py`, the JSON behind
+         LCSC's product pages: unofficial, so failures are reported, never fatal).
+         Checked from GitHub runners on 2026-10-29
+   - [x] Total per board and per batch (`boards: 1,10,100`), per build (default and
+         each variant), minimum order quantities and price breaks included
+   - [x] Warn on not found, out of stock for the largest batch, lifecycle other than
+         normal, and an LCSC code that doesn't match the schematic MPN
+   - [x] Example board: 46 of 48 parts priced, $24.81 for one board, $8.95 each for
+         100; R5/R7 and U2 out of stock, U1's code not found at LCSC
+   - [ ] Optional Mouser / DigiKey / Nexar lookups by MPN for parts without an LCSC
+         code (free API keys as repository secrets; the owner has none today)
 3. **Ready-to-order package — generic, any fab house**
    - [x] One zip in standard formats every fab accepts, no vendor lock-in, built on
          every run and attached to a GitHub Release on tag `vX.Y`:
@@ -243,6 +248,8 @@ it's clear the feature is actually missed.
   Vendor formats (JLCPCB, PCBWay…) are optional profiles, never the default.
 - **Web portal needs public repos** (or GitHub Pro): GitHub Pages is free only
   for public repositories.
+- **Prices without API keys first** (2026-10-29): LCSC by part number, keyless.
+  Distributor APIs that need keys (Mouser, DigiKey, Nexar) are optional extras.
 - **PR images live in a branch of the board repo** (2026-10-29): a comment can only
   show images with a URL; a `kicad-hub-images` branch needs no extra service and
   works in private repos for anyone who can read the repo.

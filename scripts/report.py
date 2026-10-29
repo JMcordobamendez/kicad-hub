@@ -29,6 +29,7 @@ ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
+ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
 ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
 ap.add_argument("--package", default="", help="file name of the fab package zip")
 ap.add_argument("--package-warnings", help="text file, one warning per line, from fabnotes.py")
@@ -226,6 +227,35 @@ if ds is not None:
         md += [f"<details><summary>{len(unver)} link{'s' if len(unver) != 1 else ''} could not be verified (the site blocks automated "
                f"checks or timed out)</summary>", "", table(["Part", "Value", "Datasheet", "Reason"], unver),
                "", "</details>", ""]
+
+# --- Cost and stock -------------------------------------------------------------
+if args.sourcing and os.path.exists(args.sourcing):
+    src = json.load(open(args.sourcing, encoding="utf-8"))
+    sym = "$" if src["currency"] == "USD" else src["currency"] + " "
+    money = lambda v: f"{sym}{v:,.2f}"
+    d = src["builds"][0]
+    gaps = []
+    if d["no_code"]:
+        gaps.append(f"no LCSC code: {', '.join(sorted(d['no_code'], key=ref_key))}")
+    if d["unpriced"]:
+        gaps.append(f"no price: {', '.join(sorted(d['unpriced'], key=ref_key))}")
+    md += ["### Cost and stock",
+           f"Components only, {src['source']} prices in {src['currency']} at the time of this run. "
+           f"**{d['priced']} of {d['fitted']} fitted parts priced**" + (f" ({'; '.join(gaps)})" if gaps else "") + ".", ""]
+    head_row = ["Build"] + [f"{n} board{'s' if n != 1 else ''}" for n in src["batches"]]
+    rows = []
+    for b in src["builds"]:
+        cells = [f"**{b['name']}**"]
+        for n in src["batches"]:
+            t = b["totals"].get(str(n))
+            cells.append("—" if t is None else money(t) if n == 1 else f"{money(t)} ({money(t / n)} each)")
+        rows.append(cells)
+    md += [table(head_row, rows), "",
+           "_Minimum order quantities count, so small batches cost more per board._", ""]
+    if src["warnings"]:
+        md += ["**Check before buying:**", ""] + [f"- ⚠️ {w['lcsc']} · {w['message']}" for w in src["warnings"][:MAX_ROWS]] + [""]
+    md += ["Price per part and batch: `reports/sourcing.csv` in the artifact.", ""]
+    counts["sourcing_warnings"] = len(src["warnings"])
 
 # --- Fab package ----------------------------------------------------------------
 if args.package:

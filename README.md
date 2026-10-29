@@ -23,6 +23,9 @@ On every push and pull request of a KiCad project, the action:
   removed and changed (`Value: 10uF → 22uF`).
 - **Resolves the datasheets**: links checked (broken vs. unverifiable), local PDFs
   found by MPN or value in the datasheet folders and bundled for offline use.
+- **Prices the BOM**: cost per board and per batch (1, 10, 100 boards), for every
+  variant, from LCSC by part number (no API key); warns on parts out of stock,
+  not active, not found, or whose LCSC code doesn't match the MPN.
 - **Builds a fab package** in standard formats any fab house accepts (Gerber X2,
   Excellon, IPC-D-356, BOM and pick & place CSV) with fab notes read from the
   board, which warn about features below the project rules.
@@ -42,7 +45,6 @@ with a warning instead of failing.
 
 ## Planned
 
-- **Cost and stock** per part, total per board and per batch.
 - **Web portal** on GitHub Pages: schematic/PCB viewer in the browser
   ([KiCanvas](https://kicanvas.org)), iBOM, downloads.
 - **Visual diff** in the portal.
@@ -66,6 +68,7 @@ Mockups: [PR comment](docs/mockups/pull-request.png) ·
                           │               IPC-D-356, BOM, pick & place
                           ├─ Python ──── scripts/datasheets.py  resolve, check, bundle
                           │            ── scripts/fabnotes.py    fab notes from the board
+                          │            ── scripts/sourcing.py    cost and stock (LCSC)
                           │            ── scripts/visual_diff.py before/after images
                           │            ── scripts/report.py      markdown report
                           ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
@@ -127,6 +130,8 @@ can use it.
 | `datasheet-optional-refs` | `R,C,TP,H,MH,FID,JP,NT,LOGO` | Prefixes that don't need a datasheet |
 | `check-datasheet-links` | `true` | Check that datasheet URLs respond |
 | `variants` | `auto` | Design variants to build: `auto` (all in the project), a list, or `none` |
+| `sourcing` | `lcsc` | Price and stock from LCSC by the `LCSC` field (no API key), or `none` |
+| `boards` | `1,10,100` | Batch sizes to price (components only) |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
@@ -146,12 +151,14 @@ the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 
 **Report** — job summary and PR comment:
 ERC/DRC counts · BOM changes vs. the PR base · before/after images · variants · parts missing required fields ·
-datasheet status (broken links, offline copies) · fab package warnings.
+datasheet status (broken links, offline copies) · cost per batch and stock warnings ·
+fab package warnings.
 
 **Artifact `<board>-fab`:**
 
 ```
-reports/      erc/drc (.rpt, .json), per-part BOMs, report.md, datasheets.json
+reports/      erc/drc (.rpt, .json), per-part BOMs, report.md, datasheets.json,
+              sourcing.csv (price per part and batch)
 package/      <board>-<rev>-fab.zip  ← send this to the fab
   <board>-<rev>/
     gerber/       Gerber X2 + .gbrjob (layers as set in the board's plot settings)
@@ -175,7 +182,8 @@ the commit hash.
 
 ```
 action.yml                  the action
-scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py, visual_diff.py
+scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py,
+                            visual_diff.py, sourcing.py
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
