@@ -292,6 +292,7 @@
   function openForm(view) {
     cancel();
     S.mode = view.kind;
+    document.dispatchEvent(new CustomEvent("kh:mode", {detail: {mode: "comment", kind: view.kind}}));  // viewer-tools.js leaves Measure
     view.btn.classList.add("on");
     const v = view.v, cam = camOf(v), ctxItem = v.selected && v.selected.context;
     const w = cam ? cam.center : {x: 0, y: 0};
@@ -579,6 +580,8 @@
       injectStyle(); markerClicks();
       document.addEventListener("kh:viewer", e => attach(e.detail.kind, e.detail.viewer));
       document.addEventListener("keydown", e => { if (e.key === "Escape" && S.mode) cancel(); });
+      // Measure (viewer-tools.js) was entered: leave the Comment mode
+      document.addEventListener("kh:mode", e => { if (e.detail && e.detail.mode !== "comment" && S.mode) cancel(); });
       for (const [kind, v] of Object.entries(c.viewers)) attach(kind, v);
       load();
       requestAnimationFrame(tick);

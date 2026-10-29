@@ -346,6 +346,7 @@ def index():
     os.makedirs(assets, exist_ok=True)
     for js in glob.glob(os.path.join(HERE, "vendor", "*.js")) + [os.path.join(HERE, "pins.js")]:
         shutil.copy2(js, assets)
+    shutil.copy2(os.path.join(HERE, "viewer-tools.js"), assets)  # nets and measuring in the viewer
     shutil.copy2(os.path.join(HERE, "compare.js"), assets)  # compare widget, shared by both pages
     # activity.json (scripts/activity.py) is in the site root when the activity input is on
     has_activity = os.path.isfile(os.path.join(args.root, "activity.json"))

@@ -249,6 +249,15 @@ Every push to a branch, tag and pull request publishes a page to the
   published before this feature have no renders until their next publish.
 - **Activity** (`/activity.html`, linked from the front page and the top bar): how the
   work evolved, see [below](#activity);
+- **Nets and measuring** in the viewer: on the PCB tab, the **Nets** card searches every
+  net of the board as you type; the nets of the selected part are buttons too, and a click on
+  a track does the same. The net's tracks, vias, pads and zones are highlighted and the
+  copper dimmed, with its pad, track (length), via and zone count; **Prev / Next pad**
+  centres each pad in turn ("U3 pad 12 · 3 of 18", turning the board over for a pad on the
+  other side). **Measure** (PCB and schematic) draws the distance, dx and dy between two
+  clicks or taps (on the PCB the points snap to a pad centre when you click near one).
+  **Esc** or **Clear** drops the highlight and the measurement. Measure and **Comment** are
+  exclusive. The schematic has no net highlight (the viewer doesn't offer one);
 - on pull request pages, **comments pinned on the board** (see below).
 
 The viewer is a pinned copy of KiCanvas (`scripts/vendor/`, see its README), not
@@ -505,7 +514,8 @@ scripts/                    fab_assembly.py, report.py, requirements.py, datashe
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
                             compare.js, the compare page and its shared widget;
-                            pins.js, comments pinned on the board; activity.py +
+                            pins.js, comments pinned on the board;
+                            viewer-tools.js, nets and measuring; activity.py +
                             activity.html, the activity page)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
