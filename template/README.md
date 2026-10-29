@@ -55,5 +55,8 @@ before/after images in the PR comment and the fab package (artifact
   [how to get them](https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys).
 - Supplier picked per part: open `sourcing.html` from the artifact, choose, and
   commit the downloaded `kicad-hub-sourcing.csv` next to the `.kicad_pro`.
-- `.github/workflows/kicad-hub-cleanup.yml` removes a PR's images from the
-  `kicad-hub-images` branch when the PR is closed.
+- Design portal (schematic and PCB in the browser, iBOM, downloads): after the
+  first run, *Settings → Pages → Deploy from a branch → `kicad-hub-site` / (root)*.
+  Pages is free for public repositories.
+- `.github/workflows/kicad-hub-cleanup.yml` removes a PR's images and portal page
+  when the PR is closed.

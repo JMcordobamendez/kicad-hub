@@ -43,6 +43,10 @@ On every push and pull request of a KiCad project, the action:
 - **Shows before/after images** of the schematic sheets and PCB layers changed in a
   pull request, right in the PR comment: removed in red, added in green, each
   changed area boxed.
+- **Publishes a design portal** on GitHub Pages: one page per branch, release and
+  pull request with the schematic and PCB in the browser
+  ([KiCanvas](https://kicanvas.org)), the report, interactive BOM, supplier
+  comparison, datasheets and downloads; the PR comment links to it.
 - **Publishes a GitHub Release** with the fab package when you tag `vX.Y`.
 - Also: schematic PDF, BOM (CSV/HTML) and interactive BOM.
 
@@ -51,9 +55,7 @@ with a warning instead of failing.
 
 ## Planned
 
-- **Web portal** on GitHub Pages: schematic/PCB viewer in the browser
-  ([KiCanvas](https://kicanvas.org)), iBOM, downloads.
-- **Visual diff** in the portal.
+- **Visual diff** in the portal (before/after of the schematic and PCB, interactive).
 
 Mockups: [PR comment](docs/mockups/pull-request.png) ·
 [design portal](docs/mockups/portal.png). Details and progress:
@@ -81,10 +83,11 @@ Mockups: [PR comment](docs/mockups/pull-request.png) ·
                           ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
                           │
                           ├──► job summary + sticky PR comment (images: branch kicad-hub-images)
+                          ├──► design portal (branch kicad-hub-site → GitHub Pages)
                           ├──► artifact <board>-fab
                           └──► GitHub Release (on tags)
 
- (planned) GitHub Pages portal: KiCanvas viewer, iBOM, visual diff, downloads
+ GitHub Pages (branch kicad-hub-site): design portal, one page per branch / release / PR
 ```
 
 `kicad-cli` is used wherever possible: it respects the settings saved in the
@@ -123,9 +126,8 @@ jobs:
 
 Ready-made workflows are in [`template/.github/workflows/`](template/.github/workflows/):
 `kicad.yml` (the one above, with every option and the supplier keys) and
-`kicad-hub-cleanup.yml`, which removes a pull request's before/after images from the
-`kicad-hub-images` branch when it is closed (or by hand, *Run workflow* with a PR
-number). Copy both to `.github/workflows/` in your board repository.
+`kicad-hub-cleanup.yml`, which removes a pull request's before/after images and its
+portal page when it is closed (or by hand, *Run workflow* with a PR number). Copy both to `.github/workflows/` in your board repository.
 
 **Versions:** `@v1` always points to the latest 1.x release (no breaking changes);
 pin a full tag such as `@v1.0.0` to freeze it, or use `@main` for the development
@@ -152,6 +154,8 @@ version.
 | `farnell-store` | `uk.farnell.com` | Farnell store to price from (`es.farnell.com`, `de.farnell.com`, `www.newark.com`…) |
 | `digikey-client-id` | — | DigiKey API client ID, from a secret |
 | `digikey-client-secret` | — | DigiKey API client secret, from a secret |
+| `pages` | `true` | Publish the design portal (see [design portal](#design-portal)) |
+| `pages-branch` | `kicad-hub-site` | Branch the portal is published to |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
@@ -166,6 +170,24 @@ Datasheet folders searched by default: `datasheet(s)/` and `docs/` next to the
 project, and `datasheet(s)/` one level up. A file is used when its name contains
 the part's MPN or value, or its family code (`S-82A2A_B_C.pdf` →
 `S-82A2AAA-A8T2U`).
+
+### Design portal
+
+Every push to a branch, tag and pull request publishes a page to the
+`kicad-hub-site` branch, served by GitHub Pages at
+`https://<owner>.github.io/<repo>/`:
+
+- `/<branch>/` (e.g. `/main/`), `/releases/<tag>/`, `/pr-<N>/`, and a front page
+  listing them all;
+- each page has tabs: **Schematic** and **PCB** (pan, zoom, select parts, layers),
+  **Interactive BOM**, **Report**, **BOM**, **Suppliers**, **Datasheets** and
+  **Downloads** (fab package, schematic PDF, BOM CSV).
+
+**Turn it on once:** after the first run, *Settings → Pages → Build and deployment →
+Source: Deploy from a branch → `kicad-hub-site` / `(root)` → Save*. The PR comment
+links to the PR's page. The branch keeps a single commit, replaced on every
+publish, so it doesn't grow; the cleanup workflow removes a PR's page when it is
+closed. Pull requests from forks aren't published (they can't write to the repo).
 
 ### Supplier API keys
 
@@ -272,12 +294,13 @@ the commit hash.
 ```
 action.yml                  the action
 scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py,
-                            visual_diff.py, sourcing.py (+ sourcing.html, the comparison page)
+                            visual_diff.py, sourcing.py (+ sourcing.html, the comparison page),
+                            portal.py (+ portal.html, the design portal)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
 .github/workflows/test.yml  runs the action on the example board on every push/PR/tag
-.github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images (same file as the template's)
+.github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
 docs/                       roadmap and mockups
 ```
 
@@ -301,7 +324,9 @@ workflows.
 
 - **No real-time co-editing.** KiCad files don't merge well: split work by
   hierarchical sheet and keep a single owner for the PCB at a time.
-- **No web viewer yet**, and GitHub Pages is free only for public repositories.
+- **GitHub Pages is free only for public repositories** (private ones need a paid
+  plan); without Pages the portal branch is still published but not served.
+- The viewer is KiCanvas, still in alpha: some KiCad features may not display.
 - Comments pinned to a location on the board are an optional later phase.
 
 ## License

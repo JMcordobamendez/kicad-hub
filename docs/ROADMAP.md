@@ -38,7 +38,7 @@ flowchart LR
 
   subgraph P3["3 · Web portal"]
     direction TB
-    p3["KiCanvas viewer, iBOM,<br/>downloads on GitHub Pages"]:::todo
+    p3["KiCanvas viewer, iBOM,<br/>downloads on GitHub Pages"]:::done
   end
 
   subgraph P4["4 · Visual diff"]
@@ -58,9 +58,9 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phases 2 and 2b done (BOM diff, field checks, datasheets, fab package,
-variants, before/after images, cost and stock from LCSC). Left in 2b: small
-extras (variant BOM diff, fab profiles, other distributors). Next: web portal.
+**Now:** phases 1–3 done and public as v1 (CI, BOM review, suppliers, before/after
+images, design portal on GitHub Pages). Next: visual diff in the portal (phase 4)
+and the small 2b extras (variant BOM diff, fab profiles, real supplier keys).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -210,10 +210,17 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] Reuse the engine for phase 4 (visual diff in the portal)
 
 ## Phase 3 — Web portal (~2–3 days)
-- [ ] Static page per commit or branch on GitHub Pages
-- [ ] KiCanvas viewer embedded
-- [ ] Interactive BOM and downloads
-- [ ] Bot comment on the PR with links: "view design", "view diff", "BOM"
+- [x] Static page per branch, release (`releases/<tag>/`) and PR (`pr-<N>/`) on GitHub
+      Pages, plus a front page listing them (`scripts/portal.py`, `scripts/portal.html`).
+      Published to the `kicad-hub-site` branch as a single commit replaced on every
+      run (`--force-with-lease`, retried), so zips and PDFs don't pile up in history
+- [x] KiCanvas viewer embedded: all schematic sheets and the PCB. Checked with the
+      KiCad 10 example (2026-10-29); KiCanvas is alpha, loaded from kicanvas.org
+- [x] Report, interactive BOM, BOM, supplier comparison, datasheets and downloads
+      (fab zip, schematic PDF, BOM and offers CSV) on each page
+- [x] PR comment links to the PR's page ("Open this design in the browser")
+- [x] Cleanup workflow removes a closed PR's page and updates the front page
+- [ ] Owner enables Pages on `kicad-hub-site` in this repo and checks it live
 
 ## Phase 4 — Visual diff (~1–2 days)
 - [ ] Kiri or KiDiff comparing the PR branch with the target branch
@@ -274,6 +281,9 @@ it's clear the feature is actually missed.
   LCSC and JLCPCB need no key. Mouser, Farnell and DigiKey use each user's own free
   keys from their repository secrets; the tool never ships or shares keys. RS has no
   public API.
+- **Portal on a branch, not the Pages artifact API** (2026-10-29): `actions/deploy-pages`
+  replaces the whole site on each deploy, which can't keep a page per PR and
+  release. A `kicad-hub-site` branch served by Pages can; one commit, force-pushed.
 - **Supplier choice lives in a file in the board repo** (2026-10-29):
   `kicad-hub-sourcing.csv`, made with the comparison page, reviewable in PRs.
 - **PR images live in a branch of the board repo** (2026-10-29): a comment can only

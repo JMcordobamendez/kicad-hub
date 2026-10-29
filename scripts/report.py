@@ -29,6 +29,7 @@ ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
+ap.add_argument("--portal-url", default="", help="this build's page in the design portal")
 ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
 ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
 ap.add_argument("--package", default="", help="file name of the fab package zip")
@@ -68,6 +69,9 @@ def table(header, rows):
 
 
 md = [f"<!-- kicad-hub:{args.name} -->", f"## KiCad checks: {args.name}", ""]
+if args.portal_url:
+    md += [f"🔎 **[Open this design in the browser]({args.portal_url})**: schematic and PCB viewer, "
+           "interactive BOM, suppliers, downloads.", ""]
 counts = {}
 
 # --- ERC / DRC -------------------------------------------------------------

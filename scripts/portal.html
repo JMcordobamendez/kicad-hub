@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiCad design</title>
+<script type="module" src="https://kicanvas.org/kicanvas/kicanvas.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #151b23;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         display: flex; flex-direction: column; }
+  a { color: var(--accent); }
+  header { padding: 14px 16px 0; border-bottom: 1px solid var(--line); }
+  .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  h1 { font-size: 20px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .badge { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); }
+  .chip.ok { color: var(--good); border-color: var(--good); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+  nav { display: flex; gap: 2px; overflow-x: auto; margin-top: 10px; }
+  nav a { padding: 8px 12px; text-decoration: none; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav a.on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+  main { flex: 1; min-height: 0; display: flex; }
+  section { flex: 1; min-height: 0; display: none; }
+  section.on { display: flex; flex-direction: column; }
+  kicanvas-embed, iframe { flex: 1; width: 100%; min-height: 70vh; border: 0; display: block; }
+  .doc { overflow: auto; padding: 16px; max-width: 1100px; width: 100%; margin: 0 auto; }
+  .doc table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+  .doc th { background: var(--soft); }
+  .doc img { max-width: 100%; }
+  .doc details { margin: 6px 0; }
+  .empty { color: var(--muted); padding: 32px 16px; }
+  ul.files { list-style: none; padding: 0; margin: 0; }
+  ul.files li { padding: 10px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; }
+  .list { width: 100%; border-collapse: collapse; }
+  .list td, .list th { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .list th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 16px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header id="head"></header>
+<main id="main"></main>
+<footer>Made with <a href="https://github.com/JMcordobamendez/kicad-hub">kicad-hub</a> · viewer:
+  <a href="https://kicanvas.org">KiCanvas</a> · not affiliated with the KiCad project</footer>
+<script>
+const D = /*KICAD_HUB_DATA*/null;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const repoUrl = `${D.server}/${D.repo}`;
+const money = (v, cur) => new Intl.NumberFormat(undefined, {style: "currency", currency: cur}).format(v);
+const size = n => n == null ? "" : n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
+
+function chips(c, cost) {
+  const out = [];
+  const add = (label, v, warnAt) => { if (v == null) return;
+    out.push(`<span class="chip ${v === 0 ? "ok" : warnAt ? "warn" : "bad"}">${label}: ${v}</span>`); };
+  add("ERC errors", c.erc_errors); add("DRC errors", c.drc_errors);
+  add("Missing fields", c.missing_fields, true);
+  if (c.visual_changes != null) out.push(`<span class="chip">Visual changes: ${c.visual_changes}</span>`);
+  if (cost && cost.total != null) out.push(`<span class="chip">Parts for ${cost.boards} board${cost.boards > 1 ? "s" : ""}: ${money(cost.total, cost.currency)}</span>`);
+  return out.join("");
+}
+
+function buildPage() {
+  document.title = `${D.name}${D.rev ? " rev " + D.rev : ""} · ${D.label}`;
+  const commit = `<a href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a>`;
+  const tabs = [];
+  if (D.sheets.length) tabs.push(["schematic", "Schematic"]);
+  if (D.pcb) tabs.push(["pcb", "PCB"]);
+  if (D.views.ibom) tabs.push(["ibom", "Interactive BOM"]);
+  tabs.push(["report", "Report"]);
+  if (D.views.bom) tabs.push(["bom", "BOM"]);
+  if (D.views.sourcing) tabs.push(["sourcing", "Suppliers"]);
+  if (D.views.datasheets) tabs.push(["datasheets", "Datasheets"]);
+  tabs.push(["downloads", "Downloads"]);
+  document.getElementById("head").innerHTML =
+    `<div class="top"><h1>${esc(D.name)}</h1><span class="badge">${esc(D.label)}</span>` +
+    `${D.rev ? `<span class="meta">rev ${esc(D.rev)}</span>` : ""}` +
+    `<span class="meta">${commit} · ${esc(D.date)}${D.title ? " · " + esc(D.title) : ""}</span>` +
+    `<span class="meta"><a href="../${D.kind === "release" ? "../" : ""}">all builds</a>` +
+    `${D.run_url ? ` · <a href="${esc(D.run_url)}">CI run</a>` : ""}</span></div>` +
+    `<div class="chips">${chips(D.counts || {}, D.cost)}</div>` +
+    `<nav>${tabs.map(([id, t]) => `<a href="#${id}" data-tab="${id}">${t}</a>`).join("")}</nav>`;
+
+  const frame = src => `<iframe src="${esc(src)}" loading="lazy" title="${esc(src)}"></iframe>`;
+  const S = {
+    schematic: `<kicanvas-embed controls="full">${D.sheets.map(s => `<kicanvas-source src="${esc(s)}"></kicanvas-source>`).join("")}</kicanvas-embed>`,
+    pcb: D.pcb ? `<kicanvas-embed src="${esc(D.pcb)}" controls="full"></kicanvas-embed>` : "",
+    ibom: D.views.ibom ? frame(D.views.ibom) : "",
+    report: `<div class="doc" id="report-doc"></div>`,
+    bom: D.views.bom ? frame(D.views.bom) : "",
+    sourcing: D.views.sourcing ? frame(D.views.sourcing) : "",
+    datasheets: D.views.datasheets ? frame(D.views.datasheets + "/index.html") : "",
+    downloads: `<div class="doc"><ul class="files">${D.downloads.map(f =>
+      `<li><a href="${esc(f.file)}" download>${esc(f.label)}</a><span class="meta">${esc(f.file)} ${size(f.size)}</span></li>`).join("")}` +
+      `<li><a href="${repoUrl}/tree/${esc(D.sha)}">Source files at this commit</a><span class="meta">GitHub</span></li></ul></div>`,
+  };
+  // only build a tab's content when it's first opened (iframes and viewers are heavy)
+  document.getElementById("main").innerHTML = tabs.map(([id]) => `<section id="s-${id}"></section>`).join("");
+  const done = new Set();
+  function show() {
+    const id = (location.hash.slice(1) && S[location.hash.slice(1)] !== undefined) ? location.hash.slice(1) : tabs[0][0];
+    if (!done.has(id)) {
+      document.getElementById("s-" + id).innerHTML = S[id];
+      if (id === "report") document.getElementById("report-doc").innerHTML =
+        window.marked ? marked.parse(D.report || "_No report._") : `<pre>${esc(D.report)}</pre>`;
+      done.add(id);
+    }
+    document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "s-" + id));
+    document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.tab === id));
+  }
+  window.addEventListener("hashchange", show);
+  show();
+}
+
+function indexPage() {
+  document.title = `${D.repo.split("/")[1]} · designs`;
+  document.getElementById("head").innerHTML = `<div class="top" style="padding-bottom:12px"><h1>${esc(D.repo.split("/")[1])}</h1>` +
+    `<span class="meta"><a href="${repoUrl}">${esc(D.repo)}</a> · KiCad designs</span></div>`;
+  document.getElementById("main").innerHTML = `<div class="doc"><p class="empty">Loading…</p></div>`;
+  // builds.json is rewritten on every publish and by the cleanup workflow
+  fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
+  builds.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const group = (kind, title) => {
+    const rows = builds.filter(b => b.kind === kind);
+    if (!rows.length) return "";
+    return `<h2>${title}</h2><table class="list"><tr><th>Build</th><th>Board</th><th>Commit</th><th>Updated</th><th>Checks</th></tr>` +
+      rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="meta">${esc(b.title)}</div>` : ""}</td>` +
+        `<td>${esc(b.name)}${b.rev ? ` <span class="meta">rev ${esc(b.rev)}</span>` : ""}</td>` +
+        `<td><a href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="meta">${esc(b.date)}</td>` +
+        `<td><div class="chips" style="margin:0">${chips(b.counts || {}, b.cost)}</div></td></tr>`).join("") + `</table>`;
+  };
+  document.getElementById("main").innerHTML = `<div class="doc">` +
+    (builds.length ? group("branch", "Branches") + group("release", "Releases") + group("pr", "Pull requests")
+                   : `<p class="empty">Nothing published yet.</p>`) + `</div>`;
+  });
+}
+
+D.mode === "index" ? indexPage() : buildPage();
+</script>
+</body>
+</html>
