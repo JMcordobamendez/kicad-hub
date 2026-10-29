@@ -34,10 +34,11 @@ ap.add_argument("--prefix", default="", help="project name, stripped from the fi
 ap.add_argument("--out", required=True, help="folder for the PNGs and renders.json")
 args = ap.parse_args()
 
-# Same resolution as visual_diff.py for the raster, then one fixed reduction so a page
-# stays a few hundred KB. Both are constants per kind: never derived from the content.
-RENDER_DPI = {"sch": 150, "pcb": 300}[args.kind]
-OUT_DPI = {"sch": 150, "pcb": 200}[args.kind]
+# Rasterized at 300 dpi (the PCB resolution of visual_diff.py), then one fixed reduction
+# per kind so a page stays small (tens to a few hundred KB, a dozen of them per build).
+# Both are constants: never derived from the content.
+RENDER_DPI = 300
+OUT_DPI = {"sch": 200, "pcb": 250}[args.kind]
 COLORS = 256         # palette size of schematic renders (PCB renders are grey)
 
 
