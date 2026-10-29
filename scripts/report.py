@@ -170,6 +170,23 @@ if variants:
            "Each variant has its own BOM and pick & place in the fab package (`assembly/<variant>/`).", ""]
     counts["variants"] = len(variants)
 
+# --- Design to finish ------------------------------------------------------------
+# Parts still to annotate (KiBot can't load a schematic with them) and values still
+# to decide: normal while drawing, worth a list before ordering.
+unannotated = sorted((r for r in head if r.endswith("?")), key=ref_key)
+pending = sorted((r for r, row in head.items() if re.fullmatch(r"(?i)\s*(tbd|tbc|\?+|x+|n/?a)\s*", row.get("Value") or "")),
+                 key=ref_key)
+counts.update(unannotated=len(unannotated), pending_values=len(pending))
+if unannotated or pending:
+    md.append("### Design to finish")
+    if unannotated:
+        md += [f"- **{len(unannotated)} not annotated:** {', '.join(unannotated)}. Annotate the schematic "
+               "(*Tools → Annotate Schematic*); until then the schematic PDF, BOM HTML and iBOM can't be built."]
+    if pending:
+        md += [f"- **{len(pending)} values to decide:** "
+               + ", ".join(f"{r} ({cell(head[r].get('Value'))})" for r in pending) + "."]
+    md.append("")
+
 # --- Missing fields ------------------------------------------------------------
 ds = json.load(open(args.datasheets, encoding="utf-8")) if args.datasheets and os.path.exists(args.datasheets) else None
 
@@ -233,6 +250,7 @@ if ds is not None:
                "", "</details>", ""]
 
 # --- Cost and stock -------------------------------------------------------------
+src = None
 if args.sourcing and os.path.exists(args.sourcing):
     src = json.load(open(args.sourcing, encoding="utf-8"))
     sym = {"USD": "$", "EUR": "€", "GBP": "£"}.get(src["currency"], src["currency"] + " ")
@@ -245,6 +263,15 @@ if args.sourcing and os.path.exists(args.sourcing):
         gaps.append(f"not found: {', '.join(sorted(d['unpriced'], key=ref_key))}")
     used = [s["name"] for s in src["suppliers"] if s["status"] == "ok"]
     other = [f"{s['name']} ({s['status'].split(' (')[0]})" for s in src["suppliers"] if s["status"] != "ok"]
+    if d["priced"] == 0:
+        # a design still being drawn: say what's missing instead of an empty table
+        md += ["### Cost and stock",
+               f"No part could be priced yet ({d['fitted']} fitted parts). Give the symbols an `LCSC` part "
+               "number (e.g. `C25744`, looked up at LCSC and JLCPCB with no key) or an `MPN` (looked up at "
+               "Mouser, Farnell and DigiKey with your API keys).", ""]
+        counts["sourcing_warnings"] = len(src["warnings"])
+        src = None
+if src:
     md += ["### Cost and stock",
            f"Components only, prices in {src['currency']} at the time of this run, from {', '.join(used) or 'no supplier'}"
            + (f"; not used: {', '.join(other)}" if other else "") + ". "
