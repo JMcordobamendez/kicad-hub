@@ -33,6 +33,6 @@
   pattern: '78\d\d'
 
 - id: R7
-  text: Fewer than 10 fitted parts (fails on purpose: the board has far more)
+  text: "Fewer than 10 fitted parts (fails on purpose, the board has far more)"
   check: max_parts
   max: 10
