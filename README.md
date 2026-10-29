@@ -62,8 +62,9 @@ On every push and pull request of a KiCad project, the action:
   pull request with the schematic and PCB in the browser
   ([KiCanvas](https://kicanvas.org)), the report, interactive BOM, supplier
   comparison, datasheets and downloads; the PR comment links to it. Keeps a **timeline**
-  of the last commits of `main` and the releases, and a page to **compare any two
-  versions** (BOM, schematic sheets, PCB layers).
+  of the last commits of `main` and the releases, a page to **compare any two
+  versions** (BOM, schematic sheets, PCB layers) and an **activity** page with the
+  branch graph, pull requests, reviews, comments and pushes.
 - **Publishes a GitHub Release** with the fab package when you tag `vX.Y`.
 - Also: schematic PDF, BOM (CSV/HTML) and interactive BOM.
 
@@ -93,6 +94,7 @@ Details and progress: [roadmap](docs/ROADMAP.md).
                           │                                      Mouser, Farnell, DigiKey)
                           │            ── scripts/visual_diff.py before/after images
                           │            ── scripts/renders.py     page renders for the compare page
+                          │            ── scripts/activity.py    branches, PRs, pushes for the activity page
                           │            ── scripts/report.py      markdown report
                           ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
                           │
@@ -172,6 +174,7 @@ version.
 | `pages` | `true` | Publish the design portal (see [design portal](#design-portal)) |
 | `pages-branch` | `kicad-hub-site` | Branch the portal is published to |
 | `history` | `10` | Light snapshots of the last N commits of the default branch for the portal's timeline and compare page; `0` = off |
+| `activity` | `500` | Activity page of the portal: graph of the last N commits of all branches, pull requests, reviews, comments, releases and pushes (see [activity](#activity)); `0` = off |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `fab-profile` | `generic` | Optional fab layer: `jlcpcb`, `pcbway` or `eurocircuits` (see [fab profiles](#fab-profiles)) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
@@ -242,6 +245,8 @@ Every push to a branch, tag and pull request publishes a page to the
   build stores in `renders/` (same export options and resolution, no crop, so any two
   builds line up). Pages identical in both are collapsed as "no changes". Builds
   published before this feature have no renders until their next publish.
+- **Activity** (`/activity.html`, linked from the front page and the top bar): how the
+  work evolved, see [below](#activity);
 - on pull request pages, **comments pinned on the board** (see below).
 
 The viewer is a pinned copy of KiCanvas (`scripts/vendor/`, see its README), not
@@ -252,6 +257,36 @@ Source: Deploy from a branch → `kicad-hub-site` / `(root)` → Save*. The PR c
 links to the PR's page. The branch keeps a single commit, replaced on every
 publish, so it doesn't grow; the cleanup workflow removes a PR's page when it is
 closed. Pull requests from forks aren't published (they can't write to the repo).
+
+#### Activity
+
+`activity.html` draws the history of the repository: a lane graph of the last commits of
+every branch and tag (newest on top, one colour per lane, merge curves, a star on
+releases) next to a table of subject, author, date and commit, and a feed of what
+happened, newest first: pull requests opened, reviewed (approved, changes requested,
+commented), commented, merged or closed, pushes, releases. A chip at each branch tip
+shows who created the branch: the author of its pull request, else of its first commit,
+else whoever pushed it first. Hover (or focus, or tap) a feed item to highlight its
+commits in the graph, and a commit to highlight its feed items. Click a commit for its
+actions: open the portal page of that commit if one was published (`history/<sha>/`,
+`main/`, a release, a PR), *Compare with parent* when both have one, or the commit on
+GitHub. Filters: branch, author, dates, and *only main + open PRs*. Everything is drawn
+in the browser from `activity.json` (no libraries), rebuilt on every publish.
+
+- **Data**: git (all branches and tags in topological order; a shallow checkout is
+  deepened and all branches are fetched, so the graph is complete without
+  `fetch-depth: 0`) and the GitHub GraphQL API with the action's `github-token` (the last
+  100 pull requests with their reviews and comments, and releases). Without the token or
+  when GitHub doesn't answer, the page shows the git graph alone.
+- **Pushes**: GitHub doesn't keep who pushed a branch, so every run of a push (and every
+  update of a pull request's branch) appends `{actor, ref, before, after, date}` to
+  `activity-pushes.json` in the site branch (the last 1000). Pushes made before the first
+  run with this feature are not known; the page says since when it records.
+- **Privacy**: no e-mail address is ever published. Authors are shown by GitHub login (and
+  avatar from `avatars.githubusercontent.com`) when known, else by the name in the commit,
+  and anything that looks like an address is removed from commit subjects and comments.
+- Input `activity` sets how many commits to read (default 500, `0` = no page). Pull requests
+  from forks aren't published, so they never reach it.
 
 #### Comments on the board
 
@@ -452,7 +487,8 @@ scripts/                    fab_assembly.py, report.py, requirements.py, datashe
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
                             compare.js, the compare page and its shared widget;
-                            pins.js, comments pinned on the board)
+                            pins.js, comments pinned on the board; activity.py +
+                            activity.html, the activity page)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)

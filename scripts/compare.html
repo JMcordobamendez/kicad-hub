@@ -139,7 +139,7 @@ function info(b) {
 function head() {
   $("head").innerHTML = `<div class="bar"><a class="logo" href="./" title="All builds">kh</a>` +
     `<div class="crumb"><a href="./">${esc(repoName)}</a><span class="sep">/</span><span>Compare versions</span></div>` +
-    `<div class="right"><a href="./#history">History</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a></div></div>`;
+    `<div class="right"><a href="./#history">History</a>${D.activity ? `<a href="activity.html">Activity</a>` : ""}<a href="${repoUrl}">${esc(D.repo)} on GitHub</a></div></div>`;
 }
 
 function picker() {

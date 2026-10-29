@@ -30,6 +30,8 @@ jobs:
           # currency: EUR
           # history: 10                  # light snapshots of the last N commits of main (timeline and
           #                              # compare page in the portal); 0 = off
+          # activity: 500                # activity page: graph of the last N commits of all branches, PRs,
+          #                              # reviews, comments, pushes (no e-mails published); 0 = off
           # Optional suppliers, with your own free API keys stored as repository
           # secrets (Settings → Secrets and variables → Actions). Unset = skipped.
           # How to get them: https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys

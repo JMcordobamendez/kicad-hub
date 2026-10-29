@@ -4,7 +4,7 @@
   portal.py build  ...  one build's page: KiCanvas viewer of the schematic and PCB,
                         report, interactive BOM, BOM, supplier comparison, datasheets
                         and downloads, all copied into --site
-  portal.py index  ...  the portal's front page and compare page, listing every build
+  portal.py index  ...  the portal's front page, compare page and activity page, listing every build
                         published in the site branch (main, history, releases, pull
                         requests); prunes the history of main to --keep-history
 
@@ -45,6 +45,7 @@ b.add_argument("--commit-author", default="")
 b.add_argument("--commit-message", default="", help="first line of the commit message")
 b.add_argument("--renders", default="", help="folder with the PNG renders and renders.json (renders.py)")
 b.add_argument("--light", action="store_true", help="snapshot for the timeline: no fab package, offers, PDFs")
+b.add_argument("--activity", action="store_true", help="the site has an activity page: link to it")
 i = sub.add_parser("index")
 i.add_argument("--root", required=True, help="checkout of the site branch")
 i.add_argument("--repo", required=True)
@@ -280,7 +281,7 @@ def build():
             "title": args.title, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sheets": [f"design/{s}" for s in sheets], "pcb": pcb, "views": views, "downloads": downloads,
             "report": md, "counts": counts, "cost": cost, "parts": parts,
-            "branch": args.branch, "commit": commit, "light": args.light,
+            "branch": args.branch, "commit": commit, "light": args.light, "activity": args.activity,
             "changes": changes(out, site) if args.kind == "pr" else None,
             "pr": int(pr.group(1)) if pr else None}
     page(info, os.path.join(site, "index.html"))
@@ -346,9 +347,13 @@ def index():
     for js in glob.glob(os.path.join(HERE, "vendor", "*.js")) + [os.path.join(HERE, "pins.js")]:
         shutil.copy2(js, assets)
     shutil.copy2(os.path.join(HERE, "compare.js"), assets)  # compare widget, shared by both pages
-    data = {"repo": args.repo, "server": args.server}
+    # activity.json (scripts/activity.py) is in the site root when the activity input is on
+    has_activity = os.path.isfile(os.path.join(args.root, "activity.json"))
+    data = {"repo": args.repo, "server": args.server, "activity": has_activity}
     page({"mode": "index", **data}, os.path.join(args.root, "index.html"))
     page(data, os.path.join(args.root, "compare.html"), "compare.html")
+    if has_activity:
+        page(data, os.path.join(args.root, "activity.html"), "activity.html")
     open(os.path.join(args.root, ".nojekyll"), "w").close()  # serve files as they are, no Jekyll
 
 

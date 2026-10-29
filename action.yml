@@ -88,6 +88,14 @@ inputs:
       parts BOM, commit info) of the last N commits under history/<sha>/ in the portal, to
       browse and compare them (compare.html). 0 = off. Needs pages.
     default: "10"
+  activity:
+    description: >-
+      Activity page of the portal (activity.html): graph of the last N commits of all
+      branches and tags, who created each branch, pull requests with their reviews and
+      comments, releases, and who pushed (recorded from the first run on, GitHub doesn't
+      keep it). No e-mail addresses are published. Needs pages; the token reads the PRs.
+      0 = off.
+    default: "500"
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
@@ -696,10 +704,36 @@ runs:
         REF_NAME: ${{ github.ref_name }}
         HISTORY: ${{ inputs.history }}
         HIST_DEST: ${{ steps.portal.outputs.history_dest }}
+        ACTIVITY: ${{ inputs.activity }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_ACTION: ${{ github.event.action }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        ACTOR: ${{ github.actor }}
+        EVENT_REF: ${{ github.ref }}
+        EVENT_BEFORE: ${{ github.event.before }}
+        EVENT_AFTER: ${{ github.event.after }}
       run: |
         set -uo pipefail
         site="$RUNNER_TEMP/kicad-hub-portal"
         rm -rf "$site"
+        # Activity page: read git (full history, all branches) and GitHub once, here; the push
+        # log is appended to the site branch inside the publish loop (scripts/activity.py)
+        act_raw="$RUNNER_TEMP/kicad-hub-activity.json"
+        rm -f "$act_raw"
+        act=0
+        case "$ACTIVITY" in ''|*[!0-9]*) ;; *) act=$ACTIVITY ;; esac
+        activity=(); push=()
+        if [ "$act" -gt 0 ]; then
+          activity=(--activity)
+          python3 "$GITHUB_ACTION_PATH/scripts/activity.py" collect --out "$act_raw" --repo "$GITHUB_REPOSITORY"             --server "$GITHUB_SERVER_URL" --limit "$act" --default-branch "$DEFAULT_BRANCH"             --exclude "$BRANCH,kicad-hub-images" --deepen || true
+          if [ "$EVENT_NAME" = push ]; then
+            push=(--push-actor "$ACTOR" --push-ref "$EVENT_REF" --push-before "$EVENT_BEFORE" --push-after "$EVENT_AFTER")
+          elif [ "$EVENT_NAME" = pull_request ] && [ "$PR_ACTION" = synchronize ]; then
+            push=(--push-actor "$ACTOR" --push-ref "refs/heads/$PR_HEAD_REF" --push-before "$EVENT_BEFORE" --push-after "$EVENT_AFTER")
+          fi
+        fi
         # commit of this build (a PR is checked out as a merge commit: nothing to say there)
         commit=()
         if [ "$KIND" != pr ]; then
@@ -712,7 +746,7 @@ runs:
         portal() { python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --out "$OUT" \
           --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
           --server "$GITHUB_SERVER_URL" --title "$TITLE" --base-ref "$BASE_REF" --branch "$branch" \
-          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "${commit[@]}" "${renders[@]}" "$@"; }
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "${commit[@]}" "${renders[@]}" "${activity[@]}" "$@"; }
         portal --site "$site" --label "$LABEL" --kind "$KIND"
         # light snapshot of this commit for the timeline (default branch only)
         hist=""
@@ -738,6 +772,10 @@ runs:
           rm -rf "${wt:?}/$DEST" && mkdir -p "$(dirname "$wt/$DEST")" && cp -r "$site" "$wt/$DEST"
           if [ -n "$hist" ]; then
             rm -rf "${wt:?}/$HIST_DEST" && mkdir -p "$(dirname "$wt/$HIST_DEST")" && cp -r "$hist" "$wt/$HIST_DEST"
+          fi
+          # activity.json first: index adds the activity page when it is there
+          if [ -s "$act_raw" ]; then
+            python3 "$GITHUB_ACTION_PATH/scripts/activity.py" publish --root "$wt" --data "$act_raw" --repo "$GITHUB_REPOSITORY"               --server "$GITHUB_SERVER_URL" "${push[@]}" || true
           fi
           # index also prunes history/ to the newest $keep snapshots (-1 = leave it alone)
           python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --keep-history "$keep"
