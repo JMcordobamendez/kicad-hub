@@ -13,6 +13,7 @@ import os
 import re
 
 MAX_ROWS = 60  # rows per table before cutting, to keep PR comments readable
+MAX_IMAGES = 12  # before/after images in the report
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--name", required=True)
@@ -28,6 +29,7 @@ ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
+ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
 ap.add_argument("--package", default="", help="file name of the fab package zip")
 ap.add_argument("--package-warnings", help="text file, one warning per line, from fabnotes.py")
 ap.add_argument("--run-url", default="")
@@ -113,6 +115,30 @@ else:
             md += [table(["Part", "Value", "Footprint"], rows), ""]
         if changed:
             md += [table(["Part", "Value", "Change"], changed), ""]
+
+# --- Visual changes ---------------------------------------------------------------
+if args.visual and os.path.exists(args.visual):
+    pages = json.load(open(args.visual, encoding="utf-8"))
+    md.append("### Visual changes")
+    if not pages:
+        md += ["No visual changes in the schematic or the board.", ""]
+    else:
+        kinds = {"sch": "Schematic", "pcb": "PCB"}
+        md += [f"{len(pages)} page{'s' if len(pages) != 1 else ''} changed. Removed in red, added in green, "
+               "changed areas boxed in orange.", ""]
+        for p in pages[:MAX_IMAGES]:
+            what = f"**{kinds[p['kind']]} · {p['title']}**"
+            extra = f" ({p['status']})" if p["status"] != "changed" else f" ({p['areas']} area{'s' if p['areas'] != 1 else ''})"
+            if p.get("url"):
+                md += [f"{what}{extra} · [full page]({p['full_url']})", "", f"![{kinds[p['kind']]} {p['title']}]({p['url']})", ""]
+            else:
+                md += [f"- {what}{extra}"]
+        if len(pages) > MAX_IMAGES:
+            md += ["", f"_…and {len(pages) - MAX_IMAGES} more._"]
+        if not pages[0].get("url"):
+            md += ["", "_Images in the artifact (`visual/`)._"]
+        md.append("")
+    counts["visual_changes"] = len(pages)
 
 # --- Variants -------------------------------------------------------------------
 variants = json.load(open(args.variants, encoding="utf-8")) if args.variants and os.path.exists(args.variants) else []

@@ -32,8 +32,8 @@ flowchart LR
     b6["6 · Datasheets"]:::done
     b5["5 · Variants"]:::done
     b3["3 · Generic fab package<br/>(+ optional fab profiles)"]:::done
-    b2["2 · Cost and stock"]:::todo
-    b7["7 · Before/after images<br/>changes highlighted"]:::doing
+    b2["2 · Cost and stock"]:::doing
+    b7["7 · Before/after images<br/>changes highlighted"]:::done
   end
 
   subgraph P3["3 · Web portal"]
@@ -58,13 +58,14 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phase 2 done; 2b has BOM diff, field checks, datasheets and the fab
-package working, variants added. Next: before/after images.
+**Now:** phase 2 done; 2b has BOM diff, field checks, datasheets, the fab
+package, variants and before/after images working. Next: cost and stock
+(without distributor API keys, see 2b.2), then the web portal.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
 
-*Last update: 2026-10-28. Update the classes (`:::done`, `:::doing`, `:::todo`)
+*Last update: 2026-10-29. Update the classes (`:::done`, `:::doing`, `:::todo`)
 whenever a task changes state.*
 
 ## Phase 1 — Project template (~1 day)
@@ -115,6 +116,9 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [ ] Total per board and per batch (quantity as an input, e.g. 7 boards)
    - [ ] Warn on obsolete, not-recommended or out-of-stock parts
    - [ ] API keys as repository secrets; skip gracefully when they are missing
+   - [ ] The owner has no distributor API keys (2026-10-29): start with sources that
+         need none (LCSC part numbers already in the BOM), and treat Mouser /
+         DigiKey / Nexar keys (free to register) as optional extras
 3. **Ready-to-order package — generic, any fab house**
    - [x] One zip in standard formats every fab accepts, no vendor lock-in, built on
          every run and attached to a GitHub Release on tag `vX.Y`:
@@ -169,13 +173,21 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (`datasheet-optional-refs`)
    - [ ] (Phase 3) open the datasheet from the selected part in the web viewer
 7. **Before/after images in the PR comment, with the changes highlighted**
-   - [ ] Render the changed schematic sheets and PCB layers for both branches (SVG/PNG)
-   - [ ] Highlight what changed: added in green, removed in red, unchanged dimmed
-         (pixel/vector diff, as Kiri/KiDiff do), plus a box around each changed area
-   - [ ] Only the sheets/layers that changed, to keep the comment short
-   - [ ] Images embedded in the PR comment (not just a link), each linking to the
-         full-size diff
-   - [ ] Shares the diff engine with phase 4 (visual diff in the portal)
+   - [x] Render every schematic sheet and PCB layer (copper, silkscreen, outline) of
+         both branches with `kicad-cli … export svg` (PCB in black and white, same
+         page for both sides) and rasterize them (`rsvg-convert`)
+   - [x] Pixel diff (`scripts/visual_diff.py`, PIL + numpy in the KiBot image):
+         Before | After cropped to the changes, unchanged dimmed, removed in red,
+         added in green, an orange box around each changed area; small changes zoomed in
+   - [x] Only the sheets/layers that changed; a full-page overlay is linked too
+   - [x] Images embedded in the PR comment. They are committed to the branch
+         `kicad-hub-images` (`pr-<N>/`, replaced on each push) and linked by commit,
+         so older versions of the comment keep working; without `contents: write`
+         (e.g. PRs from forks) they stay in the artifact only (`visual/`)
+   - [x] Confirmed on GitHub with a demo PR (kicad-hub #3, 2026-10-29: R5 value and
+         position → nRF54L15 sheet, F.Cu and F.Silkscreen)
+   - [ ] Clean up `kicad-hub-images` folders of closed PRs
+   - [ ] Reuse the engine for phase 4 (visual diff in the portal)
 
 ## Phase 3 — Web portal (~2–3 days)
 - [ ] Static page per commit or branch on GitHub Pages
@@ -231,4 +243,7 @@ it's clear the feature is actually missed.
   Vendor formats (JLCPCB, PCBWay…) are optional profiles, never the default.
 - **Web portal needs public repos** (or GitHub Pro): GitHub Pages is free only
   for public repositories.
+- **PR images live in a branch of the board repo** (2026-10-29): a comment can only
+  show images with a URL; a `kicad-hub-images` branch needs no extra service and
+  works in private repos for anyone who can read the repo.
 - **Mockups** of the PR comment and the portal: `docs/mockups/`.
