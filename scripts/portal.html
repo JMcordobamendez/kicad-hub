@@ -49,7 +49,11 @@
   .seg { display: inline-flex; }
   .seg .btn { border-radius: 0; } .seg .btn:first-child { border-radius: 6px 0 0 6px; } .seg .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
   .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .layer { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; cursor: pointer; }
+  .layer { display: flex; align-items: center; gap: 6px; padding: 1px 0; font-size: 13px; }
+  .lname { display: flex; align-items: center; gap: 8px; flex: 1; text-align: left; background: none; border: 1px solid transparent;
+           border-radius: 5px; padding: 2px 6px; color: var(--fg); font: inherit; cursor: pointer; }
+  .lname:hover { border-color: var(--line); }
+  .layer.focus .lname { border-color: var(--accent); background: var(--soft); font-weight: 600; }
   .layer i { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid var(--line); }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
   .presets .btn { padding: 2px 8px; font-size: 12px; }
@@ -366,26 +370,45 @@ function layerPanel(v) {
   const box = document.getElementById("layers");
   if (!box || !v.layers) return;
   const all = [...v.layers.in_ui_order()];
-  const used = all.filter(l => (l.items && l.items.length) || (l.bboxes && l.bboxes.size));
+  // a layer is used if it or one of KiCanvas's derived layers (":In1.Cu:Zones",
+  // ":In1.Cu:BBViaHoles"…) has something drawn: inner planes keep their copper only there
+  const drawn = [...v.layers.in_order()].filter(l => l.items && l.items.length).map(l => l.name);
+  const used = all.filter(l => drawn.some(n => n === l.name || n.startsWith(":" + l.name + ":")));
   const layers = used.length ? used : all;
   const nice = n => n.replace(/\.SilkS$/, ".Silkscreen").replace(/\.CrtYd$/, ".Courtyard").replace(/\.Adhes$/, ".Adhesive");
   const color = l => { try { return l.color.to_css(); } catch (e) { return "transparent"; } };
   const presets = {
     all: () => true,
+    none: () => false,
     copper: l => /\.Cu$/.test(l.name) || l.name === "Edge.Cuts",
     front: l => /^F\./.test(l.name) || l.name === "Edge.Cuts",
     back: l => /^B\./.test(l.name) || l.name === "Edge.Cuts",
   };
+  let focus = null;  // layer drawn on top, the others dimmed (KiCanvas "highlight")
+  const setFocus = l => {
+    focus = l;
+    if (l) l.visible = true;
+    try { v.layers.highlight(l || null); } catch (e) {}
+    v.draw(); render();
+  };
   const render = () => {
     box.classList.remove("muted");
     box.innerHTML = `<div class="presets">${Object.keys(presets).map(k => `<button class="btn" data-preset="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>` +
-      layers.map((l, i) => `<label class="layer"><input type="checkbox" data-layer="${i}" ${l.visible ? "checked" : ""}>` +
-        `<i style="background:${color(l)}"></i>${esc(nice(l.name))}</label>`).join("");
+      layers.map((l, i) => `<div class="layer ${l === focus ? "focus" : ""}"><input type="checkbox" data-layer="${i}" ${l.visible ? "checked" : ""} aria-label="Show ${esc(nice(l.name))}">` +
+        `<button class="lname" data-focus="${i}" title="Bring to front"><i style="background:${color(l)}"></i>${esc(nice(l.name))}</button></div>`).join("") +
+      `<div class="muted" style="font-size:12px;margin-top:6px">Tick to show or hide · click a name to bring it to the front${focus ? " · click it again to go back" : ""}.</div>`;
   };
-  box.onchange = e => { const i = e.target.dataset.layer; if (i == null) return; layers[+i].visible = e.target.checked; v.draw(); };
+  box.onchange = e => {
+    const i = e.target.dataset.layer; if (i == null) return;
+    layers[+i].visible = e.target.checked;
+    if (!e.target.checked && layers[+i] === focus) setFocus(null); else v.draw();
+  };
   box.onclick = e => {
-    const k = e.target.dataset && e.target.dataset.preset; if (!k) return;
-    layers.forEach(l => { l.visible = presets[k](l); }); v.draw(); render();
+    const el = e.target.closest("[data-preset],[data-focus]"); if (!el) return;
+    if (el.dataset.focus != null) { const l = layers[+el.dataset.focus]; setFocus(l === focus ? null : l); return; }
+    const k = el.dataset.preset;
+    layers.forEach(l => { l.visible = presets[k](l); });
+    if (focus && !focus.visible) setFocus(null); else { v.draw(); render(); }
   };
   render();
 }
