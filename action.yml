@@ -213,8 +213,8 @@ runs:
         if [ -f "$dru" ]; then echo >> "$dru"; else echo "(version 1)" > "$dru"; fi
         grep -v '^(version' "$rules" >> "$dru"
         kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$tmp:/w" -w /w "$IMAGE" kicad-cli "$@"; }
-        kicad pcb drc --severity-all --schematic-parity --format json -o "$tmp/drc-fab.json" "$NAME.kicad_pcb"
-        kicad pcb drc --severity-all --schematic-parity --format report -o "$tmp/drc-fab.rpt" "$NAME.kicad_pcb"
+        kicad pcb drc --severity-all --schematic-parity --format json -o drc-fab.json "$NAME.kicad_pcb"
+        kicad pcb drc --severity-all --schematic-parity --format report -o drc-fab.rpt "$NAME.kicad_pcb"
         cp "$tmp/drc-fab.json" "$tmp/drc-fab.rpt" "$OUT/reports/"
         rm -rf "$tmp"
 
