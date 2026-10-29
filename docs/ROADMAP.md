@@ -59,7 +59,7 @@ flowchart LR
     i2["Timeline, compare<br/>any two versions"]:::done
     i3["Requirements in the repo"]:::done
     i4["Approval flows"]:::done
-    i5["Net navigation, measuring"]:::todo
+    i5["Net navigation, measuring"]:::done
     i6["Sharing private boards"]:::todo
     i7["Target price"]:::done
     i8["Activity page<br/>branches, PRs, pushes"]:::doing
@@ -354,8 +354,14 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
       GitHub GraphQL API (`scripts/activity.py`); who pushed comes from a push log kept in the
       site branch, so it only covers pushes since it was installed. No e-mail address is ever
       published (owner decision). Done 2026-10-29, awaiting a check on a real push to `main`
-- [ ] **Net navigation and measuring in the viewer**: highlight a net, jump between
-      its pads, measure distances. Depends on KiCanvas (alpha)
+- [x] **Net navigation and measuring in the viewer**: highlight a net, jump between
+      its pads, measure distances. Depends on KiCanvas (alpha). `scripts/viewer-tools.js`:
+      a **Nets** card (search over every net, net buttons in the Selected card, a click on
+      a track too) highlights the net with KiCanvas's own `highlight_net` and dims the copper;
+      Prev / Next pad walks its pads ("U3 pad 12 · 3 of 18"); **Measure** (PCB and schematic)
+      draws distance, dx and dy between two clicks or taps, snapping to pad centres on the
+      PCB; Esc clears; exclusive with the Comment mode of `pins.js`. Not in the schematic:
+      net highlight (KiCanvas has none). Done 2026-10-29, awaiting a check in a real browser
 - [ ] **Sharing private boards**: a way to show a private repo's portal to people
       without access (e.g. a password-protected or expiring static export)
 - [x] **Target price per part** (last): optional column in `kicad-hub-sourcing.csv`,

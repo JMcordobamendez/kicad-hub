@@ -98,6 +98,46 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
     await page.screenshot({ path: `${OUT}/extra-${name}-phone.png`, fullPage: true });
     await page.setViewportSize({ width: 1440, height: 900 });
   }
+  if (name === "nets") try {  // net highlight, pad walk and measuring (scripts/viewer-tools.js)
+    const shot = async step => { await page.waitForTimeout(1200); await page.screenshot({ path: `${OUT}/extra-nets-${step}.png` }); };
+    const box = await page.locator("#kc-pcb").boundingBox();
+    await page.mouse.click(box.x + 8, box.y + box.height - 8);  // first click only wakes KiCanvas
+    await page.waitForTimeout(800);
+    await page.mouse.click(box.x + box.width * 0.336, box.y + box.height * 0.568);
+    // KiCanvas asks "Footprint or Net?" when both are under the click
+    await page.waitForTimeout(800);
+    const item = page.getByText(/Footprint: /).first();
+    console.log("menu items:", await item.count());
+    if (await item.count()) await item.click();
+    await shot("1-part");
+    const nets = page.locator("#sel-pcb .netbtn");
+    console.log("net buttons:", await nets.count(), "| nets card:", await page.locator(".kt-q").count(), "| selected:", JSON.stringify((await page.locator("#sel-pcb").innerText()).slice(0, 200)));
+    if (await nets.count()) await nets.nth(Math.min(1, (await nets.count()) - 1)).click();
+    await shot("2-net");
+    await page.getByRole("button", { name: "Next pad of the net" }).click({ timeout: 5000 });
+    await shot("3-pad1");
+    await page.getByRole("button", { name: "Next pad of the net" }).click({ timeout: 5000 });
+    await shot("4-pad2");
+    await page.getByRole("button", { name: "Clear" }).first().click();
+    await page.fill(".kt-q", "GND");
+    await page.locator(".kt-hit").first().click();
+    await page.getByRole("button", { name: "Fit" }).click();
+    await shot("5-search-gnd");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Measure" }).click();
+    await page.mouse.click(box.x + box.width * 0.30, box.y + box.height * 0.50);
+    await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.60);
+    await shot("6-measure-live");
+    await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.60);
+    await shot("7-measure");
+    console.log("readout:", await page.locator(".kt-read").first().textContent());
+    await page.keyboard.press("Escape");
+    await shot("8-cleared");
+  } catch (e) {
+    console.log("nets step failed:", String(e.message).slice(0, 200));
+    errors.push(`[nets step] ${String(e.message).slice(0, 200)}`);
+    await page.screenshot({ path: `${OUT}/extra-nets-failed.png` });
+  }
   });
 }
 

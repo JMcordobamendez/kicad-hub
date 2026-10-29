@@ -55,6 +55,9 @@
   .lname:hover { border-color: var(--line); }
   .layer.focus .lname { border-color: var(--accent); background: var(--soft); font-weight: 600; }
   .layer i { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid var(--line); }
+  .netbtn { border: 1px solid var(--line); background: var(--card); color: var(--accent); border-radius: 10px; padding: 0 8px; margin: 1px 0 1px 4px;
+            font: inherit; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+  .netbtn:hover, .netbtn:focus-visible { border-color: var(--accent); background: var(--soft); }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
   .presets .btn { padding: 2px 8px; font-size: 12px; }
   .diffimg { margin: 6px 0 18px; } .diffimg img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
@@ -189,6 +192,8 @@ function buildPage() {
     `<span>${where} · commit <a class="mono" href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a>` +
     ` · <a href="${history}">history</a>${D.activity ? ` · <a href="${HOME}activity.html">activity</a>` : ""}</span>${status(c)}`) + `<nav id="tabs"></nav>`;
   versions();
+  // net highlight, pad walk and measuring in the viewers (scripts/viewer-tools.js)
+  load("viewer-tools.js").then(() => KHTools.init({D, viewers, findProject})).catch(() => {});
   // comments pinned on the board: pull request pages on github.com only (scripts/pins.js)
   if (D.kind === "pr" && D.pr && D.server === "https://github.com")
     load("pins.js").then(() => KHPins.init({D, viewers, findProject})).catch(() => {});
@@ -474,17 +479,23 @@ function showPart(kind, item) {
   const p = D.parts[ref] || {};
   const kv = (k, v) => v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : "";
   const ds = p.datasheet ? `<a href="${esc(p.datasheet)}" target="_blank" rel="noopener">${esc(p.datasheet.split("/").pop().split("?")[0] || "open")}</a>` : "";
-  // nets of the clicked footprint (PCB only)
+  // nets of the clicked footprint (PCB only), each a button that highlights the net (scripts/viewer-tools.js)
   let nets = "";
   try {
-    if (item.pads) nets = [...new Set([...item.pads.values()].map(pad => pad.net && pad.net.name).filter(Boolean))].slice(0, 8).join(", ");
+    if (item.pads) {
+      const seen = new Map();
+      for (const pad of item.pads.values()) if (pad.net && pad.net.name && pad.net.number > 0) seen.set(pad.net.number, pad.net.name);
+      const all = [...seen].sort((a, b) => (+a[1].startsWith("unconnected-") - +b[1].startsWith("unconnected-")) || a[1].localeCompare(b[1]));
+      nets = all.slice(0, 12).map(([n, name]) => `<button type="button" class="netbtn" data-net="${n}" title="Highlight this net on the board">${esc(name)}</button>`).join(" ") +
+        (all.length > 12 ? ` <span class="muted">+${all.length - 12} more: search them under Nets</span>` : "");
+    }
   } catch (e) {}
   const offers = (p.offers || []).map(o => `<div class="offer"><span><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.supplier)}</a>` +
       ` <span class="sub mono">${esc(o.sku)}</span></span><b>${money(o.price, p.currency, 4)}</b>` +
       `<span class="sub ${o.stock < 1 ? "short" : ""}">${o.stock.toLocaleString()} in stock</span><span class="sub">min ${o.moq}</span></div>`).join("");
   box.innerHTML = `<h3>Selected</h3><div class="sel-ref">${esc(ref)} <span class="mono muted" style="font-size:14px;font-weight:500">${esc(p.mpn || p.lcsc || "")}</span></div>` +
     `<div class="sel-val">${esc(p.value || item.value || "")}${p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
-    kv("Footprint", esc(p.footprint)) + kv("Nets", esc(nets)) + kv("Manufacturer", esc(p.manufacturer)) + kv("MPN", esc(p.mpn)) +
+    kv("Footprint", esc(p.footprint)) + kv("Nets", nets) + kv("Manufacturer", esc(p.manufacturer)) + kv("MPN", esc(p.mpn)) +
     kv("LCSC", esc(p.lcsc)) + kv("Voltage", esc(p.voltage)) + kv("Datasheet", ds) +
     (offers ? `<h3 style="margin-top:12px">Suppliers · unit price</h3>${offers}<div class="kv"><span></span><a href="#sourcing">compare all</a></div>` : "") +
     (!D.parts[ref] ? `<div class="muted">Not in the BOM.</div>` : "");
