@@ -68,6 +68,17 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
   const [name, ...rest] = item.split("=");
   await open(rest.join("="), 10000);
   await page.screenshot({ path: `${OUT}/extra-${name}.png`, fullPage: true });
+  if (name === "activity") {  // interactions: select a commit, hover a feed item, then a phone
+    await page.locator(".row[data-s]").nth(3).click();
+    await page.locator(".feed li[data-e]").nth(2).hover();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUT}/extra-${name}-selected.png` });
+    await page.check("#f-main");  // a filter, to exercise the redraw
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${OUT}/extra-${name}-phone.png`, fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
 }
 
 const fs = await import("node:fs");

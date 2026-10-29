@@ -58,8 +58,8 @@
   .scroll { overflow: auto; max-height: min(78vh, 900px); }
 
   /* graph table */
-  .tbl { min-width: 680px; --gw: 80px; }
-  .row { display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) 150px 112px 64px; height: 28px; line-height: 28px;
+  .tbl { min-width: 720px; --gw: 80px; }
+  .row { display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) 176px 136px 68px; height: 28px; line-height: 28px;
          align-items: center; border-bottom: 1px solid transparent; cursor: pointer; }
   .row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
   .row.head { position: sticky; top: 0; z-index: 3; background: var(--soft); border-bottom: 1px solid var(--line); cursor: default;
@@ -350,7 +350,7 @@ function renderFeed() {
   });
   evBy = new Map();
   for (const e of A.events) for (const s of relOf(e)) { if (!evBy.has(s)) evBy.set(s, []); evBy.get(s).push(e.id); }
-  $("feed").innerHTML = evs.length ? evs.map(e => `<li tabindex="0" data-e="${e.id}" aria-label="${esc(e.type)}">${avatar(e.who || "?", 24)}<div>` +
+  $("feed").innerHTML = evs.length ? evs.map(e => `<li tabindex="0" data-e="${e.id}" aria-label="${esc(e.type)}">${e.who ? avatar(e.who, 24) : "<span></span>"}<div>` +
       `<div class="what">${feedText(e)}</div>${e.text ? `<div class="quote">${esc(e.text)}</div>` : ""}<div class="t" title="${esc(utc(e.at))} UTC">${esc(ago(e.at))}</div></div></li>`).join("")
     : `<li class="empty" style="display:block;cursor:default">No activity matches the filters.</li>`;
   feedEls = new Map();
