@@ -38,8 +38,9 @@ On every push and pull request of a KiCad project, the action:
 - **Reports** all of the above in the job summary and as **one comment on the PR**,
   updated on every push.
 - **Builds every design variant** (KiCad 10 variants, read from the project): the
-  report lists what each one fits, leaves out or changes, and the fab package gets
-  a BOM and pick & place per variant.
+  report lists what each one fits, leaves out or changes, warns when a variant
+  changes a value but keeps the part number, diffs each variant in pull requests,
+  and the fab package gets a BOM and pick & place per variant.
 - **Shows before/after images** of the schematic sheets and PCB layers changed in a
   pull request, right in the PR comment: removed in red, added in green, each
   changed area boxed.

@@ -97,18 +97,26 @@ head = load_bom(args.bom) or {}
 base = load_bom(args.base_bom)
 compare = [c for c in (next(iter(head.values())).keys() if head else []) if c != "Reference"]
 
+
+
+def bom_diff(old, new):
+    """Parts added and removed, and [ref, value, field changes] for the ones in both."""
+    added = sorted(set(new) - set(old), key=ref_key)
+    removed = sorted(set(old) - set(new), key=ref_key)
+    changed = []
+    for ref in sorted(set(new) & set(old), key=ref_key):
+        diffs = [f"{c}: {cell(old[ref].get(c))} → {cell(new[ref].get(c))}"
+                 for c in compare if (old[ref].get(c) or "").strip() != (new[ref].get(c) or "").strip()]
+        if diffs:
+            changed.append([ref, cell(new[ref].get("Value")), "<br>".join(diffs)])
+    return added, removed, changed
+
+
 md.append(f"### BOM changes vs `{args.base_ref}`" if base is not None else "### BOM changes")
 if base is None:
     md += ["_Not a pull request (or no base schematic): nothing to compare._", ""]
 else:
-    added = sorted(set(head) - set(base), key=ref_key)
-    removed = sorted(set(base) - set(head), key=ref_key)
-    changed = []
-    for ref in sorted(set(head) & set(base), key=ref_key):
-        diffs = [f"{c}: {cell(base[ref].get(c))} → {cell(head[ref].get(c))}"
-                 for c in compare if (base[ref].get(c) or "").strip() != (head[ref].get(c) or "").strip()]
-        if diffs:
-            changed.append([ref, cell(head[ref].get("Value")), "<br>".join(diffs)])
+    added, removed, changed = bom_diff(base, head)
     counts.update(bom_added=len(added), bom_removed=len(removed), bom_changed=len(changed))
     if not (added or removed or changed):
         md += ["No BOM changes.", ""]
@@ -149,7 +157,7 @@ if args.visual and os.path.exists(args.visual):
 variants = json.load(open(args.variants, encoding="utf-8")) if args.variants and os.path.exists(args.variants) else []
 if variants:
     md += ["### Variants", ""]
-    rows = []
+    rows, mismatched, pr_rows = [], [], []
     for v in variants:
         vb = load_bom(v["bom"]) or {}
         not_fitted, fitted, changes = [], [], []
@@ -162,13 +170,35 @@ if variants:
             changes += [f"{ref} {c}: {cell(head[ref].get(c))} → {cell(vb[ref].get(c))}"
                         for c in compare if c != "DNP"
                         and (head[ref].get(c) or "").strip() != (vb[ref].get(c) or "").strip()]
+            # a new value with the same part number orders the old part
+            old_v, new_v = (head[ref].get("Value") or "").strip(), (vb[ref].get("Value") or "").strip()
+            if old_v != new_v:
+                same = [c for c in ("MPN", "LCSC") if not blank(vb[ref].get(c))
+                        and (vb[ref].get(c) or "").strip() == (head[ref].get(c) or "").strip()]
+                if same:
+                    mismatched.append(f"{v['name']} · {ref}: Value {cell(old_v)} → {cell(new_v)}, but "
+                                      + " and ".join(f"{c} {vb[ref][c].strip()}" for c in same)
+                                      + " unchanged (it is still the part for " + cell(old_v) + ")")
+        if v.get("base_bom") and os.path.exists(v["base_bom"]):
+            a, r, ch = bom_diff(load_bom(v["base_bom"]) or {}, vb)
+            if a or r or ch:
+                pr_rows.append([f"**{v['name']}**", ", ".join(a) or "—", ", ".join(r) or "—",
+                                "<br>".join(f"{c[0]}: {c[2]}" for c in ch) or "—"])
         n_fit = sum(1 for r in vb.values() if blank(r.get("DNP")))
         rows.append([f"**{v['name']}**", cell(v.get("description")), str(n_fit),
                      ", ".join(not_fitted) or "—", ", ".join(fitted) or "—", "<br>".join(changes) or "—"])
     md += [table(["Variant", "Description", "Fitted parts", "Not fitted (vs. default)",
                   "Fitted only here", "Changed fields"], rows), "",
            "Each variant has its own BOM and pick & place in the fab package (`assembly/<variant>/`).", ""]
-    counts["variants"] = len(variants)
+    if mismatched:
+        md += ["**Check the variants:**", ""] + [f"- ⚠️ {m}" for m in mismatched[:MAX_ROWS]] + [""]
+    if base is not None:
+        if pr_rows:
+            md += [f"**Variant BOM changes vs `{args.base_ref}`**", "",
+                   table(["Variant", "Added", "Removed", "Changed"], pr_rows), ""]
+        else:
+            md += [f"No variant BOM changes vs `{args.base_ref}`.", ""]
+    counts.update(variants=len(variants), variant_mismatches=len(mismatched), variant_bom_changes=len(pr_rows))
 
 # --- Design to finish ------------------------------------------------------------
 # Parts still to annotate (KiBot can't load a schematic with them) and values still

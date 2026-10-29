@@ -236,6 +236,18 @@ runs:
           if git fetch --no-tags --depth=1 origin "$BASE_SHA" && git worktree add --detach "$base_dir" FETCH_HEAD; then
             if [ -f "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" ]; then
               bom "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts-base.csv"
+              # each variant as it is on the base too, when the base already has it
+              base_pro="$base_dir/$PROJECT_DIR/$NAME.kicad_pro"
+              while IFS=$'\t' read -r v safe; do
+                [ -n "$v" ] || continue
+                jq -e --arg v "$v" '.schematic.variants[]? | select(.name == $v)' "$base_pro" > /dev/null 2>&1 || continue
+                bbom="$OUT/reports/bom-parts-variant-$safe-base.csv"
+                kicad sch export bom --variant "$v" --fields "$fields" --labels "$labels" \
+                  --group-by "" --ref-range-delimiter "" -o "$bbom" "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" || continue
+                virtual "$bbom"
+                jq --arg n "$v" --arg b "$bbom" 'map(if .name == $n then . + {base_bom: $b} else . end)' \
+                  "$OUT/reports/variants.json" > "$OUT/reports/v.tmp" && mv "$OUT/reports/v.tmp" "$OUT/reports/variants.json"
+              done < <(jq -r '.[] | [.name, .dir] | @tsv' "$OUT/reports/variants.json")
             else
               # board is new in this PR: every part counts as added
               head -n 1 "$OUT/reports/bom-parts.csv" > "$OUT/reports/bom-parts-base.csv"
