@@ -53,6 +53,51 @@ def first(pattern):
     return found[0] if found else None
 
 
+def part_info(out, site):
+    """Reference -> what the side panel shows when the part is clicked in the viewer."""
+    import csv
+    parts = {}
+    bom = os.path.join(out, "reports", "bom-parts.csv")
+    if not os.path.exists(bom):
+        return parts
+    with open(bom, newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            if not r.get("Reference"):
+                continue
+            parts[r["Reference"]] = {k: v for k, v in {
+                "value": r.get("Value"), "footprint": (r.get("Footprint") or "").split(":")[-1],
+                "mpn": r.get("MPN"), "manufacturer": r.get("Manufacturer"), "lcsc": r.get("LCSC"),
+                "voltage": r.get("Voltage"), "dnp": bool((r.get("DNP") or "").strip())}.items() if v not in ("", None, "~")}
+    ds_path = os.path.join(out, "reports", "datasheets.json")
+    if os.path.exists(ds_path):
+        for ref, d in json.load(open(ds_path, encoding="utf-8")).items():
+            if ref not in parts:
+                continue
+            local = d.get("local") or (d.get("target") if d.get("source") in ("file", "folder") else "")
+            if local and os.path.exists(os.path.join(site, "datasheets", os.path.basename(local))):
+                parts[ref]["datasheet"] = "datasheets/" + os.path.basename(local)
+            elif d.get("source") == "url":
+                parts[ref]["datasheet"] = d.get("target")
+    src_path = os.path.join(out, "reports", "sourcing.json")
+    if os.path.exists(src_path):
+        s = json.load(open(src_path, encoding="utf-8"))
+        for line in s.get("lines", []):
+            refs = line.get("refs", {}).get("default") or []
+            offers = []
+            for o in line.get("offers", []):
+                if not o.get("ladders"):
+                    continue
+                price = next((p for q, p in reversed(o["ladders"]) if len(refs) >= q), o["ladders"][0][1])
+                offers.append({"supplier": o["supplier"], "sku": o["sku"], "stock": o["stock"],
+                               "moq": o["moq"], "price": price, "url": o.get("url", "")})
+            offers.sort(key=lambda o: (o["stock"] < len(refs), o["price"]))
+            for ref in refs:
+                if ref in parts:
+                    parts[ref]["offers"] = offers[:4]
+                    parts[ref]["currency"] = s["currency"]
+    return parts
+
+
 def build():
     site, out = args.site, args.out
     os.makedirs(site, exist_ok=True)
@@ -124,11 +169,12 @@ def build():
             n = s["batches"][0]
             cost = {"boards": n, "total": totals.get(str(n)), "currency": s["currency"]}
 
+    parts = part_info(out, site)
     info = {"mode": "build", "name": args.name, "rev": args.rev, "label": args.label, "kind": args.kind,
             "sha": args.sha, "repo": args.repo, "server": args.server, "run_url": args.run_url,
             "title": args.title, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sheets": [f"design/{s}" for s in sheets], "pcb": pcb, "views": views, "downloads": downloads,
-            "report": md, "counts": counts, "cost": cost}
+            "report": md, "counts": counts, "cost": cost, "parts": parts}
     page(info, os.path.join(site, "index.html"))
     summary = {k: info[k] for k in ("name", "rev", "label", "kind", "sha", "date", "title", "counts", "cost")}
     with open(os.path.join(site, "build.json"), "w", encoding="utf-8") as f:

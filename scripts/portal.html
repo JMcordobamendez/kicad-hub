@@ -8,13 +8,14 @@
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
   :root {
-    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
-    --accent: #0969da; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+    --bg: #f6f8fa; --card: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --brand: #e8622c; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+    --bar: #1c2128; --bar-fg: #e6edf3; --bar-muted: #9198a1;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #151b23;
-      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149;
+      --bg: #0d1117; --card: #151b23; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #1c2128;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --bar: #010409;
     }
   }
   * { box-sizing: border-box; }
@@ -22,37 +23,76 @@
   body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
          display: flex; flex-direction: column; }
   a { color: var(--accent); }
-  header { padding: 14px 16px 0; border-bottom: 1px solid var(--line); }
-  .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
-  h1 { font-size: 20px; margin: 0; }
-  .meta { color: var(--muted); font-size: 13px; }
-  .badge { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; }
-  .chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); }
-  .chip.ok { color: var(--good); border-color: var(--good); }
-  .chip.warn { color: var(--warn); border-color: var(--warn); }
-  .chip.bad { color: var(--bad); border-color: var(--bad); }
-  nav { display: flex; gap: 2px; overflow-x: auto; margin-top: 10px; }
-  nav a { padding: 8px 12px; text-decoration: none; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
-  nav a.on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
-  main { flex: 1; min-height: 0; display: flex; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+
+  /* top bar */
+  .bar { background: var(--bar); color: var(--bar-fg); display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+         padding: 10px 20px; }
+  .logo { width: 30px; height: 30px; border-radius: 7px; background: var(--brand); color: #fff; font-weight: 700;
+          display: grid; place-items: center; font-size: 13px; flex: none; text-decoration: none; }
+  .crumb { font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .crumb a { color: var(--bar-fg); text-decoration: none; }
+  .crumb .sep { color: var(--bar-muted); font-weight: 400; }
+  .pill { font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 10px; background: #30363d; color: var(--bar-fg); }
+  .bar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--bar-muted); font-size: 13px; }
+  .bar .right a { color: var(--bar-muted); }
+  .status { font-size: 13px; font-weight: 600; padding: 3px 12px; border-radius: 12px; color: #fff; }
+  .status.ok { background: #1f883d; } .status.bad { background: #cf222e; } .status.none { background: #57606a; }
+
+  /* tabs */
+  nav { background: var(--card); border-bottom: 1px solid var(--line); display: flex; gap: 4px; padding: 0 20px; overflow-x: auto; }
+  nav a { padding: 11px 14px; text-decoration: none; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav a.on { color: var(--fg); border-bottom-color: var(--brand); font-weight: 600; }
+
+  main { flex: 1; min-height: 0; padding: 16px 20px; display: flex; }
   section { flex: 1; min-height: 0; display: none; }
-  section.on { display: flex; flex-direction: column; }
-  kicanvas-embed, iframe { flex: 1; width: 100%; min-height: 70vh; border: 0; display: block; }
-  .doc { overflow: auto; padding: 16px; max-width: 1100px; width: 100%; margin: 0 auto; }
+  section.on { display: flex; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; width: 100%; min-height: 0; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } main { padding: 12px 16px; } }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .viewer { display: flex; flex-direction: column; min-height: 72vh; }
+  .vbar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .vbar .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 4px 12px; border-radius: 6px;
+         cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); }
+  kicanvas-embed { flex: 1; width: 100%; min-height: 60vh; display: block; }
+  iframe.full { flex: 1; width: 100%; min-height: 75vh; border: 0; background: #fff; border-radius: 10px; }
+
+  aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .side { padding: 14px 16px; }
+  .side h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .sel-ref { font-size: 20px; font-weight: 700; }
+  .sel-val { color: var(--muted); margin-bottom: 6px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .kv span:first-child { color: var(--muted); flex: none; }
+  .kv span:last-child { text-align: right; overflow-wrap: anywhere; }
+  .offer { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .offer .sub { color: var(--muted); font-size: 12px; }
+  .offer .short { color: var(--bad); }
+  .muted { color: var(--muted); }
+  .chk { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .chk b.ok { color: var(--good); } .chk b.bad { color: var(--bad); } .chk b.warn { color: var(--warn); }
+
+  .doc { overflow: auto; padding: 18px 22px; width: 100%; max-width: 1100px; margin: 0 auto; }
   .doc table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
   .doc th, .doc td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
   .doc th { background: var(--soft); }
   .doc img { max-width: 100%; }
-  .doc details { margin: 6px 0; }
-  .empty { color: var(--muted); padding: 32px 16px; }
   ul.files { list-style: none; padding: 0; margin: 0; }
-  ul.files li { padding: 10px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; }
+  ul.files li { padding: 8px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+  ul.files li:first-child { border-top: 0; }
   .list { width: 100%; border-collapse: collapse; }
-  .list td, .list th { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-  .list th { color: var(--muted); font-weight: 600; font-size: 12px; }
-  h2 { font-size: 15px; margin: 22px 0 6px; }
-  footer { color: var(--muted); font-size: 12px; padding: 8px 16px; border-top: 1px solid var(--line); }
+  .list td, .list th { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .list th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--soft); }
+  h2 { font-size: 15px; margin: 4px 0 10px; }
+  .group { margin-bottom: 18px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+  .chip.ok { color: var(--good); border-color: var(--good); } .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
 </style>
 </head>
 <body>
@@ -64,63 +104,91 @@
 const D = /*KICAD_HUB_DATA*/null;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const repoUrl = `${D.server}/${D.repo}`;
-const money = (v, cur) => new Intl.NumberFormat(undefined, {style: "currency", currency: cur}).format(v);
+const repoName = D.repo.split("/")[1];
+const money = (v, cur, max = 2) => new Intl.NumberFormat(undefined, {style: "currency", currency: cur, maximumFractionDigits: max}).format(v);
 const size = n => n == null ? "" : n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
 
+function status(c) {
+  if (c.erc_errors == null && c.drc_errors == null) return `<span class="status none">no checks</span>`;
+  const n = (c.erc_errors || 0) + (c.drc_errors || 0);
+  return n ? `<span class="status bad">✕ ${n} check error${n > 1 ? "s" : ""}</span>` : `<span class="status ok">✓ checks passed</span>`;
+}
 function chips(c, cost) {
-  const out = [];
-  const add = (label, v, warnAt) => { if (v == null) return;
-    out.push(`<span class="chip ${v === 0 ? "ok" : warnAt ? "warn" : "bad"}">${label}: ${v}</span>`); };
-  add("ERC errors", c.erc_errors); add("DRC errors", c.drc_errors);
-  add("Missing fields", c.missing_fields, true);
-  if (c.visual_changes != null) out.push(`<span class="chip">Visual changes: ${c.visual_changes}</span>`);
-  if (cost && cost.total != null) out.push(`<span class="chip">Parts for ${cost.boards} board${cost.boards > 1 ? "s" : ""}: ${money(cost.total, cost.currency)}</span>`);
+  const out = [], add = (l, v, soft) => { if (v != null) out.push(`<span class="chip ${v === 0 ? "ok" : soft ? "warn" : "bad"}">${l} ${v}</span>`); };
+  add("ERC", c.erc_errors); add("DRC", c.drc_errors); add("missing fields", c.missing_fields, true);
+  if (cost && cost.total != null) out.push(`<span class="chip">${money(cost.total, cost.currency)} / ${cost.boards} board${cost.boards > 1 ? "s" : ""}</span>`);
   return out.join("");
 }
+function topbar(crumbs, right) {
+  return `<div class="bar"><a class="logo" href="${D.mode === "index" ? "." : D.home}" title="All builds">kh</a>` +
+    `<div class="crumb">${crumbs}</div><div class="right">${right}</div></div>`;
+}
 
+/* ---------- one build ---------- */
 function buildPage() {
+  D.home = D.kind === "release" ? "../../" : "../";
   document.title = `${D.name}${D.rev ? " rev " + D.rev : ""} · ${D.label}`;
-  const commit = `<a href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a>`;
+  const c = D.counts || {};
+  const where = D.kind === "pr" ? `pull request <b>#${esc(D.label.replace(/^PR #/, ""))}</b>` : D.kind === "release" ? `release <b>${esc(D.label)}</b>` : `branch <b class="mono">${esc(D.label)}</b>`;
+  document.getElementById("head").innerHTML = topbar(
+    `<a href="${D.home}">${esc(repoName)}</a><span class="sep">/</span><span>${esc(D.name)}</span>` +
+      (D.rev ? `<span class="pill">rev ${esc(D.rev)}</span>` : ""),
+    `<span>${where} · commit <a class="mono" href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a></span>${status(c)}`) +
+    `<nav id="tabs"></nav>`;
+
   const tabs = [];
   if (D.sheets.length) tabs.push(["schematic", "Schematic"]);
   if (D.pcb) tabs.push(["pcb", "PCB"]);
   if (D.views.ibom) tabs.push(["ibom", "Interactive BOM"]);
-  tabs.push(["report", "Report"]);
   if (D.views.bom) tabs.push(["bom", "BOM"]);
   if (D.views.sourcing) tabs.push(["sourcing", "Suppliers"]);
+  tabs.push(["report", "Report"]);
   if (D.views.datasheets) tabs.push(["datasheets", "Datasheets"]);
   tabs.push(["downloads", "Downloads"]);
-  document.getElementById("head").innerHTML =
-    `<div class="top"><h1>${esc(D.name)}</h1><span class="badge">${esc(D.label)}</span>` +
-    `${D.rev ? `<span class="meta">rev ${esc(D.rev)}</span>` : ""}` +
-    `<span class="meta">${commit} · ${esc(D.date)}${D.title ? " · " + esc(D.title) : ""}</span>` +
-    `<span class="meta"><a href="../${D.kind === "release" ? "../" : ""}">all builds</a>` +
-    `${D.run_url ? ` · <a href="${esc(D.run_url)}">CI run</a>` : ""}</span></div>` +
-    `<div class="chips">${chips(D.counts || {}, D.cost)}</div>` +
-    `<nav>${tabs.map(([id, t]) => `<a href="#${id}" data-tab="${id}">${t}</a>`).join("")}</nav>`;
+  document.getElementById("tabs").innerHTML = tabs.map(([id, t]) => `<a href="#${id}" data-tab="${id}">${t}</a>`).join("");
 
-  const frame = src => `<iframe src="${esc(src)}" loading="lazy" title="${esc(src)}"></iframe>`;
-  const S = {
-    schematic: `<kicanvas-embed controls="full">${D.sheets.map(s => `<kicanvas-source src="${esc(s)}"></kicanvas-source>`).join("")}</kicanvas-embed>`,
-    pcb: D.pcb ? `<kicanvas-embed src="${esc(D.pcb)}" controls="full"></kicanvas-embed>` : "",
-    ibom: D.views.ibom ? frame(D.views.ibom) : "",
-    report: `<div class="doc" id="report-doc"></div>`,
-    bom: D.views.bom ? frame(D.views.bom) : "",
-    sourcing: D.views.sourcing ? frame(D.views.sourcing) : "",
-    datasheets: D.views.datasheets ? frame(D.views.datasheets + "/index.html") : "",
-    downloads: `<div class="doc"><ul class="files">${D.downloads.map(f =>
-      `<li><a href="${esc(f.file)}" download>${esc(f.label)}</a><span class="meta">${esc(f.file)} ${size(f.size)}</span></li>`).join("")}` +
-      `<li><a href="${repoUrl}/tree/${esc(D.sha)}">Source files at this commit</a><span class="meta">GitHub</span></li></ul></div>`,
+  const downloads = `<ul class="files">${D.downloads.map(f =>
+      `<li><span>${esc(f.label.split(" (")[0])}</span><a href="${esc(f.file)}" download>${esc(f.file.split(".").pop())}</a></li>`).join("")}` +
+    (D.views.ibom ? `<li><span>Interactive BOM</span><a href="#ibom">open</a></li>` : "") + `</ul>`;
+  const checks = () => {
+    const row = (l, v, soft) => v == null ? "" : `<div class="chk"><span>${l}</span><b class="${v === 0 ? "ok" : soft ? "warn" : "bad"}">${v}</b></div>`;
+    return row("ERC errors", c.erc_errors) + row("DRC errors", c.drc_errors) + row("Parts missing fields", c.missing_fields, true) +
+      (c.visual_changes != null ? `<div class="chk"><span>Pages changed vs. base</span><b>${c.visual_changes}</b></div>` : "") +
+      (D.cost && D.cost.total != null ? `<div class="chk"><span>Parts for ${D.cost.boards} board${D.cost.boards > 1 ? "s" : ""}</span><b>${money(D.cost.total, D.cost.currency)}</b></div>` : "") +
+      `<div class="chk"><span>Full report</span><a href="#report">open</a></div>`;
   };
-  // only build a tab's content when it's first opened (iframes and viewers are heavy)
+  const side = kind => `<aside>
+      <div class="card side" id="sel-${kind}"><h3>Selected</h3><div class="muted">Click a ${kind === "pcb" ? "footprint" : "symbol"} to see its part, datasheet and suppliers.</div></div>
+      <div class="card side"><h3>Checks</h3>${checks()}</div>
+      <div class="card side"><h3>Downloads</h3>${downloads}</div></aside>`;
+  const viewer = (kind, inner, buttons) => `<div class="split"><div class="card viewer">
+      <div class="vbar">${buttons}<span class="hint">scroll to zoom · drag to pan · click a part to inspect · KiCanvas</span></div>
+      ${inner}</div>${side(kind)}</div>`;
+  const frame = src => `<iframe class="full card" src="${esc(src)}" loading="lazy" title="${esc(src)}"></iframe>`;
+
+  const S = {
+    schematic: () => viewer("sch", `<kicanvas-embed id="kc-sch" controls="basic">${D.sheets.map(s => `<kicanvas-source src="${esc(s)}"></kicanvas-source>`).join("")}</kicanvas-embed>`,
+      `<button class="btn" data-fit="sch-page">Whole sheet</button><button class="btn" data-fit="sch-sel">Zoom to selection</button>`),
+    pcb: () => viewer("pcb", `<kicanvas-embed id="kc-pcb" src="${esc(D.pcb)}" controls="basic"></kicanvas-embed>`,
+      `<button class="btn" data-fit="pcb-board">Board</button><button class="btn" data-fit="pcb-page">Whole page</button><button class="btn" data-fit="pcb-sel">Zoom to selection</button>`),
+    ibom: () => frame(D.views.ibom),
+    bom: () => frame(D.views.bom),
+    sourcing: () => frame(D.views.sourcing),
+    datasheets: () => frame(D.views.datasheets + "/index.html"),
+    report: () => `<div class="card doc">${window.marked ? marked.parse(D.report || "_No report._") : `<pre>${esc(D.report)}</pre>`}</div>`,
+    downloads: () => `<div class="card doc"><h2>Downloads</h2><ul class="files">${D.downloads.map(f =>
+        `<li><a href="${esc(f.file)}" download>${esc(f.label)}</a><span class="muted">${esc(f.file)} · ${size(f.size)}</span></li>`).join("")}` +
+      `<li><a href="${repoUrl}/tree/${esc(D.sha)}">Source files at this commit</a><span class="muted">GitHub</span></li></ul>` +
+      (D.run_url ? `<p class="muted">Built by <a href="${esc(D.run_url)}">this CI run</a> on ${esc(D.date)}.</p>` : "") + `</div>`,
+  };
   document.getElementById("main").innerHTML = tabs.map(([id]) => `<section id="s-${id}"></section>`).join("");
   const done = new Set();
   function show() {
-    const id = (location.hash.slice(1) && S[location.hash.slice(1)] !== undefined) ? location.hash.slice(1) : tabs[0][0];
+    const want = location.hash.slice(1);
+    const id = S[want] ? want : tabs[0][0];
     if (!done.has(id)) {
-      document.getElementById("s-" + id).innerHTML = S[id];
-      if (id === "report") document.getElementById("report-doc").innerHTML =
-        window.marked ? marked.parse(D.report || "_No report._") : `<pre>${esc(D.report)}</pre>`;
+      document.getElementById("s-" + id).innerHTML = S[id]();
+      if (id === "schematic" || id === "pcb") hook(id === "pcb" ? "pcb" : "sch");
       done.add(id);
     }
     document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "s-" + id));
@@ -130,26 +198,74 @@ function buildPage() {
   show();
 }
 
+/* KiCanvas keeps its viewer inside shadow DOM: find it to zoom and to follow selections */
+function findViewer(root) {
+  for (const el of root.querySelectorAll("*")) {
+    if ((el.localName === "kc-board-viewer" || el.localName === "kc-schematic-viewer") && el.viewer) return el.viewer;
+    if (el.shadowRoot) { const v = findViewer(el.shadowRoot); if (v) return v; }
+  }
+  return null;
+}
+const viewers = {};
+function hook(kind) {
+  const embed = document.getElementById("kc-" + kind);
+  let tries = 0, last = null;
+  const timer = setInterval(() => {
+    const v = embed && findViewer(embed.shadowRoot || embed);
+    if (v && v !== last && v.document) {
+      last = v; viewers[kind] = v;
+      v.addEventListener("kicanvas:select", e => showPart(kind, e.detail && e.detail.item));
+      if (kind === "pcb") setTimeout(() => { try { v.zoom_to_board(); v.draw(); } catch (e) {} }, 150);
+    }
+    // the schematic viewer is replaced when another sheet is opened: keep watching it
+    if (++tries > 600 || (kind === "pcb" && last)) clearInterval(timer);
+  }, 300);
+}
+document.addEventListener("click", e => {
+  const f = e.target.dataset && e.target.dataset.fit; if (!f) return;
+  const [kind, what] = f.split("-"), v = viewers[kind]; if (!v) return;
+  try { what === "board" ? v.zoom_to_board() : what === "page" ? v.zoom_to_page() : v.zoom_to_selection(); v.draw(); } catch (err) {}
+});
+
+function showPart(kind, item) {
+  const box = document.getElementById("sel-" + kind); if (!box) return;
+  const ref = item && item.reference;
+  if (!ref || ref === "?") { box.innerHTML = `<h3>Selected</h3><div class="muted">Nothing selected.</div>`; return; }
+  const p = D.parts[ref] || {};
+  const kv = (k, v) => v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : "";
+  const ds = p.datasheet ? `<a href="${esc(p.datasheet)}" target="_blank" rel="noopener">${esc(p.datasheet.split("/").pop().split("?")[0] || "open")}</a>` : "";
+  const offers = (p.offers || []).map(o => `<div class="offer"><span><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.supplier)}</a>` +
+      ` <span class="sub mono">${esc(o.sku)}</span></span><b>${money(o.price, p.currency, 4)}</b>` +
+      `<span class="sub ${o.stock < 1 ? "short" : ""}">${o.stock.toLocaleString()} in stock</span><span class="sub">min ${o.moq}</span></div>`).join("");
+  box.innerHTML = `<h3>Selected</h3><div class="sel-ref">${esc(ref)} <span class="mono muted" style="font-size:14px;font-weight:500">${esc(p.mpn || p.lcsc || "")}</span></div>` +
+    `<div class="sel-val">${esc(p.value || item.value || "")}${p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
+    kv("Footprint", esc(p.footprint)) + kv("Manufacturer", esc(p.manufacturer)) + kv("MPN", esc(p.mpn)) + kv("LCSC", esc(p.lcsc)) +
+    kv("Voltage", esc(p.voltage)) + kv("Datasheet", ds) +
+    (offers ? `<h3 style="margin-top:12px">Suppliers · unit price</h3>${offers}<div class="kv"><span></span><a href="#sourcing">compare all</a></div>` : "") +
+    (!D.parts[ref] ? `<div class="muted">Not in the BOM.</div>` : "");
+}
+
+/* ---------- front page ---------- */
 function indexPage() {
-  document.title = `${D.repo.split("/")[1]} · designs`;
-  document.getElementById("head").innerHTML = `<div class="top" style="padding-bottom:12px"><h1>${esc(D.repo.split("/")[1])}</h1>` +
-    `<span class="meta"><a href="${repoUrl}">${esc(D.repo)}</a> · KiCad designs</span></div>`;
-  document.getElementById("main").innerHTML = `<div class="doc"><p class="empty">Loading…</p></div>`;
+  document.title = `${repoName} · designs`;
+  document.getElementById("head").innerHTML = topbar(`<span>${esc(repoName)}</span><span class="pill">KiCad designs</span>`,
+    `<a href="${repoUrl}">${esc(D.repo)} on GitHub</a>`);
+  document.getElementById("main").innerHTML = `<div class="doc"><p class="muted">Loading…</p></div>`;
   // builds.json is rewritten on every publish and by the cleanup workflow
   fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
-  builds.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  const group = (kind, title) => {
-    const rows = builds.filter(b => b.kind === kind);
-    if (!rows.length) return "";
-    return `<h2>${title}</h2><table class="list"><tr><th>Build</th><th>Board</th><th>Commit</th><th>Updated</th><th>Checks</th></tr>` +
-      rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="meta">${esc(b.title)}</div>` : ""}</td>` +
-        `<td>${esc(b.name)}${b.rev ? ` <span class="meta">rev ${esc(b.rev)}</span>` : ""}</td>` +
-        `<td><a href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="meta">${esc(b.date)}</td>` +
-        `<td><div class="chips" style="margin:0">${chips(b.counts || {}, b.cost)}</div></td></tr>`).join("") + `</table>`;
-  };
-  document.getElementById("main").innerHTML = `<div class="doc">` +
-    (builds.length ? group("branch", "Branches") + group("release", "Releases") + group("pr", "Pull requests")
-                   : `<p class="empty">Nothing published yet.</p>`) + `</div>`;
+    builds.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const group = (kind, title) => {
+      const rows = builds.filter(b => b.kind === kind);
+      if (!rows.length) return "";
+      return `<div class="group"><h2>${title}</h2><div class="card"><table class="list"><tr><th>Build</th><th>Board</th><th>Commit</th><th>Updated</th><th>Checks</th></tr>` +
+        rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="muted">${esc(b.title)}</div>` : ""}</td>` +
+          `<td>${esc(b.name)}${b.rev ? ` <span class="muted">rev ${esc(b.rev)}</span>` : ""}</td>` +
+          `<td><a class="mono" href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="muted">${esc(b.date)}</td>` +
+          `<td><div class="chips">${chips(b.counts || {}, b.cost)}</div></td></tr>`).join("") + `</table></div></div>`;
+    };
+    document.getElementById("main").innerHTML = `<div class="doc">` +
+      (builds.length ? group("branch", "Branches") + group("release", "Releases") + group("pr", "Pull requests")
+                     : `<p class="muted">Nothing published yet.</p>`) + `</div>`;
   });
 }
 
