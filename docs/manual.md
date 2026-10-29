@@ -270,6 +270,14 @@ in the side panel.
   **click a layer's name to bring it to the front**.
 - **Selected** panel (click a footprint): reference, value, footprint, **nets** of its pads,
   the **datasheet** (local copy if found) and the best **supplier offers**.
+- **Nets**: click a net in the Selected panel, a track on the board, or search it in the
+  **Nets** card (type-ahead over every net). The net's tracks, vias, pads and zones are
+  highlighted and the rest dimmed; the card shows its pads, tracks (with length), vias and
+  zones. **Prev / Next pad** centres each pad in turn ("J3 pad B6 · 2 of 5", turning the
+  board for the other side); **Fit** frames the whole net; **Clear** or **Esc** ends it.
+- **Measure** (PCB and schematic): press **Measure**, click point A, then point B. The
+  distance and its dx / dy legs are drawn and shown in the toolbar (on the PCB, points snap
+  to a pad centre nearby). **Esc** clears. Measure and **Comment** are exclusive modes.
 - The viewer is [KiCanvas](https://kicanvas.org), still alpha: some KiCad features may not
   draw exactly as in KiCad.
 
