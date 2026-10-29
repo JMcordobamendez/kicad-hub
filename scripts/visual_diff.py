@@ -39,6 +39,8 @@ THRESHOLD = 48       # per-channel difference that counts as a change (ignores a
 CELL = 16            # px; changes closer than a few cells are boxed together
 MARGIN = 80          # px around the changed area in the cropped image
 PANEL_MAX = 900      # px; max width of each half of the before/after image
+PANEL_MIN = 700      # px; narrower crops are zoomed in
+MIN_CROP = {"sch": (500, 350), "pcb": (300, 210)}[args.kind]  # px around a single small change
 REMOVED, ADDED, BOX = (220, 30, 30), (0, 150, 60), (255, 140, 0)
 
 
@@ -145,7 +147,7 @@ def compare(stem, base_svg, head_svg, tmp):
     # Before | After, cropped to the changes
     x0, y0 = min(bx[0] for bx in bxs), min(bx[1] for bx in bxs)
     x1, y1 = max(bx[2] for bx in bxs), max(bx[3] for bx in bxs)
-    cw, ch = max(x1 - x0 + 2 * MARGIN, 500), max(y1 - y0 + 2 * MARGIN, 350)
+    cw, ch = max(x1 - x0 + 2 * MARGIN, MIN_CROP[0]), max(y1 - y0 + 2 * MARGIN, MIN_CROP[1])
     cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
     cx0, cy0 = min(max(cx - cw // 2, 0), max(w - cw, 0)), min(max(cy - ch // 2, 0), max(h - ch, 0))
     crop = (cx0, cy0, min(cx0 + cw, w), min(cy0 + ch, h))
@@ -159,8 +161,10 @@ def compare(stem, base_svg, head_svg, tmp):
         im = Image.fromarray(arr)
         draw_boxes(im, bxs)
         im = im.crop(crop)
-        if im.width > PANEL_MAX:
-            im = im.resize((PANEL_MAX, round(im.height * PANEL_MAX / im.width)), Image.LANCZOS)
+        # small changes are zoomed in (up to 3x), large crops scaled down
+        scale = min(PANEL_MAX / im.width, 3.0) if im.width < PANEL_MIN else min(PANEL_MAX / im.width, 1.0)
+        if scale != 1.0:
+            im = im.resize((round(im.width * scale), round(im.height * scale)), Image.LANCZOS)
         panels.append((im, label))
     pw, ph = panels[0][0].size
     bar, gap = 34, 12
