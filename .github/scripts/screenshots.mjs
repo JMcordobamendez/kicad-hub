@@ -71,7 +71,5 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
 }
 
 const fs = await import("node:fs");
-fs.writeFileSync(`${OUT}/console-errors.txt`, errors.join("
-") + "
-");
+fs.writeFileSync(`${OUT}/console-errors.txt`, errors.join("\n") + "\n");
 await browser.close();
