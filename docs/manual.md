@@ -358,6 +358,20 @@ By default each part uses the cheapest supplier with enough stock for the batch.
 
 From then on the totals use your picks; parts not listed stay automatic.
 
+**Target prices.** Add an optional `Target` column (unit price in the action's `currency`)
+to `kicad-hub-sourcing.csv`, or type it next to each part in `sourcing.html` before
+downloading the selection file. A row can carry only a target (`Part,,,Target`), with no
+supplier chosen:
+
+```csv
+Part,Supplier,SKU,Target
+C307331,,,0.005
+C96446,LCSC,C96446,0.05
+```
+
+The report then lists the parts whose price at each batch is above target ("Above target
+price": target, price used, supplier, +%), and `sourcing.html` marks those offers in red.
+
 ### 6.2 Variants
 
 KiCad 10 design variants are read from the project (input `variants`: `auto` = all,
@@ -380,7 +394,8 @@ Each entry has `id`, `text`, `check` and parameters:
 
 Checks: `erc_errors_max`, `drc_errors_max`, `max_parts`, `max_unique_parts`, `max_cost`,
 `in_stock`, `no_bad_lifecycle`, `max_layers`, `max_board_size`, `min_track`, `min_drill`,
-`required_fields`, `forbidden_parts` (parameters in the README). Result is **pass**, **fail**
+`required_fields`, `forbidden_parts`, `max_above_target` (parts above their target price;
+default max 0) — parameters in the README. Result is **pass**, **fail**
 or **unknown** (missing data: never fails the job). Failed requirements fail the job only
 with `strict: true`. No file = nothing checked.
 

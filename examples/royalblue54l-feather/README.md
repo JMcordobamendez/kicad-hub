@@ -65,3 +65,7 @@ Hardware files are released under CERN-OHL-V2-P.
 Modified by KiCad Project Feb 17, 2025
  - Removed Manufacturing files
  - Update README.md
+
+## kicad-hub
+
+`kicad-hub-sourcing.csv` sets target unit prices (USD) for four parts (`Part,Supplier,SKU,Target`, no supplier chosen). `C307331` has a target set far below its real price on purpose, so the report shows an "Above target price" table.

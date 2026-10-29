@@ -193,6 +193,22 @@ def in_stock(req):
     return verdict(True, f"all in stock at {n} boards")
 
 
+def max_above_target(req):
+    limit = number(req, "max", default=0)
+    n, b = build_totals(req) if req.get("batch") else (sourcing["batches"][-1] if sourcing else None, None)
+    if sourcing is None:
+        raise Unknown("no sourcing data (needs sourcing: true)")
+    if not sourcing.get("targets"):
+        raise Unknown("no target prices (add a Target column to kicad-hub-sourcing.csv)")
+    name = req.get("variant") or "default"
+    over = []
+    for line in sourcing["lines"]:
+        v = (line.get("vs_target") or {}).get(str(n))
+        if v and v["status"] == "above" and line["refs"].get(name):
+            over.append(f"{line['part']} (+{v['pct']:.1f}%)")
+    return verdict(len(over) <= limit, f"{len(over)} above target at {n} boards", "; ".join(over[:12]) or f"limit {limit}")
+
+
 BAD_LIFECYCLE = re.compile(r"obsolete|end of life|\beol\b|not recommended|nrnd|not for new|last time|"
                            r"no_longer_manufactured|discontinued", re.I)
 
@@ -289,6 +305,7 @@ CHECKS = {
     "max_unique_parts": (max_unique_parts, {"max", "variant"}),
     "max_cost": (max_cost, {"max", "batch", "variant"}),
     "in_stock": (in_stock, {"batch", "variant"}),
+    "max_above_target": (max_above_target, {"max", "batch", "variant"}),
     "no_bad_lifecycle": (no_bad_lifecycle, {"variant"}),
     "max_layers": (max_layers, {"max"}),
     "max_board_size": (max_board_size, {"width", "height"}),
