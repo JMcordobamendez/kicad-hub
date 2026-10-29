@@ -400,6 +400,21 @@ the batch. To choose yourself:
    the file stay automatic. It's a plain CSV (`Part,Supplier,SKU`, where `Part` is
    the MPN or the LCSC code), so it can also be edited by hand and reviewed in PRs.
 
+**Target price.** An optional fourth column, `Target`, is the unit price you want to
+pay for a part, in the `currency` input (`Part,Supplier,SKU,Target`). A row may carry
+only `Part` and `Target`, leaving `Supplier` and `SKU` empty: no choice, just a
+target. Files without the column keep working. In `sourcing.html` type the target
+next to a part; offers above it turn red, and **Download selection file** writes
+the column. The report's *Cost and stock* section then lists an **Above target
+price** table (part, references, target, unit price of the offer used at the
+largest batch, supplier, percentage over) and `above_target` is added to the
+counts; `reports/sourcing.csv` has a `Target` column and a `Vs target @n` column per
+batch, and `sourcing.json` a `vs_target` entry per part (`above`, `ok` or `no offer`).
+The example board has a [`kicad-hub-sourcing.csv`](examples/royalblue54l-feather/kicad-hub-sourcing.csv)
+with a few targets, one of them set too low on purpose so the warning shows.
+A `Target price` symbol field is not read: the BOM export only carries the fields
+listed in `required-fields`-style columns, so targets live in the CSV.
+
 ### Requirements
 
 Write down what the board has to meet and let CI check it. Put a
@@ -433,6 +448,7 @@ and a working one in [`examples/royalblue54l-feather/`](examples/royalblue54l-fe
 | `max_unique_parts` | `max`, `variant` | Distinct fitted parts ≤ `max` (same MPN or LCSC code, else same value and footprint, counts once) |
 | `max_cost` | `max`, `batch`, `variant` | Components cost per board at `batch` boards ≤ `max`, in the `currency` input. `batch` must be in the `boards` input. Unknown if some parts have no price and the priced ones are still within `max` |
 | `in_stock` | `batch`, `variant` | Every part has a supplier with stock for `batch` boards (the picked supplier if `kicad-hub-sourcing.csv` chooses one) |
+| `max_above_target` | `max` (default 0), `batch` (default: largest in `boards`), `variant` | Parts whose used offer costs more than their `Target` in `kicad-hub-sourcing.csv` ≤ `max`. Unknown without any target |
 | `no_bad_lifecycle` | `variant` | No part is obsolete / EOL / NRND at every supplier that reports its lifecycle |
 | `max_layers` | `max` | Copper layers ≤ `max` |
 | `max_board_size` | `width`, `height` (mm) | Board outline fits in `width` x `height`, either orientation |
@@ -442,7 +458,7 @@ and a working one in [`examples/royalblue54l-feather/`](examples/royalblue54l-fe
 | `forbidden_parts` | `pattern`, `variant` | No fitted part has an MPN or value matching the regex `pattern` (case-insensitive) |
 
 `variant` is the name of a design variant; leave it out for the default build.
-`max_cost`, `in_stock` and `no_bad_lifecycle` need `sourcing: true`.
+`max_cost`, `in_stock`, `max_above_target` and `no_bad_lifecycle` need `sourcing: true`.
 
 ### What you get
 

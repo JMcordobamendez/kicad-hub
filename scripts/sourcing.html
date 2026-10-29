@@ -50,6 +50,10 @@
   .best { color: var(--good); font-weight: 600; }
   .short { color: var(--bad); }
   .tag { font-size: 11px; color: var(--muted); }
+  .over { color: var(--bad); font-weight: 600; }
+  tr.offer.above td.unit { background: color-mix(in srgb, var(--bad) 18%, transparent); }
+  input.tg { width: 84px; font: inherit; padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px;
+             background: var(--bg); color: var(--fg); }
   .auto { color: var(--muted); font-style: italic; }
   a { color: var(--accent); }
   .warns { margin: 0 0 14px; padding-left: 18px; color: var(--warn); }
@@ -88,7 +92,7 @@
   <p class="help">
     Pick an offer per part, or leave it on <i>automatic</i> (cheapest with enough stock for the batch).
     <b>Download selection file</b> saves your picks as <code>kicad-hub-sourcing.csv</code>: put it next to the
-    <code>.kicad_pro</code> and commit it, and the next CI run uses it for the totals. Your picks are also kept in
+    <code>.kicad_pro</code> and commit it, and the next CI run uses it for the totals. Type a <b>target</b> unit price next to a part and offers above it turn red; targets go into the same file. Your picks are also kept in
     this browser until then.
   </p>
 </main>
@@ -105,6 +109,11 @@ let batch = DATA.batches.find(n => n > 1) || DATA.batches[0];
 let sel = {};  // line key -> offer index (manual); missing = automatic
 DATA.lines.forEach(l => { if (l.choice != null) sel[l.key] = l.choice; });
 try { Object.assign(sel, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
+let tg = {};  // line key -> target unit price; missing = none
+DATA.lines.forEach(l => { if (l.target != null) tg[l.key] = l.target; });
+const KEYT = KEY + ":target";
+try { Object.assign(tg, JSON.parse(localStorage.getItem(KEYT) || "{}")); } catch (e) {}
+const saveT = () => { try { localStorage.setItem(KEYT, JSON.stringify(tg)); } catch (e) {} };
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(sel)); } catch (e) {} };
 
 function order(o, need) {
@@ -157,22 +166,27 @@ function render() {
   for (const l of DATA.lines) {
     const q = qtyOf(l, build); if (!q) continue;
     const need = q * batch, chosen = pick(l, need), manual = l.key in sel && l.offers[sel[l.key]];
+    const target = tg[l.key], used = chosen == null ? null : order(l.offers[chosen], need).price;
+    const flag = target == null ? "" : used == null ? ` <span class="over">no offer to compare</span>` :
+      used > target ? ` <span class="over">above target ${fmt(used - target)} (+${(100 * (used - target) / target).toFixed(1)}%)</span>` :
+      ` <span class="best">within target</span>`;
     const costs = l.offers.map(o => order(o, need).total).filter(t => t != null);
     const best = costs.length ? Math.min(...costs) : null;
     rows.push(`<tr class="part"><td colspan="8"><b>${esc(l.part)}</b> ${esc(l.value)} · ${esc(l.footprint)} ` +
       `<span class="refs">· ${q} per board: ${esc(l.refs[build].join(", "))}</span> ` +
-      `<label class="tag"><input type="radio" name="${esc(l.key)}" data-k="${esc(l.key)}" data-i="" ${manual ? "" : "checked"}> automatic</label></td></tr>`);
+      `<label class="tag"><input type="radio" name="${esc(l.key)}" data-k="${esc(l.key)}" data-i="" ${manual ? "" : "checked"}> automatic</label> ` +
+      `<label class="tag">target <input class="tg" type="number" min="0" step="any" data-t="${esc(l.key)}" value="${target ?? ""}" placeholder="none"> ${DATA.currency}</label>${flag}</td></tr>`);
     if (!l.offers.length) rows.push(`<tr><td colspan="8" class="auto">Not found at any supplier</td></tr>`);
     l.offers.forEach((o, i) => {
       const r = order(o, need);
-      rows.push(`<tr class="offer ${i === chosen ? "picked" : ""}">` +
+      rows.push(`<tr class="offer ${i === chosen ? "picked" : ""} ${target != null && r.price != null && r.price > target ? "above" : ""}">` +
         `<td><label><input type="radio" name="${esc(l.key)}" data-k="${esc(l.key)}" data-i="${i}" ${manual && sel[l.key] === i ? "checked" : ""}>` +
         `${esc(o.supplier)}</label>${o.note ? `<div class="tag">${esc(o.note)}</div>` : ""}</td>` +
         `<td>${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.sku)}</a>` : esc(o.sku)}</td>` +
         `<td>${esc(o.mpn)}<div class="tag">${esc(o.brand)}${o.lifecycle ? " · " + esc(o.lifecycle) : ""}</div></td>` +
         `<td class="num ${o.stock < need ? "short" : ""}">${o.stock.toLocaleString()}</td>` +
         `<td class="num">${o.moq}${o.mult > 1 ? " / " + o.mult : ""}</td>` +
-        `<td class="num">${fmt(r.price)}</td><td class="num">${r.qty.toLocaleString()}</td>` +
+        `<td class="num unit">${fmt(r.price)}</td><td class="num">${r.qty.toLocaleString()}</td>` +
         `<td class="num ${r.total === best ? "best" : ""}">${fmt(r.total)}</td></tr>`);
     });
   }
@@ -192,7 +206,13 @@ document.addEventListener("click", e => {
   if (t.dataset.n) { batch = +t.dataset.n; render(); }
 });
 document.addEventListener("change", e => {
-  const t = e.target; if (!t.dataset.k) return;
+  const t = e.target;
+  if (t.dataset.t) {
+    const v = parseFloat(t.value);
+    if (v > 0) tg[t.dataset.t] = v; else delete tg[t.dataset.t];
+    saveT(); render(); return;
+  }
+  if (!t.dataset.k) return;
   if (t.dataset.i === "") delete sel[t.dataset.k]; else sel[t.dataset.k] = +t.dataset.i;
   save(); render();
 });
@@ -202,8 +222,9 @@ document.getElementById("lock").onclick = () => {
 };
 document.getElementById("reset").onclick = () => { sel = {}; save(); render(); };
 document.getElementById("dl-choices").onclick = () => download("kicad-hub-sourcing.csv",
-  [["Part", "Supplier", "SKU"], ...DATA.lines.filter(l => l.key in sel && l.offers[sel[l.key]])
-    .map(l => [l.part, l.offers[sel[l.key]].supplier, l.offers[sel[l.key]].sku])]);
+  [["Part", "Supplier", "SKU", "Target"], ...DATA.lines.filter(l => (l.key in sel && l.offers[sel[l.key]]) || tg[l.key] != null)
+    .map(l => { const o = l.key in sel ? l.offers[sel[l.key]] : null;
+      return [l.part, o ? o.supplier : "", o ? o.sku : "", tg[l.key] ?? ""]; })]);
 document.getElementById("dl-order").onclick = () => {
   const rows = [];
   for (const l of DATA.lines) {

@@ -61,7 +61,7 @@ flowchart LR
     i4["Approval flows"]:::done
     i5["Net navigation, measuring"]:::todo
     i6["Sharing private boards"]:::todo
-    i7["Target price"]:::todo
+    i7["Target price"]:::done
     i8["Activity page<br/>branches, PRs, pushes"]:::doing
   end
 
@@ -344,8 +344,9 @@ Reviewed against the public docs of a commercial cloud platform for PCB design
       its pads, measure distances. Depends on KiCanvas (alpha)
 - [ ] **Sharing private boards**: a way to show a private repo's portal to people
       without access (e.g. a password-protected or expiring static export)
-- [ ] **Target price per part** (last): optional column in `kicad-hub-sourcing.csv`,
-      warn when the chosen offer is above it
+- [x] **Target price per part** (last): optional column in `kicad-hub-sourcing.csv`,
+      warn when the chosen offer is above it. Done 2026-10-29: `Target` column, report table,
+      editable in `sourcing.html`, `max_above_target` requirement
 - [ ] *Under study:* **versioned component library**: a KiCad library in its own repo
       with tags, a lifecycle field (planned / production / obsolete) and a where-used
       index across board repos

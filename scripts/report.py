@@ -363,6 +363,17 @@ if src:
            + ". Minimum orders count, so small batches cost more per board.", ""]
     if src["warnings"]:
         md += ["**Check before buying:**", ""] + [f"- ⚠️ {w['part']} · {w['message']}" for w in src["warnings"][:MAX_ROWS]] + [""]
+    last = src["batches"][-1]
+    over = []
+    for l in src["lines"]:
+        v = (l.get("vs_target") or {}).get(str(last))
+        if v and v["status"] == "above" and l["refs"].get("default"):
+            over.append([f"`{l['part']}`", ", ".join(sorted(l["refs"]["default"], key=ref_key)[:6]),
+                         f"{l['target']:.4g}", f"{v['price']:.4g}", v["supplier"], f"+{v['pct']:.1f}%"])
+    counts["above_target"] = len(over)
+    if over:
+        md += [f"**Above target price** (unit price in {src['currency']}, offer used at {last} board{'s' if last != 1 else ''}):", "",
+               table(["Part", "Refs", "Target", "Used", "Supplier", "Over"], over[:MAX_ROWS]), ""]
     md += ["Compare suppliers per part and choose: `sourcing.html` in the artifact. "
            "Every offer: `reports/sourcing.csv`.", ""]
     counts["sourcing_warnings"] = len(src["warnings"])

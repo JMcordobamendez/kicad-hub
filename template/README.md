@@ -57,6 +57,7 @@ before/after images in the PR comment and the fab package (artifact
   [how to get them](https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys).
 - Supplier picked per part: open `sourcing.html` from the artifact, choose, and
   commit the downloaded `kicad-hub-sourcing.csv` next to the `.kicad_pro`.
+  Add a `Target` column (unit price) to get an "Above target price" table in the report.
 - Requirements: `kicad-hub-requirements.yaml` lists what the board must meet (cost,
   layers, size, stock...); CI checks it and shows a pass/fail table. Uncomment the
   ones you need.

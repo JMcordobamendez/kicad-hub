@@ -13,8 +13,9 @@ Keys come from the environment, so each user brings their own (repository secret
 When a part has no MPN, the manufacturer part number LCSC reports is used.
 
 Which offer is used for each part: the one named in the selection file (CSV with
-columns Part, Supplier[, SKU]; Part = MPN or LCSC code), else the cheapest offer with
+columns Part, Supplier[, SKU][, Target]; Part = MPN or LCSC code), else the cheapest offer with
 enough stock for each batch. Minimum orders, order multiples and price breaks count.
+A Target (unit price, in the output currency) flags the parts whose used offer costs more.
 All prices are converted to one currency (rates from frankfurter.app, ECB data).
 
 Writes a JSON for the report and the comparison page, a CSV with every offer, and
@@ -38,7 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 ap = argparse.ArgumentParser()
 ap.add_argument("--bom", required=True, help="per-part BOM of the default build")
 ap.add_argument("--variants", help="variants.json from the action (per-part BOM of each variant)")
-ap.add_argument("--choices", help="selection file: Part,Supplier[,SKU]")
+ap.add_argument("--choices", help="selection file: Part,Supplier[,SKU][,Target]")
 ap.add_argument("--boards", default="1,5,10,100", help="batch sizes, comma-separated")
 ap.add_argument("--currency", default="USD")
 ap.add_argument("--json", required=True)
@@ -308,15 +309,23 @@ def order(o, need):
     return qty, price, (qty * price if price is not None else None)
 
 
-choices = {}
+choices, targets = {}, {}
 if args.choices and os.path.exists(args.choices):
     with open(args.choices, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
-            if norm(r.get("Part")) and (r.get("Supplier") or "").strip():
+            if not norm(r.get("Part")):
+                continue
+            if (r.get("Supplier") or "").strip():
                 choices[norm(r["Part"])] = ((r.get("Supplier") or "").strip().lower(), (r.get("SKU") or "").strip())
+            try:
+                t = money(r.get("Target") or "")
+            except ValueError:
+                t = None
+            if t:
+                targets[norm(r["Part"])] = t
 
 out = {"currency": CUR, "batches": batches, "suppliers": [{"name": n, "status": status[n]} for n, *_ in SUPPLIERS],
-       "choices_file": bool(choices), "lines": [], "builds": [], "warnings": []}
+       "choices_file": bool(choices), "targets": len(targets), "lines": [], "builds": [], "warnings": []}
 warned = set()
 
 
@@ -330,6 +339,7 @@ for key in sorted(lines, key=lambda k: (min((r for refs in lines[k]["refs"].valu
     l = lines[key]
     c = choices.get(norm(l["mpn"])) or choices.get(norm(l["lcsc"]))
     l["choice"] = None
+    l["target"] = targets.get(norm(l["mpn"])) or targets.get(norm(l["lcsc"]))
     if c:
         idx = next((i for i, o in enumerate(l["offers"]) if o["supplier"].lower() == c[0]
                     and (not c[1] or norm(o["sku"]) == norm(c[1]))), None)
@@ -383,6 +393,28 @@ for b in builds:
     res["priced"] = res["fitted"] - len(res["unpriceable"]) - len(res["unpriced"])
     out["builds"].append(res)
 
+# Target price: unit price of the offer used at each batch size against the target
+out["above_target"] = 0
+for l in out["lines"]:
+    l["vs_target"] = None
+    if l["target"] is None:
+        continue
+    refs = l["refs"].get("default") or next(iter(l["refs"].values()))
+    res = {}
+    for n in batches:
+        i = pick(l, len(refs) * n)
+        if i is None:
+            res[str(n)] = {"status": "no offer"}
+            continue
+        o = l["offers"][i]
+        price = order(o, len(refs) * n)[1]
+        diff = price - l["target"]
+        res[str(n)] = {"status": "above" if diff > 1e-9 else "ok", "price": price, "supplier": o["supplier"],
+                       "diff": round(diff, 6), "pct": round(100 * diff / l["target"], 1)}
+    l["vs_target"] = res
+    if l["refs"].get("default") and res[str(batches[-1])]["status"] == "above":
+        out["above_target"] += 1
+
 with open(args.json, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=1)
 
@@ -390,8 +422,8 @@ with open(args.json, "w", encoding="utf-8") as f:
 with open(args.csv, "w", newline="", encoding="utf-8") as f:
     w = csv.writer(f)
     w.writerow(["Part", "References", "Qty per board", "Supplier", "SKU", "Manufacturer PN", "Brand", "Stock",
-                "Min order", "Multiple", "Lifecycle", "Note"] + [f"Unit price @{n} ({CUR})" for n in batches]
-               + [f"Line total @{n} ({CUR})" for n in batches] + [f"Used @{n}" for n in batches] + ["URL"])
+                "Min order", "Multiple", "Lifecycle", "Note", f"Target ({CUR})"] + [f"Unit price @{n} ({CUR})" for n in batches]
+               + [f"Line total @{n} ({CUR})" for n in batches] + [f"Used @{n}" for n in batches] + [f"Vs target @{n}" for n in batches] + ["URL"])
     for l in out["lines"]:
         refs = l["refs"].get("default")
         if not refs:
@@ -401,9 +433,11 @@ with open(args.csv, "w", newline="", encoding="utf-8") as f:
         for i, o in enumerate(l["offers"]):
             orders = [order(o, len(refs) * n) for n in batches]
             used = ["yes" if pick(l, len(refs) * n) == i else "" for n in batches]
+            vs = [(f"{v['diff']:+.4f} ({v['pct']:+.1f}%)" if v["status"] == "above" else v["status"])
+                  if u and v else "" for u, v in zip(used, [(l["vs_target"] or {}).get(str(n)) for n in batches])]
             w.writerow([l["part"], " ".join(refs), len(refs), o["supplier"], o["sku"], o["mpn"], o["brand"], o["stock"],
-                        o["moq"], o["mult"], o["lifecycle"], o["note"]] + [x[1] for x in orders]
-                       + [round(x[2], 4) if x[2] is not None else "" for x in orders] + used + [o["url"]])
+                        o["moq"], o["mult"], o["lifecycle"], o["note"], l["target"] or ""] + [x[1] for x in orders]
+                       + [round(x[2], 4) if x[2] is not None else "" for x in orders] + used + vs + [o["url"]])
 
 if args.html:
     tpl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sourcing.html"), encoding="utf-8").read()
