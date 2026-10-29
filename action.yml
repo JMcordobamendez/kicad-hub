@@ -66,6 +66,15 @@ inputs:
   digikey-client-secret:
     description: DigiKey API client secret (pass a secret).
     default: ""
+  pages:
+    description: >-
+      Publish a design portal page per branch, release and pull request (schematic and
+      PCB viewer, report, interactive BOM, suppliers, downloads) to the pages-branch,
+      for GitHub Pages. Needs contents write; enable Pages on that branch once.
+    default: "true"
+  pages-branch:
+    description: Branch the portal is published to (Settings → Pages → Deploy from a branch).
+    default: kicad-hub-site
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
@@ -371,6 +380,7 @@ runs:
         # Revision: the tag on releases, else the board's title block, else the commit
         rev=$(grep -oP '\(rev "\K[^"]+' "$pcb" | head -n 1 || true)
         [ "$REF_TYPE" != tag ] || rev="$REF_NAME"
+        board_rev="$rev"
         rev=${rev:-$(git rev-parse --short HEAD)}
         rev=$(printf '%s' "$rev" | tr -c 'A-Za-z0-9._-' '_')
         base="$NAME-$rev"
@@ -420,8 +430,35 @@ runs:
 
         (cd "$pkg" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
         (cd "$OUT/package" && zip -qr "$base-fab.zip" "$base")
+        echo "rev=$rev" >> "$GITHUB_OUTPUT"
+        echo "board_rev=$board_rev" >> "$GITHUB_OUTPUT"
         echo "zip=$OUT/package/$base-fab.zip" >> "$GITHUB_OUTPUT"
         echo "name=$base-fab.zip" >> "$GITHUB_OUTPUT"
+
+    - name: Portal address
+      id: portal
+      # pushes and PRs from this repo (a fork's PR can't write to the site branch)
+      if: >-
+        inputs.pages == 'true' && (github.event_name == 'push' || (github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name == github.repository))
+      shell: bash
+      env:
+        REF_TYPE: ${{ github.ref_type }}
+        REF_NAME: ${{ github.ref_name }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+        if [ -n "$PR" ]; then
+          dest="pr-$PR"; label="PR #$PR"; kind=pr
+        elif [ "$REF_TYPE" = tag ]; then
+          dest="releases/$(printf '%s' "$REF_NAME" | tr -c 'A-Za-z0-9._-' '_')"; label="$REF_NAME"; kind=release
+        else
+          dest=$(printf '%s' "$REF_NAME" | tr -c 'A-Za-z0-9._-' '_'); label="$REF_NAME"; kind=branch
+          case "$dest" in pr-*|releases) dest="branch-$dest" ;; esac
+        fi
+        owner=${GITHUB_REPOSITORY%%/*}; repo=${GITHUB_REPOSITORY#*/}
+        if [ "${repo,,}" = "${owner,,}.github.io" ]; then base="https://${repo,,}"; else base="https://${owner,,}.github.io/$repo"; fi
+        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; } >> "$GITHUB_OUTPUT"
 
     - name: Report
       id: report
@@ -434,6 +471,7 @@ runs:
         DS_OPTIONAL: ${{ inputs.datasheet-optional-refs }}
         PACKAGE: ${{ steps.package.outputs.name }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
+        PORTAL_URL: ${{ steps.portal.outputs.url }}
       run: |
         set -euo pipefail
         r="$OUT/reports"
@@ -444,6 +482,7 @@ runs:
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
           --variants "$r/variants.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
+          --portal-url "$PORTAL_URL" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
@@ -496,6 +535,61 @@ runs:
           kibot -c "$OUT/.kibot.yaml" -e "$PROJECT_DIR/$NAME.kicad_sch" "${pcb_args[@]}" \
                 -d "$OUT" -s all $targets
         rm "$OUT/.kibot.yaml"
+
+    - name: Publish design portal
+      if: steps.portal.outputs.dest != ''
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        OUT: ${{ inputs.output-dir }}
+        BRANCH: ${{ inputs.pages-branch }}
+        DEST: ${{ steps.portal.outputs.dest }}
+        LABEL: ${{ steps.portal.outputs.label }}
+        KIND: ${{ steps.portal.outputs.kind }}
+        URL: ${{ steps.portal.outputs.url }}
+        REV: ${{ steps.package.outputs.board_rev }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
+        SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        TITLE: ${{ github.event.pull_request.title }}
+      run: |
+        set -uo pipefail
+        site="$RUNNER_TEMP/kicad-hub-portal"
+        rm -rf "$site"
+        python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --site "$site" --out "$OUT" \
+          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --label "$LABEL" --kind "$KIND" \
+          --sha "$SHA" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --title "$TITLE" \
+          --base-ref "$BASE_REF" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        # The site branch is one commit, replaced on every publish (no history of zips and
+        # PDFs piling up). --force-with-lease keeps concurrent runs from losing each other's
+        # pages: the loser retries on top of the winner.
+        wt="$RUNNER_TEMP/kicad-hub-site"
+        ok=""
+        for try in 1 2 3; do
+          git worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
+          old=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
+          if [ -n "$old" ] && git fetch -q --no-tags --depth=1 origin "$BRANCH"; then
+            git worktree add -q --detach "$wt" FETCH_HEAD
+          else
+            git worktree add -q --detach "$wt" && git -C "$wt" rm -rqf . > /dev/null
+          fi
+          rm -rf "${wt:?}/$DEST" && mkdir -p "$(dirname "$wt/$DEST")" && cp -r "$site" "$wt/$DEST"
+          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL"
+          git -C "$wt" checkout -q --orphan "site-$try"
+          git -C "$wt" add -A
+          git -C "$wt" -c user.name="github-actions[bot]" \
+            -c user.email="41898699+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Design portal: $LABEL (${SHA:0:7})"
+          if git -C "$wt" push -q --force-with-lease="refs/heads/$BRANCH:$old" origin "HEAD:refs/heads/$BRANCH"; then
+            ok=1; break
+          fi
+        done
+        git worktree remove --force "$wt" 2>/dev/null || true
+        if [ -n "$ok" ]; then
+          echo "Design portal: $URL" | tee -a "$GITHUB_STEP_SUMMARY"
+        else
+          echo "::warning::Could not publish the design portal to $BRANCH (needs 'contents: write')"
+        fi
 
     - name: Upload outputs
       uses: actions/upload-artifact@v4
