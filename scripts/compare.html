@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compare versions</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --brand: #e8622c; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+    --bar: #1c2128; --bar-fg: #e6edf3; --bar-muted: #9198a1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --card: #151b23; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #1c2128;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --bar: #010409;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
+  a { color: var(--accent); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+
+  /* top bar, same as portal.html */
+  .bar { background: var(--bar); color: var(--bar-fg); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 20px; }
+  .logo { width: 30px; height: 30px; border-radius: 7px; background: var(--brand); color: #fff; font-weight: 700;
+          display: grid; place-items: center; font-size: 13px; flex: none; text-decoration: none; }
+  .crumb { min-width: 0; font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .crumb a { color: var(--bar-fg); text-decoration: none; }
+  .crumb .sep { color: var(--bar-muted); font-weight: 400; }
+  .pill { font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 10px; background: #30363d; color: var(--bar-fg); }
+  .bar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--bar-muted); font-size: 13px; }
+  .bar .right a { color: var(--bar-muted); }
+
+  main { flex: 1; padding: 16px 20px; min-width: 0; }
+  .wrap { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; overflow: hidden; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  h3 { font-size: 13px; margin: 14px 0 6px; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 4px 12px; border-radius: 6px;
+         cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg { display: inline-flex; }
+  .seg .btn { border-radius: 0; } .seg .btn:first-child { border-radius: 6px 0 0 6px; } .seg .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+  select { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; width: 100%; }
+
+  .pick { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: start; }
+  .pick .who { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .pick .info { margin-top: 8px; font-size: 13px; }
+  .pick .info .msg { font-weight: 600; overflow-wrap: anywhere; }
+  .pick .swap { margin-top: 22px; }
+  @media (max-width: 700px) { .pick { grid-template-columns: minmax(0, 1fr); } .pick .swap { margin-top: 0; justify-self: start; } main { padding: 12px 16px; } }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+  .chip.ok { color: var(--good); border-color: var(--good); } .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+
+  table { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  tr.add td:first-child { color: var(--good); } tr.del td:first-child { color: var(--bad); }
+
+  details.pg { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 0 16px; }
+  details.pg + details.pg { margin-top: 10px; }
+  details.pg > summary { cursor: pointer; padding: 10px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  details.pg[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  details.pg .kind { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .legend { font-size: 12px; color: var(--muted); }
+  .legend b.r { color: #dc1e1e; } .legend b.g { color: #009640; }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
+</style>
+</head>
+<body>
+<header id="head"></header>
+<main><div class="wrap" id="wrap"></div></main>
+<footer>Made with <a href="https://github.com/JMcordobamendez/kicad-hub">kicad-hub</a> · not affiliated with the KiCad project</footer>
+<script>
+const D = /*KICAD_HUB_DATA*/null;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const repoUrl = `${D.server}/${D.repo}`;
+const repoName = D.repo.split("/")[1];
+const $ = id => document.getElementById(id);
+// when a build was made: its commit's date if known, else the publish time
+const when = b => Date.parse((b.commit && b.commit.date) || "") || Date.parse(String(b.date || "").replace(" UTC", "Z").replace(" ", "T")) || 0;
+const day = b => when(b) ? new Date(when(b)).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
+const norm = p => !p ? "" : p.endsWith("/") ? p : p + "/";
+
+/* vendored assets live at the site root, next to this page */
+const loadScript = file => new Promise((ok, fail) => {
+  const s = document.createElement("script");
+  s.src = "assets/" + file; s.onload = ok; s.onerror = fail;
+  document.head.appendChild(s);
+});
+
+let khScript;
+let builds = [];
+const state = {a: "", b: ""};
+const byPath = p => builds.find(b => b.path === p);
+const fetched = {};
+const get = (url, kind) => fetched[url] ??= fetch(url, {cache: "no-cache"}).then(r => r.ok ? (kind === "json" ? r.json() : r.text()) : null).catch(() => null);
+
+function chipsOf(c) {
+  c = c || {};
+  const out = [];
+  const add = (l, v, soft) => { if (v != null) out.push(`<span class="chip ${v === 0 ? "ok" : soft ? "warn" : "bad"}">${l} ${v}</span>`); };
+  add("ERC", c.erc_errors); add("DRC", c.drc_errors); add("missing fields", c.missing_fields, true);
+  return out.join("") || `<span class="muted">no checks</span>`;
+}
+function vname(b) {
+  if (b.kind === "history") return `${b.label} · ${day(b).slice(0, 10)}${b.commit && b.commit.message ? " · " + b.commit.message.slice(0, 50) : ""}`;
+  if (b.kind === "release") return `${b.label} (release)`;
+  if (b.kind === "pr") return `${b.label}${b.title ? " · " + b.title.slice(0, 50) : ""}`;
+  return `${b.label} (branch, latest)`;
+}
+const group = {branch: "Branches", history: "History of main", release: "Releases", pr: "Pull requests"};
+function options(selected) {
+  const order = ["branch", "history", "release", "pr"];
+  let html = `<option value="">Pick a version…</option>`;
+  for (const kind of order) {
+    const rows = builds.filter(b => b.kind === kind).sort((a, b) => when(b) - when(a));
+    if (rows.length) html += `<optgroup label="${group[kind]}">` + rows.map(b =>
+      `<option value="${esc(b.path)}" ${b.path === selected ? "selected" : ""}>${esc(vname(b))}</option>`).join("") + `</optgroup>`;
+  }
+  return html;
+}
+function info(b) {
+  if (!b) return "";
+  const c = b.commit || {};
+  return `<div class="info"><div class="msg">${esc(c.message || b.title || b.label)}</div>` +
+    `<div class="muted"><a href="${esc(b.path)}">Open</a> · commit <a class="mono" href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a>` +
+    `${c.author ? " · " + esc(c.author) : ""} · ${esc(day(b))}</div><div class="chips" style="margin-top:4px">${chipsOf(b.counts)}</div></div>`;
+}
+
+function head() {
+  $("head").innerHTML = `<div class="bar"><a class="logo" href="./" title="All builds">kh</a>` +
+    `<div class="crumb"><a href="./">${esc(repoName)}</a><span class="sep">/</span><span>Compare versions</span></div>` +
+    `<div class="right"><a href="./#history">History</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a></div></div>`;
+}
+
+function picker() {
+  $("wrap").innerHTML = `<div class="card pick">
+      <div><div class="who">Version A · before</div><select id="sel-a" aria-label="Version A"></select><div id="info-a"></div></div>
+      <button class="btn swap" id="swap" title="Swap A and B">⇄</button>
+      <div><div class="who">Version B · after</div><select id="sel-b" aria-label="Version B"></select><div id="info-b"></div></div>
+    </div><div id="result"></div>`;
+  const sync = () => {
+    $("sel-a").innerHTML = options(state.a); $("sel-b").innerHTML = options(state.b);
+    $("info-a").innerHTML = info(byPath(state.a)); $("info-b").innerHTML = info(byPath(state.b));
+  };
+  const go = () => {
+    const q = new URLSearchParams();
+    if (state.a) q.set("a", state.a);
+    if (state.b) q.set("b", state.b);
+    history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : ""));
+    sync();
+    run();
+  };
+  $("sel-a").onchange = e => { state.a = e.target.value; go(); };
+  $("sel-b").onchange = e => { state.b = e.target.value; go(); };
+  $("swap").onclick = () => { [state.a, state.b] = [state.b, state.a]; go(); };
+  sync();
+}
+
+/* ---------- BOM ---------- */
+function parseCSV(text) {  // RFC 4180: quoted fields, "" escapes, CRLF; KiCad writes a BOM-less UTF-8 file
+  const rows = []; let row = [], f = "", q = false;
+  text = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ",") { row.push(f); f = ""; }
+    else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(f); f = ""; if (row.length > 1 || row[0] !== "") rows.push(row); row = []; }
+    else f += ch;
+  }
+  if (f !== "" || row.length) { row.push(f); rows.push(row); }
+  if (!rows.length) return {cols: [], by: {}};
+  const cols = rows[0], by = {};
+  for (const r of rows.slice(1)) { const o = {}; cols.forEach((c, i) => { o[c] = r[i] ?? ""; }); if (o.Reference) by[o.Reference] = o; }
+  return {cols, by};
+}
+const refKey = r => { const m = /^([A-Za-z_#]*)(\d*)/.exec(r); return [m[1], +(m[2] || 0), r]; };
+const refSort = (x, y) => { const a = refKey(x), b = refKey(y); return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0); };
+const fp = s => (s || "").split(":").pop();
+
+function bomView(A, B) {
+  if (!A.bom || !B.bom) {
+    const missing = [!A.bom && "A", !B.bom && "B"].filter(Boolean).join(" and ");
+    return `<div class="card"><h2>BOM</h2><p class="muted">No parts BOM stored for version ${missing} (published before the compare page existed): it appears with its next publish.</p></div>`;
+  }
+  const a = A.bom.by, b = B.bom.by;
+  const cols = [...new Set([...A.bom.cols, ...B.bom.cols])].filter(c => c !== "Reference");
+  const added = Object.keys(b).filter(r => !(r in a)).sort(refSort), removed = Object.keys(a).filter(r => !(r in b)).sort(refSort);
+  const changed = [];
+  for (const r of Object.keys(b).filter(r => r in a).sort(refSort)) {
+    const diffs = cols.filter(c => (a[r][c] || "").trim() !== (b[r][c] || "").trim())
+      .map(c => `${esc(c)}: ${esc((a[r][c] || "").trim() || "—")} → ${esc((b[r][c] || "").trim() || "—")}`);
+    if (diffs.length) changed.push({ref: r, value: b[r].Value, diffs});
+  }
+  const n = added.length + removed.length + changed.length;
+  let html = `<div class="card"><h2>BOM</h2>`;
+  if (!n) return html + `<p class="muted">No BOM changes (${Object.keys(b).length} parts).</p></div>`;
+  html += `<p><b>＋${added.length} added · −${removed.length} removed · ~${changed.length} changed</b> <span class="muted">(by reference)</span></p>`;
+  if (added.length || removed.length)
+    html += `<table><tr><th>Part</th><th>Value</th><th>Footprint</th></tr>` +
+      added.map(r => `<tr class="add"><td>＋ ${esc(r)}</td><td>${esc(b[r].Value)}</td><td>${esc(fp(b[r].Footprint))}</td></tr>`).join("") +
+      removed.map(r => `<tr class="del"><td>− ${esc(r)}</td><td>${esc(a[r].Value)}</td><td>${esc(fp(a[r].Footprint))}</td></tr>`).join("") + `</table>`;
+  if (changed.length)
+    html += `<table><tr><th>Part</th><th>Value</th><th>Change</th></tr>` +
+      changed.map(p => `<tr><td>${esc(p.ref)}</td><td>${esc(p.value)}</td><td>${p.diffs.join("<br>")}</td></tr>`).join("") + `</table>`;
+  return html + `</div>`;
+}
+
+/* ---------- pages ---------- */
+const pageStatus = {};   // page key -> "same" | "diff" | "added" | "removed" | "pending"
+function summary() {
+  const v = Object.values(pageStatus), n = s => v.filter(x => x === s).length;
+  const el = $("pages-sum"); if (!el) return;
+  const parts = [`<b>${n("diff") + n("added") + n("removed")}</b> of ${v.length} pages differ`];
+  if (n("pending")) parts.push(`${n("pending")} still being compared`);
+  el.innerHTML = parts.join(" · ");
+}
+function setStatus(det, key, st, text, cls) {
+  pageStatus[key] = st;
+  det.querySelector(".st").innerHTML = `<span class="chip ${cls || ""}">${text}</span>`;
+  summary();
+}
+
+const pending = new Map();   // <details> -> {pa, pb, A, B, key, prepared, built}
+function widget(r, A, B) {
+  const modes = [["swipe", "Swipe"], ["fade", "Fade"], ["side", "Side by side"], ["diff", "Changes"]];
+  return `<div class="cmp" data-mode="diff"><div class="cmp-bar"><span class="seg">${modes.map(([m, l]) => `<button class="btn" data-mode="${m}">${l}</button>`).join("")}</span>` +
+    `<input type="range" min="0" max="100" value="50" aria-label="A / B"><button class="btn" data-fit>Fit</button>` +
+    `<span class="legend">Changes: <b class="r">red</b> only in A · <b class="g">green</b> only in B · scroll to zoom · drag to pan</span></div>` +
+    `<div class="cmp-view"><div class="cmp-stage"><img class="a" src="${r.a}" alt="A"><img class="b" src="${r.b}" alt="B"><img class="d" src="${r.d}" alt="changes" hidden></div><div class="cmp-line"></div>` +
+    `<span class="cmp-tag" style="left:8px">A · ${esc(A.entry.label)}</span><span class="cmp-tag" style="right:8px">B · ${esc(B.entry.label)}</span></div></div>`;
+}
+// at most two pages are decoded and diffed at a time (a board has a dozen layers)
+let active = 0;
+const waiting = [];
+const limited = fn => new Promise((ok, fail) => {
+  const go = () => { active++; fn().then(ok, fail).finally(() => { active--; if (waiting.length) waiting.shift()(); }); };
+  active < 2 ? go() : waiting.push(go);
+});
+let autoOpened = 0;   // the first few changed pages open by themselves, the rest on a click
+function prepare(det) {
+  const j = pending.get(det);
+  if (!j.prepared) {
+    const url = (S, p) => p ? S.entry.path + "renders/" + p.file : null;
+    j.prepared = limited(() => KHCompare.prepare(url(j.A, j.pa), url(j.B, j.pb))).then(r => {
+      const differs = !(j.pa && j.pb) || r.changed > 0;
+      if (j.pa && j.pb) setStatus(det, j.key, differs ? "diff" : "same", differs ? "changed" : "no visual changes", differs ? "warn" : "ok");
+      if (differs && autoOpened < 3) { autoOpened++; det.open = true; }
+      return r;
+    }, e => {
+      if (j.pa && j.pb) setStatus(det, j.key, "error", "could not compare", "bad");
+      throw e;
+    });
+  }
+  return j.prepared;
+}
+async function show(det) {
+  const j = pending.get(det), body = det.querySelector(".body");
+  if (!j || j.built) return;
+  j.built = true;
+  body.innerHTML = `<p class="muted">Comparing…</p>`;
+  try {
+    const r = await prepare(det);
+    body.innerHTML = widget(r, j.A, j.B);
+    KHCompare.mount(body.querySelector(".cmp"));
+  } catch (e) {
+    body.innerHTML = `<p class="muted">Could not load the renders (${esc(e.message)}).</p>`;
+  }
+}
+
+function pagesView(A, B) {
+  const ra = A.renders, rb = B.renders;
+  if (!ra || !rb) {
+    const who = [!ra && `A (${esc(A.entry.label)})`, !rb && `B (${esc(B.entry.label)})`].filter(Boolean).join(" and ");
+    return `<div class="card"><h2>Schematic and PCB</h2><p class="muted">No page renders stored for ${who}: it was published before ` +
+      `the compare page existed (or with renders turned off) and gets them with its next publish. Open the BOM comparison above in the meantime.</p></div>`;
+  }
+  const ma = Object.fromEntries(ra.pages.map(p => [p.key, p])), mb = Object.fromEntries(rb.pages.map(p => [p.key, p]));
+  const keys = [...ra.pages.map(p => p.key), ...rb.pages.map(p => p.key).filter(k => !(k in ma))];
+  const order = k => (k.startsWith("sch:") ? 0 : 1);
+  keys.sort((x, y) => order(x) - order(y));   // stable: sheets first, then layers, each in build order
+  const odd = [];
+  if (ra.dpi && rb.dpi && JSON.stringify(ra.dpi) !== JSON.stringify(rb.dpi)) odd.push("rendered at different resolutions");
+  let html = `<div class="card"><h2>Schematic and PCB</h2><p id="pages-sum" class="muted"></p>` +
+    (odd.length ? `<p class="chip warn">The two builds were ${odd.join(", ")}: pixels won't line up, differences are not reliable.</p>` : "") + `</div><div id="pages"></div>`;
+  setTimeout(() => {
+    const box = $("pages"); if (!box) return;
+    pending.clear();
+    for (const k of Object.keys(pageStatus)) delete pageStatus[k];
+    const frag = document.createDocumentFragment();
+    for (const key of keys) {
+      const pa = ma[key], pb = mb[key], p = pa || pb;
+      const same = pa && pb && pa.hash && pa.hash === pb.hash;
+      const st = same ? "same" : !pa ? "added" : !pb ? "removed" : "pending";
+      pageStatus[key] = st;
+      const det = document.createElement("details");
+      det.className = "pg";
+      det.innerHTML = `<summary><span class="kind">${p.kind === "pcb" ? "PCB" : "Schematic"}</span><b>${esc(p.title)}</b>` +
+        `<span class="st">${same ? `<span class="chip ok">no changes</span>` : st === "added" ? `<span class="chip warn">only in B</span>` :
+          st === "removed" ? `<span class="chip warn">only in A</span>` : `<span class="chip">comparing…</span>`}</span></summary><div class="body"></div>`;
+      pending.set(det, {pa, pb, A, B, key});
+      det.addEventListener("toggle", () => { if (det.open) show(det); });
+      frag.appendChild(det);
+    }
+    box.appendChild(frag);
+    summary();
+    for (const det of box.children) if (pageStatus[pending.get(det).key] !== "same") prepare(det).catch(() => {});
+  }, 0);
+  return html;
+}
+
+/* ---------- run ---------- */
+let runId = 0;
+async function run() {
+  const me = ++runId, out = $("result");
+  const A = byPath(state.a), B = byPath(state.b);
+  const bad = [state.a && !A && state.a, state.b && !B && state.b].filter(Boolean);
+  if (bad.length) { out.innerHTML = `<div class="card"><p>Not found in this portal: <code>${esc(bad.join(", "))}</code> (a closed pull request, or a snapshot that was pruned).</p></div>`; return; }
+  if (!A || !B) { out.innerHTML = `<div class="card muted">Pick two versions above to compare their BOM, schematic sheets and PCB layers.</div>`; return; }
+  if (A === B) { out.innerHTML = `<div class="card muted">Pick two different versions.</div>`; return; }
+  out.innerHTML = `<div class="card muted">Loading…</div>`;
+  const load = async e => ({
+    entry: e,
+    bom: e.bom ? await get(e.path + e.bom, "text").then(t => t == null ? null : parseCSV(t)) : null,
+    renders: e.renders ? await get(e.path + e.renders, "json") : null,
+  });
+  const [la, lb] = await Promise.all([load(A), load(B)]);
+  if (me !== runId) return;   // the pickers changed while loading
+  await (khScript ??= loadScript("compare.js").catch(() => {}));
+  out.innerHTML = bomView(la, lb) + pagesView(la, lb);
+}
+
+/* ---------- start ---------- */
+head();
+const q = new URLSearchParams(location.search);
+state.a = norm(q.get("a")); state.b = norm(q.get("b"));
+fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
+  builds = list;
+  document.title = `Compare versions · ${repoName}`;
+  picker();
+  run();
+});
+</script>
+</body>
+</html>

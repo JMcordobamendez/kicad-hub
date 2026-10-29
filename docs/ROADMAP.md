@@ -275,8 +275,12 @@ right: start with a prototype on the PR portal page.
 Reviewed against the public docs of a commercial cloud platform for PCB design
 (2026-10-29). Chosen ones, in order:
 
-- [ ] **Timeline in the portal**: a page per commit on `main` (or a listed range), and
-      compare any two versions (e.g. release 1.0 vs 1.2), not only a PR against its base
+- [x] **Timeline in the portal**: a page per commit on `main` (or a listed range), and
+      compare any two versions (e.g. release 1.0 vs 1.2), not only a PR against its base.
+      Done 2026-10-29: light snapshots of the last `history` (default 10) commits of `main`
+      under `/history/<sha>/`, History view on the front page, `compare.html` with BOM diff
+      and client-side compare of the page renders every build now stores; awaiting a check
+      on a real push to `main`
 - [ ] **Requirements in the repo**: a YAML/Markdown file of requirements (max current,
       voltage rating, part count, cost per board…) checked by CI against ERC, DRC,
       BOM and sourcing, with a pass/fail table in the report

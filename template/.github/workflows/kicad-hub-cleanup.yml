@@ -57,7 +57,9 @@ jobs:
             echo "No portal page for PR #$PR"; exit 0
           fi
           rm -rf "pr-$PR"
-          # the front page lists what's in builds.json: rebuild it from the build.json left
+          # the front page and compare.html list what's in builds.json: rebuild it from the
+          # build.json left (a build's summary plus its folder as `path`; history/<sha>/
+          # snapshots and releases are picked up the same way)
           find . -name build.json -not -path './.git/*' | sort | while read -r f; do
             d=${f#./}; jq --arg p "${d%/build.json}/" '. + {path: $p}' "$f"
           done | jq -s . > builds.json

@@ -47,7 +47,9 @@ On every push and pull request of a KiCad project, the action:
 - **Publishes a design portal** on GitHub Pages: one page per branch, release and
   pull request with the schematic and PCB in the browser
   ([KiCanvas](https://kicanvas.org)), the report, interactive BOM, supplier
-  comparison, datasheets and downloads; the PR comment links to it.
+  comparison, datasheets and downloads; the PR comment links to it. Keeps a **timeline**
+  of the last commits of `main` and the releases, and a page to **compare any two
+  versions** (BOM, schematic sheets, PCB layers).
 - **Publishes a GitHub Release** with the fab package when you tag `vX.Y`.
 - Also: schematic PDF, BOM (CSV/HTML) and interactive BOM.
 
@@ -79,6 +81,7 @@ Mockups: [PR comment](docs/mockups/pull-request.png) ·
                           │            ── scripts/sourcing.py    cost and stock (LCSC, JLCPCB,
                           │                                      Mouser, Farnell, DigiKey)
                           │            ── scripts/visual_diff.py before/after images
+                          │            ── scripts/renders.py     page renders for the compare page
                           │            ── scripts/report.py      markdown report
                           ├─ KiBot ───── schematic PDF, BOM CSV/HTML, iBOM
                           │
@@ -156,6 +159,7 @@ version.
 | `digikey-client-secret` | — | DigiKey API client secret, from a secret |
 | `pages` | `true` | Publish the design portal (see [design portal](#design-portal)) |
 | `pages-branch` | `kicad-hub-site` | Branch the portal is published to |
+| `history` | `10` | Light snapshots of the last N commits of the default branch for the portal's timeline and compare page; `0` = off |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `extra-formats` | — | Extra formats in the fab package: `odb`, `ipc2581` |
 | `release` | `true` | On tags, attach the fab package to a GitHub Release |
@@ -186,7 +190,22 @@ Every push to a branch, tag and pull request publishes a page to the
   compare: swipe, fade, side by side or red/green changes, with zoom and pan); then **Interactive
   BOM**, **BOM**, **Suppliers**, **Report**, **Datasheets** and **Downloads** (fab
   package, schematic PDF, BOM CSV, commit history);
-- a version picker in the top bar jumps between branches, releases and PRs.
+- a version picker in the top bar jumps between branches, the history of `main`,
+  releases and PRs, and opens the timeline or the compare page;
+- **History** (front page, `#history`): the last commits of `main` (input `history`,
+  default 10, `0` = off) and the releases, newest first, with date, commit, message,
+  author, ERC/DRC status, **Open**, **Compare with previous** and **Compare with…**.
+  Each push to `main` adds a light snapshot at `/history/<short-sha>/` (design files if
+  under 6 MB, page renders, parts BOM, commit info; no fab package, offers or PDFs) and
+  the oldest beyond `history` are removed. Releases keep their full pages;
+- **Compare** (`/compare.html`, or `compare.html?a=<path>&b=<path>` with paths such as
+  `main/`, `history/<sha>/`, `releases/<tag>/`, `pr-3/`): pick any two versions. It shows
+  the BOM changes (added, removed, changed fields) and every schematic sheet and PCB layer
+  in the interactive compare (swipe, fade, side by side, or **Changes**: red only in A,
+  green only in B), computed in the browser from full-page renders that every published
+  build stores in `renders/` (same export options and resolution, no crop, so any two
+  builds line up). Pages identical in both are collapsed as "no changes". Builds
+  published before this feature have no renders until their next publish.
 
 The viewer is a pinned copy of KiCanvas (`scripts/vendor/`, see its README), not
 loaded from a third-party site, so published pages don't change under you.
@@ -302,8 +321,10 @@ the commit hash.
 ```
 action.yml                  the action
 scripts/                    report.py, datasheets.py, fabnotes.py, variant_cpl.py,
-                            visual_diff.py, sourcing.py (+ sourcing.html, the comparison page),
-                            portal.py (+ portal.html, the design portal)
+                            visual_diff.py, renders.py (page renders for the compare page),
+                            sourcing.py (+ sourcing.html, the comparison page),
+                            portal.py (+ portal.html, the design portal; compare.html and
+                            compare.js, the compare page and its shared widget)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
