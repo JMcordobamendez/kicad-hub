@@ -34,3 +34,22 @@ jobs:
           # farnell-store: es.farnell.com
           digikey-client-id: ${{ secrets.DIGIKEY_CLIENT_ID }}
           digikey-client-secret: ${{ secrets.DIGIKEY_CLIENT_SECRET }}
+
+  # Optional: require an approval before a tag publishes the release.
+  # 1. Create the Environment "fab-release" with required reviewers
+  #    (Settings → Environments), see docs/approvals.md.
+  # 2. Add to the job "board" above:  if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  # 3. Uncomment this job (copy the same "with:" options as above). On a tag it
+  #    waits for a reviewer before running, so nothing is released unapproved.
+  #
+  # release:
+  #   if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  #   runs-on: ubuntu-latest
+  #   environment: fab-release
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         lfs: true
+  #     - uses: JMcordobamendez/kicad-hub@v1
+  #       with:
+  #         project-dir: .
