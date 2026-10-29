@@ -124,8 +124,15 @@ def changes(out, site):
             os.makedirs(os.path.join(site, "visual"), exist_ok=True)
             for f in (img, full):
                 shutil.copy2(f, os.path.join(site, "visual", os.path.basename(f)))
-            visual.append({"kind": p["kind"], "title": p["title"], "status": p.get("status"), "areas": p.get("areas"),
-                           "image": "visual/" + os.path.basename(img), "full": "visual/" + os.path.basename(full)})
+            entry = {"kind": p["kind"], "title": p["title"], "status": p.get("status"), "areas": p.get("areas"),
+                     "image": "visual/" + os.path.basename(img), "full": "visual/" + os.path.basename(full)}
+            # both versions of the page, for the interactive compare (swipe / fade)
+            pair = [os.path.join(out, "visual", p.get(k) or "") for k in ("before", "after")]
+            if all(p.get(k) for k in ("before", "after")) and all(os.path.isfile(f) for f in pair):
+                for f, k in zip(pair, ("before", "after")):
+                    shutil.copy2(f, os.path.join(site, "visual", os.path.basename(f)))
+                    entry[k] = "visual/" + os.path.basename(f)
+            visual.append(entry)
     head = load_bom(os.path.join(out, "reports", "bom-parts.csv")) or {}
     base = load_bom(os.path.join(out, "reports", "bom-parts-base.csv"))
     bom = None

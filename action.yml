@@ -321,7 +321,9 @@ runs:
           else
             git worktree add --detach "$wt" > /dev/null && git -C "$wt" checkout -q --orphan "images-$try" &&git -C "$wt" rm -rqf .
           fi
-          rm -rf "$wt/pr-$PR" && mkdir -p "$wt/pr-$PR" && cp "$vis"/*.png "$wt/pr-$PR/"
+          # only what the comment shows; the full before/after pages go to the portal
+          rm -rf "$wt/pr-$PR" && mkdir -p "$wt/pr-$PR" &&
+            find "$vis" -maxdepth 1 -name '*.png' ! -name '*-before.png' ! -name '*-after.png' -exec cp {} "$wt/pr-$PR/" \;
           git -C "$wt" add -A
           git -C "$wt" -c user.name="github-actions[bot]" \
             -c user.email="41898699+github-actions[bot]@users.noreply.github.com" \
