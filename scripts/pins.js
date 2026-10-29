@@ -239,7 +239,17 @@
     view.card.addEventListener("submit", e => { e.preventDefault(); if (e.target === view.form) submit(view); else if (e.target.dataset.kh === "token") saveToken(view, e.target); });
     view.form.addEventListener("input", e => { if (e.target.name === "x" || e.target.name === "y") previewPending(view); });
 
-    v.addEventListener("kicanvas:select", e => { view.lastSel = {t: performance.now(), item: e.detail && e.detail.item}; });
+    v.addEventListener("kicanvas:select", e => {
+      const item = e.detail && e.detail.item;
+      view.lastSel = {t: performance.now(), item: item};
+      // KiCanvas may select after our click handler ran: a part picked right after the
+      // click that placed a free point takes it over
+      const c = view.click;
+      if (S.mode === kind && c && performance.now() - c.t < 500 && item && item.reference && item.reference !== "?") {
+        view.click = null;
+        setTarget(view, fromItem(view, item, c.w));
+      }
+    });
     // the click that places a pin: KiCanvas has already handled it (selection, pick)
     v.canvas.addEventListener("pointerdown", e => { view.down = {x: e.clientX, y: e.clientY}; }, true);
     v.canvas.addEventListener("click", e => {
@@ -250,7 +260,8 @@
       const w = cam.screen_to_world({x: e.clientX - r.left, y: e.clientY - r.top});
       setTimeout(() => {
         const s = view.lastSel, item = s && performance.now() - s.t < 300 ? s.item : null;
-        setTarget(view, item && item.reference && item.reference !== "?" ? fromItem(view, item, w) : {ref: "", x: w.x, y: w.y});
+        if (item && item.reference && item.reference !== "?") { view.click = null; setTarget(view, fromItem(view, item, w)); }
+        else { view.click = {t: performance.now(), w: w}; setTarget(view, {ref: "", x: w.x, y: w.y}); }
       }, 0);
     }, true);
     if (view.project) view.project.addEventListener("change", () => { view.key = null; renderPins(view); });
