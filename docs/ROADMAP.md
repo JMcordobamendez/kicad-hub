@@ -242,7 +242,7 @@ it's clear the feature is actually missed.
 - [x] Third-party trademarks: no other vendors' names in the repo or its About; the
       name kicad-hub is kept with a "not affiliated with the KiCad project" note
 - [x] Tags `v1.0.0` and moving `v1`; examples use `@v1`
-- [ ] Owner switches the repository to public (Settings → General → Danger Zone)
+- [x] Repository public (2026-10-29)
 
 ## Decisions so far
 - **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation
