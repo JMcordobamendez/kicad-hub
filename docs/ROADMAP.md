@@ -53,15 +53,34 @@ flowchart LR
 
   PUB(["Go public · v1"]):::done
 
+  subgraph P6["6 · Ideas from commercial platforms"]
+    direction TB
+    i1["Fab profiles + fab DRC"]:::doing
+    i2["Timeline, compare<br/>any two versions"]:::doing
+    i3["Requirements in the repo"]:::doing
+    i4["Approval flows"]:::doing
+    i5["Net navigation, measuring"]:::todo
+    i6["Sharing private boards"]:::todo
+    i7["Target price"]:::todo
+  end
+
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
   P4 --> P5
+  PUB --> P6
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phases 1–4 done and public (CI, BOM review, suppliers, before/after
-images, design portal on GitHub Pages, interactive compare). Next: release v1.1.0
-(the `v1` tag predates the portal), fab profiles, then the portal timeline
-(see "Ideas from commercial platforms").
+**Now:** phases 1–4 done and released as v1.1.0 (`v1` moved to it, 2026-10-29).
+In progress, one branch and PR each, worked in parallel (2026-10-29):
+
+- Fab profiles with fab DRC rules (`feat/fab-profiles`)
+- Timeline in the portal and compare any two versions (`feat/timeline`)
+- Comments pinned on the board, phase 5 prototype (`feat/pinned-comments`)
+- Requirements in the repo (`feat/requirements`, PR #18)
+- Approval flows in the template (`feat/approval-flows`, PR #17)
+
+Next batch: net navigation and measuring in the viewer (after phase 5, same code),
+sharing private boards, target price last.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
