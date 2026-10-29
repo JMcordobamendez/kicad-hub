@@ -1,0 +1,60 @@
+name: Part request
+description: Ask for a new part to be added to the design or the library
+title: "[Part] "
+labels: ["part-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in as much as you can. The part is added once the request is approved and the issue is closed by the PR that adds it.
+  - type: input
+    id: mpn
+    attributes:
+      label: Manufacturer part number (MPN)
+    validations:
+      required: true
+  - type: input
+    id: manufacturer
+    attributes:
+      label: Manufacturer
+    validations:
+      required: true
+  - type: input
+    id: lcsc
+    attributes:
+      label: LCSC code
+      description: For example C12345. Leave empty if not stocked there.
+  - type: input
+    id: datasheet
+    attributes:
+      label: Datasheet URL
+    validations:
+      required: true
+  - type: input
+    id: footprint
+    attributes:
+      label: Footprint
+      description: Package and footprint name, or "new footprint needed".
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it needed?
+      description: Function in the design, key parameters and what was checked.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other parts or second sources, and why they were not chosen.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: The part is in stock and not end-of-life
+          required: true
+        - label: Voltage, current and temperature ratings fit the design
+          required: true

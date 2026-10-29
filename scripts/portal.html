@@ -58,19 +58,8 @@
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
   .presets .btn { padding: 2px 8px; font-size: 12px; }
   .diffimg { margin: 6px 0 18px; } .diffimg img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
-  /* interactive compare of the two versions of a page */
-  .cmp { margin: 6px 0 22px; }
-  .cmp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
-  .cmp-bar input[type=range] { flex: 1; min-width: 120px; max-width: 320px; }
-  .cmp-view { position: relative; height: 62vh; overflow: hidden; background: #fff; border: 1px solid var(--line);
-              border-radius: 8px; cursor: grab; touch-action: none; }
-  .cmp-view.drag { cursor: grabbing; }
-  .cmp-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-  .cmp-stage img { position: absolute; left: 0; top: 0; max-width: none !important; border: 0 !important;
-                   border-radius: 0 !important; user-select: none; -webkit-user-drag: none; }
-  .cmp-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--brand); pointer-events: none; }
-  .cmp-tag { position: absolute; top: 8px; font-size: 12px; background: rgba(0,0,0,.65); color: #fff; padding: 2px 8px;
-             border-radius: 10px; pointer-events: none; }
+  /* the interactive compare (.cmp) is styled by assets/compare.js, shared with compare.html */
+  .tl .mono { white-space: nowrap; } .tl td.act { white-space: nowrap; }
 
   main { flex: 1; padding: 16px 20px; display: flex; min-width: 0; }
   section { flex: 1; display: none; min-width: 0; }
@@ -150,8 +139,11 @@ const repoUrl = `${D.server}/${D.repo}`;
 const repoName = D.repo.split("/")[1];
 const money = (v, cur, max = 2) => new Intl.NumberFormat(undefined, {style: "currency", currency: cur, maximumFractionDigits: max}).format(v);
 const size = n => n == null ? "" : n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
-// pages live at <root>/<branch>/, <root>/pr-N/ or <root>/releases/<tag>/
-const HOME = D.mode === "index" ? "./" : D.kind === "release" ? "../../" : "../";
+// pages live at <root>/<branch>/, <root>/pr-N/, <root>/releases/<tag>/ or <root>/history/<sha>/
+const HOME = D.mode === "index" ? "./" : D.kind === "release" || D.kind === "history" ? "../../" : "../";
+// when a build was made: its commit's date if known, else the publish time
+const when = b => Date.parse((b.commit && b.commit.date) || "") || Date.parse(String(b.date || "").replace(" UTC", "Z").replace(" ", "T")) || 0;
+const ownPath = () => decodeURIComponent(new URL(".", location.href).pathname.slice(new URL(HOME, location.href).pathname.length));
 // vendored scripts (pinned copies, see scripts/vendor/README.md), each loaded once
 const loaded = {};
 function load(file, module) {
@@ -170,7 +162,7 @@ function status(c) {
 }
 function chips(c, cost) {
   const out = [], add = (l, v, soft) => { if (v != null) out.push(`<span class="chip ${v === 0 ? "ok" : soft ? "warn" : "bad"}">${l} ${v}</span>`); };
-  add("ERC", c.erc_errors); add("DRC", c.drc_errors); add("missing fields", c.missing_fields, true);
+  add("ERC", c.erc_errors); add("DRC", c.drc_errors); add(`DRC ${esc(c.fab_profile || "")}`, c.drc_fab_violations, true); add("missing fields", c.missing_fields, true);
   if (cost && cost.total != null) out.push(`<span class="chip">${money(cost.total, cost.currency)} / ${cost.boards} board${cost.boards > 1 ? "s" : ""}</span>`);
   return out.join("");
 }
@@ -187,6 +179,7 @@ function buildPage() {
   const pr = D.kind === "pr" ? D.label.replace(/^PR #/, "") : "";
   const where = pr ? `pull request <a href="${repoUrl}/pull/${esc(pr)}"><b>#${esc(pr)}</b></a>`
     : D.kind === "release" ? `release <a href="${repoUrl}/releases/tag/${encodeURIComponent(D.label)}"><b>${esc(D.label)}</b></a>`
+    : D.kind === "history" ? `snapshot of <b class="mono">${esc(D.branch || "main")}</b>`
     : `branch <b class="mono">${esc(D.label)}</b>`;
   const history = pr ? `${repoUrl}/pull/${esc(pr)}/commits` : `${repoUrl}/commits/${esc(D.sha)}`;
   document.getElementById("head").innerHTML = topbar(
@@ -219,7 +212,7 @@ function buildPage() {
     (D.views.ibom ? `<li><span>Interactive BOM</span><a href="#ibom">open</a></li>` : "") + `</ul>`;
   const checks = () => {
     const row = (l, v, soft) => v == null ? "" : `<div class="chk"><span>${l}</span><b class="${v === 0 ? "ok" : soft ? "warn" : "bad"}">${v}</b></div>`;
-    return row("ERC errors", c.erc_errors) + row("DRC errors", c.drc_errors) + row("Parts missing fields", c.missing_fields, true) +
+    return row("ERC errors", c.erc_errors) + row("DRC errors", c.drc_errors) + row(`DRC vs ${esc(c.fab_profile || "fab")} rules`, c.drc_fab_violations, true) + row("Parts missing fields", c.missing_fields, true) + row("Requirements failed", c.requirements_failed) +
       (ch ? `<div class="chk"><span>Changes vs ${esc(ch.base || "base")}</span><a href="#changes">${nChanges}</a></div>` : "") +
       (D.cost && D.cost.total != null ? `<div class="chk"><span>Parts for ${D.cost.boards} board${D.cost.boards > 1 ? "s" : ""}</span><b>${money(D.cost.total, D.cost.currency)}</b></div>` : "") +
       `<div class="chk"><span>Full report</span><a href="#report">open</a></div>`;
@@ -261,7 +254,7 @@ function buildPage() {
       document.getElementById("s-" + id).innerHTML = S[id]();
       if (id === "schematic" || id === "pcb") hook(id === "pcb" ? "pcb" : "sch");
       if (id === "report") renderReport();
-      if (id === "changes") document.querySelectorAll(".cmp").forEach(compare);
+      if (id === "changes") load("compare.js").then(() => document.querySelectorAll(".cmp").forEach(KHCompare.mount));
       done.add(id);
     }
     document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "s-" + id));
@@ -272,21 +265,34 @@ function buildPage() {
   show();
 }
 
-/* Other published versions of the same repo (the front page's list) */
+/* Other published versions of the same repo (the front page's list), the history of main
+   and the way into the compare page */
 function versions() {
   fetch(HOME + "builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
     const sel = document.getElementById("version");
     if (!sel || builds.length < 2) return;
-    const order = {branch: 0, release: 1, pr: 2}, group = {branch: "Branches", release: "Releases", pr: "Pull requests"};
-    builds.sort((a, b) => (order[a.kind] - order[b.kind]) || (b.date || "").localeCompare(a.date || ""));
+    const here = ownPath();
+    const order = {branch: 0, history: 1, release: 2, pr: 3};
+    const group = {branch: "Branches", history: "History of main", release: "Releases", pr: "Pull requests"};
+    builds.sort((a, b) => ((order[a.kind] ?? 9) - (order[b.kind] ?? 9)) || (when(b) - when(a)));
+    const text = b => b.kind === "history"
+      ? `${b.label} · ${new Date(when(b)).toISOString().slice(0, 10)}${b.commit && b.commit.message ? " · " + b.commit.message.slice(0, 40) : ""}`
+      : `${b.label}${b.title ? " · " + b.title.slice(0, 40) : ""}`;
     let html = "", last = "";
     for (const b of builds) {
       if (b.kind !== last) { html += `${last ? "</optgroup>" : ""}<optgroup label="${group[b.kind] || b.kind}">`; last = b.kind; }
-      html += `<option value="${esc(b.path)}" ${b.label === D.label ? "selected" : ""}>${esc(b.label)}${b.title ? " · " + esc(b.title.slice(0, 40)) : ""}</option>`;
+      html += `<option value="${esc(b.path)}" ${b.path === here ? "selected" : ""}>${esc(text(b))}</option>`;
     }
-    sel.innerHTML = html + "</optgroup>";
+    html += `</optgroup><optgroup label="Timeline"><option value="@history">All history…</option><option value="@compare">Compare this with…</option></optgroup>`;
+    sel.innerHTML = html;
     sel.hidden = false;
-    sel.onchange = () => { location.href = HOME + sel.value + location.hash; };
+    sel.onchange = () => {
+      const v = sel.value;
+      sel.value = here;  // the picker stays on this build if the browser comes back here
+      if (v === "@history") location.href = HOME + "#history";
+      else if (v === "@compare") location.href = HOME + "compare.html?a=" + encodeURIComponent(here);
+      else location.href = HOME + v + location.hash;
+    };
   });
 }
 
@@ -334,63 +340,6 @@ function changesView(ch) {
     });
   }
   return out.join("") + `</div>`;
-}
-
-/* Interactive compare: both versions of a page stacked; swipe, fade, side by side or
-   the red/green overlay; wheel zooms around the cursor, drag pans. */
-function compare(root) {
-  const view = root.querySelector(".cmp-view"), stage = root.querySelector(".cmp-stage");
-  const A = root.querySelector("img.a"), B = root.querySelector("img.b"), Dif = root.querySelector("img.d");
-  const line = root.querySelector(".cmp-line"), range = root.querySelector("input[type=range]");
-  const tags = root.querySelectorAll(".cmp-tag");
-  let mode = "swipe", W = 0, H = 0, s = 1, x = 0, y = 0;
-  const GAP = 24;
-  const apply = () => {
-    stage.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
-    const pct = +range.value;
-    B.style.left = mode === "side" ? `${W + GAP}px` : "0";
-    B.style.clipPath = mode === "swipe" ? `inset(0 0 0 ${pct}%)` : "none";
-    B.style.opacity = mode === "fade" ? pct / 100 : 1;
-    A.hidden = mode === "diff"; B.hidden = mode === "diff"; Dif.hidden = mode !== "diff";
-    range.hidden = !(mode === "swipe" || mode === "fade");
-    line.hidden = mode !== "swipe";
-    line.style.left = `${x + s * W * pct / 100}px`;
-    tags.forEach(t => { t.hidden = mode === "diff"; });
-  };
-  const fit = () => {
-    if (!view.clientWidth || !W) { requestAnimationFrame(fit); return; }  // tab not laid out yet
-    const vw = view.clientWidth, vh = view.clientHeight, w = mode === "side" ? 2 * W + GAP : W;
-    s = Math.min(vw / w, vh / H) * 0.98;
-    x = (vw - w * s) / 2; y = (vh - H * s) / 2;
-    apply();
-  };
-  const ready = () => {
-    W = A.naturalWidth; H = A.naturalHeight;
-    [A, B, Dif].forEach(im => { im.style.width = W + "px"; });  // the overlay is larger: same box
-    fit();
-  };
-  if (A.complete && A.naturalWidth) ready(); else A.addEventListener("load", ready, {once: true});
-  root.querySelector(".cmp-bar").addEventListener("click", e => {
-    const b = e.target.closest("button"); if (!b) return;
-    if (b.dataset.mode) {
-      mode = b.dataset.mode;
-      root.querySelectorAll("[data-mode]").forEach(o => o.classList.toggle("on", o === b));
-      fit();
-    } else if (b.hasAttribute("data-fit")) fit();
-  });
-  range.addEventListener("input", apply);
-  view.addEventListener("wheel", e => {
-    e.preventDefault();
-    const r = view.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    const k = Math.exp(-e.deltaY * 0.0015), ns = Math.min(Math.max(s * k, 0.05), 20);
-    x = mx - (mx - x) * ns / s; y = my - (my - y) * ns / s; s = ns;
-    apply();
-  }, {passive: false});
-  let drag = null;
-  view.addEventListener("pointerdown", e => { drag = {px: e.clientX, py: e.clientY, x, y}; view.setPointerCapture(e.pointerId); view.classList.add("drag"); });
-  view.addEventListener("pointermove", e => { if (!drag) return; x = drag.x + e.clientX - drag.px; y = drag.y + e.clientY - drag.py; apply(); });
-  const end = () => { drag = null; view.classList.remove("drag"); };
-  view.addEventListener("pointerup", end); view.addEventListener("pointercancel", end);
 }
 
 function renderReport() {
@@ -545,25 +494,66 @@ function showPart(kind, item) {
 function indexPage() {
   document.title = `${repoName} · designs`;
   document.getElementById("head").innerHTML = topbar(`<span>${esc(repoName)}</span><span class="pill">KiCad designs</span>`,
-    `<a href="${repoUrl}">${esc(D.repo)} on GitHub</a>`);
+    `<a href="compare.html">Compare versions</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a>`) +
+    `<nav id="tabs"><a href="#builds" data-tab="builds">Builds</a><a href="#history" data-tab="history">History</a><a href="compare.html">Compare versions</a></nav>`;
   document.getElementById("main").innerHTML = `<div class="doc"><p class="muted">Loading…</p></div>`;
   // builds.json is rewritten on every publish and by the cleanup workflow
   fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
-    builds.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    const group = (kind, title) => {
-      const rows = builds.filter(b => b.kind === kind);
-      if (!rows.length) return "";
-      return `<div class="group"><h2>${title}</h2><div class="card"><table class="list"><tr><th>Build</th><th>Checks</th><th>Board</th><th>Commit</th><th>Updated</th></tr>` +
-        rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="muted">${esc(b.title)}</div>` : ""}</td>` +
-          `<td><div class="chips">${chips(b.counts || {}, b.cost)}</div></td>` +
-          `<td>${esc(b.name)}${b.rev ? ` <span class="muted">rev ${esc(b.rev)}</span>` : ""}</td>` +
-          `<td><a class="mono" href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="muted">${esc(b.date)}</td></tr>`).join("") +
-        `</table></div></div>`;
+    const views = {builds: () => buildsView(builds), history: () => timelineView(builds)};
+    const show = () => {
+      const id = views[location.hash.slice(1)] ? location.hash.slice(1) : "builds";
+      document.getElementById("main").innerHTML = `<div class="doc">${views[id]()}</div>`;
+      document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.tab === id));
     };
-    document.getElementById("main").innerHTML = `<div class="doc">` +
-      (builds.length ? group("branch", "Branches") + group("release", "Releases") + group("pr", "Pull requests")
-                     : `<p class="muted">Nothing published yet.</p>`) + `</div>`;
+    window.addEventListener("hashchange", show);
+    show();
   });
+}
+
+function buildsView(builds) {
+  builds = builds.filter(b => b.kind !== "history").sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const group = (kind, title) => {
+    const rows = builds.filter(b => b.kind === kind);
+    if (!rows.length) return "";
+    return `<div class="group"><h2>${title}</h2><div class="card"><table class="list"><tr><th>Build</th><th>Checks</th><th>Board</th><th>Commit</th><th>Updated</th></tr>` +
+      rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="muted">${esc(b.title)}</div>` : ""}</td>` +
+        `<td><div class="chips">${chips(b.counts || {}, b.cost)}</div></td>` +
+        `<td>${esc(b.name)}${b.rev ? ` <span class="muted">rev ${esc(b.rev)}</span>` : ""}</td>` +
+        `<td><a class="mono" href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="muted">${esc(b.date)}</td></tr>`).join("") +
+      `</table></div></div>`;
+  };
+  return builds.length ? group("branch", "Branches") + group("release", "Releases") + group("pr", "Pull requests")
+                       : `<p class="muted">Nothing published yet.</p>`;
+}
+
+/* Timeline: the last commits of main (light snapshots in history/) and the releases, newest
+   first, each one opening its page or going to the compare page */
+function timelineView(builds) {
+  const rows = builds.filter(b => b.kind === "history" || b.kind === "release").sort((a, b) => when(b) - when(a));
+  const intro = `<h2>History</h2><p class="muted">Last commits of main and releases. Pick any two versions in <a href="compare.html">Compare versions</a>.</p>`;
+  if (!rows.length) return intro + `<p class="muted">No history yet: it starts with the next push to main (input <code>history</code> of the action).</p>`;
+  // "previous" is the next older entry of the same kind: commit before commit, release before release
+  const prev = {};
+  for (const kind of ["history", "release"]) {
+    const list = rows.filter(r => r.kind === kind);
+    list.forEach((r, i) => { prev[r.path] = list[i + 1]; });
+  }
+  const link = (a, b) => `compare.html?${a ? "a=" + encodeURIComponent(a) : ""}${a && b ? "&" : ""}${b ? "b=" + encodeURIComponent(b) : ""}`;
+  const day = b => when(b) ? new Date(when(b)).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
+  return intro + `<div class="card"><table class="list tl"><tr><th>Date</th><th>Version</th><th>Message</th><th>Author</th><th>Checks</th><th></th></tr>` +
+    rows.map(r => {
+      const full = r.kind === "history" ? builds.find(b => b.kind === "branch" && b.sha === r.sha) : null;  // the full /main/ page of the same commit
+      const p = prev[r.path], c = r.counts || {};
+      const checks = c.erc_errors == null && c.drc_errors == null ? `<span class="muted">no checks</span>`
+        : `<div class="chips">${chips({erc_errors: c.erc_errors, drc_errors: c.drc_errors}, null)}</div>`;
+      return `<tr><td class="muted">${esc(day(r))}</td>` +
+        `<td>${r.kind === "release" ? `<b>${esc(r.label)}</b> <span class="chip">release</span>`
+          : `<a class="mono" href="${repoUrl}/commit/${esc(r.sha)}">${esc(r.sha.slice(0, 7))}</a>${full ? ` <span class="chip">${esc(full.label)}</span>` : ""}`}</td>` +
+        `<td>${esc((r.commit && r.commit.message) || r.title || "")}</td><td class="muted">${esc((r.commit && r.commit.author) || "")}</td><td>${checks}</td>` +
+        `<td class="act"><a href="${esc((full || r).path)}">Open</a>` +
+        (p ? ` · <a href="${link(p.path, r.path)}">Compare with previous</a>` : "") +
+        ` · <a href="${link(r.path, "")}">Compare with…</a></td></tr>`;
+    }).join("") + `</table></div>`;
 }
 
 D.mode === "index" ? indexPage() : buildPage();

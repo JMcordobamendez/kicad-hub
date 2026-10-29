@@ -7,7 +7,9 @@ inputs:
     description: Directory that contains the .kicad_pro file, relative to the repository root.
     required: true
   strict:
-    description: Fail the job when ERC or DRC report errors. Keep false while the design is in progress.
+    description: >-
+      Fail the job when ERC or DRC report errors, or a requirement fails. Keep false while
+      the design is in progress.
     default: "false"
   required-fields:
     description: >-
@@ -66,6 +68,11 @@ inputs:
   digikey-client-secret:
     description: DigiKey API client secret (pass a secret).
     default: ""
+  requirements:
+    description: >-
+      Requirements file (YAML), relative to project-dir, checked against ERC, DRC, BOM and
+      prices. Missing file = no requirements checked.
+    default: kicad-hub-requirements.yaml
   pages:
     description: >-
       Publish a design portal page per branch, release and pull request (schematic and
@@ -75,12 +82,24 @@ inputs:
   pages-branch:
     description: Branch the portal is published to (Settings → Pages → Deploy from a branch).
     default: kicad-hub-site
+  history:
+    description: >-
+      Timeline of the default branch: keep a light snapshot (design files, per-page renders,
+      parts BOM, commit info) of the last N commits under history/<sha>/ in the portal, to
+      browse and compare them (compare.html). 0 = off. Needs pages.
+    default: "10"
   visual-diff:
     description: >-
       On pull requests, before/after images of the changed schematic sheets and PCB
       layers, shown in the PR comment (images are kept in the kicad-hub-images branch,
       needs contents write).
     default: "true"
+  fab-profile:
+    description: >-
+      Optional fab layer on top of the generic package: generic, jlcpcb, pcbway or eurocircuits.
+      Adds a DRC run with that fab's rules (the project's own DRC is unchanged) and, for
+      JLCPCB, BOM and pick & place in its column layout.
+    default: generic
   extra-formats:
     description: Extra board formats for the fab package, comma-separated (odb, ipc2581).
     default: ""
@@ -107,6 +126,9 @@ outputs:
   missing-fields:
     description: Number of fitted parts missing a required field.
     value: ${{ steps.report.outputs.missing_fields }}
+  requirements-failed:
+    description: Number of failed requirements ("-" when there is no requirements file).
+    value: ${{ steps.report.outputs.requirements_failed }}
 
 runs:
   using: composite
@@ -180,6 +202,37 @@ runs:
           kicad pcb drc --severity-all --schematic-parity --format json -o "$OUT/reports/drc.json" "$PROJECT_DIR/$NAME.kicad_pcb"
           kicad pcb drc --severity-all --schematic-parity --format report -o "$OUT/reports/drc.rpt" "$PROJECT_DIR/$NAME.kicad_pcb"
         fi
+
+    - name: DRC vs fab rules
+      id: fabdrc
+      if: inputs.fab-profile != 'generic' && steps.detect.outputs.has_pcb == 'true'
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        OUT: ${{ inputs.output-dir }}
+        IMAGE: ${{ inputs.image }}
+        PROFILE: ${{ inputs.fab-profile }}
+      run: |
+        set -uo pipefail
+        rules="$GITHUB_ACTION_PATH/fab-profiles/$PROFILE/rules.kicad_dru"
+        if [ ! -f "$rules" ]; then
+          echo "::error::Unknown fab-profile '$PROFILE' (use generic, jlcpcb, pcbway, eurocircuits)"
+          exit 1
+        fi
+        # DRC in a copy of the project with the fab's rules appended to its own .kicad_dru
+        tmp="$RUNNER_TEMP/fab-drc"; rm -rf "$tmp"; mkdir -p "$tmp"
+        excl=(--exclude=.git)
+        [ "$PROJECT_DIR" != . ] || excl+=(--anchored "--exclude=./$OUT")
+        tar -C "$PROJECT_DIR" "${excl[@]}" -cf - . | tar -C "$tmp" -xf -
+        dru="$tmp/$NAME.kicad_dru"
+        if [ -f "$dru" ]; then echo >> "$dru"; else echo "(version 1)" > "$dru"; fi
+        grep -v '^(version' "$rules" >> "$dru"
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$tmp:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+        kicad pcb drc --severity-all --schematic-parity --format json -o drc-fab.json "$NAME.kicad_pcb"
+        kicad pcb drc --severity-all --schematic-parity --format report -o drc-fab.rpt "$NAME.kicad_pcb"
+        cp "$tmp/drc-fab.json" "$tmp/drc-fab.rpt" "$OUT/reports/"
+        rm -rf "$tmp"
 
     - name: Per-part BOM (this commit and PR base)
       id: bom
@@ -388,6 +441,7 @@ runs:
         EXTRA: ${{ inputs.extra-formats }}
         REF_TYPE: ${{ github.ref_type }}
         REF_NAME: ${{ github.ref_name }}
+        PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
         run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
@@ -421,6 +475,10 @@ runs:
               -o "$1/$2-bom.csv" "$sch"
           python3 "$GITHUB_ACTION_PATH/scripts/bom_virtual.py" "$1/$2-bom.csv"
           python3 "$GITHUB_ACTION_PATH/scripts/variant_cpl.py" "$3" "$OUT/reports/cpl-all.csv" "$1/$2-cpl.csv"
+          if [ "$PROFILE" != generic ]; then  # the fab's own column layout, next to the generic files
+            python3 "$GITHUB_ACTION_PATH/scripts/fab_assembly.py" "$GITHUB_ACTION_PATH/fab-profiles/$PROFILE/profile.json" \
+                "$1/$2-bom.csv" "$1/$2-cpl.csv" "$1/$PROFILE" "$2"
+          fi
         }
         assembly "$pkg/assembly" "$base" "$OUT/reports/bom-parts.csv" ""
         variant_lines=""
@@ -439,7 +497,7 @@ runs:
 
         # Fab notes from the board (KiCad's Python, inside the image)
         cp "$GITHUB_ACTION_PATH/scripts/fabnotes.py" "$OUT/.fabnotes.py"
-        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" > "$OUT/reports/fab-warnings.txt"
+        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" "$OUT/reports/board.json" "$PROFILE" > "$OUT/reports/fab-warnings.txt"
         rm "$OUT/.fabnotes.py"
         if [ -n "$variant_lines" ]; then
           printf '\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n%s' "$variant_lines" >> "$pkg/README.txt"
@@ -453,6 +511,26 @@ runs:
         echo "zip=$OUT/package/$base-fab.zip" >> "$GITHUB_OUTPUT"
         echo "name=$base-fab.zip" >> "$GITHUB_OUTPUT"
 
+    - name: Requirements
+      id: requirements
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        OUT: ${{ inputs.output-dir }}
+        REQ: ${{ inputs.requirements }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -uo pipefail
+        file="$PROJECT_DIR/$REQ"
+        if [ -z "$REQ" ] || [ ! -f "$file" ]; then
+          echo "No requirements file ($file): skipped"
+          exit 0
+        fi
+        # In the KiBot image, which has PyYAML (the runner's Python may not)
+        cp "$GITHUB_ACTION_PATH/scripts/requirements.py" "$OUT/.requirements.py"
+        docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$IMAGE"           python3 "$OUT/.requirements.py" "$file" "$OUT/reports" "$OUT/reports/requirements.json"           || echo "::warning::Requirements check failed to run: skipped"
+        rm -f "$OUT/.requirements.py"
+
     - name: Portal address
       id: portal
       # pushes and PRs from this repo (a fork's PR can't write to the site branch)
@@ -464,6 +542,8 @@ runs:
         REF_TYPE: ${{ github.ref_type }}
         REF_NAME: ${{ github.ref_name }}
         PR: ${{ github.event.pull_request.number }}
+        HISTORY: ${{ inputs.history }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         set -euo pipefail
         if [ -n "$PR" ]; then
@@ -476,7 +556,44 @@ runs:
         fi
         owner=${GITHUB_REPOSITORY%%/*}; repo=${GITHUB_REPOSITORY#*/}
         if [ "${repo,,}" = "${owner,,}.github.io" ]; then base="https://${repo,,}"; else base="https://${owner,,}.github.io/$repo"; fi
-        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; } >> "$GITHUB_OUTPUT"
+        # a light snapshot of every push to the default branch, for the timeline
+        hist_dest=""
+        if [ "$kind" = branch ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ] && [ "${HISTORY:-0}" -gt 0 ] 2>/dev/null; then
+          hist_dest="history/${GITHUB_SHA:0:7}"
+        fi
+        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; echo "history_dest=$hist_dest"; } >> "$GITHUB_OUTPUT"
+
+    - name: Page renders (compare)
+      if: steps.portal.outputs.dest != ''
+      shell: bash
+      env:
+        PROJECT_DIR: ${{ inputs.project-dir }}
+        NAME: ${{ steps.detect.outputs.name }}
+        HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -uo pipefail
+        # Every published build stores a full-page PNG of each schematic sheet and PCB layer,
+        # made with the same export options and resolution (scripts/renders.py, no crop that
+        # depends on the content), so the portal's compare page can diff any two builds.
+        r="$RUNNER_TEMP/kicad-hub-renders"
+        rm -rf "$r" && mkdir -p "$r/png" "$r/svg/sch" "$r/svg/pcb" || exit 0
+        run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -v "$r:/r" -w /w "$IMAGE" "$@"; }
+        cp "$GITHUB_ACTION_PATH/scripts/renders.py" "$r/renders.py"
+        # same export options as the visual diff (see that step)
+        run kicad-cli sch export svg -o /r/svg/sch/ "$PROJECT_DIR/$NAME.kicad_sch" > /dev/null \
+          && run python3 /r/renders.py --kind sch --svg /r/svg/sch --prefix "$NAME" --out /r/png \
+          || echo "::warning::Schematic renders for the compare page skipped"
+        if [ "$HAS_PCB" = true ]; then
+          layers=$(grep -oP '^\s*\(\d+ "\K[^"]*\.Cu(?=" )' "$PROJECT_DIR/$NAME.kicad_pcb" 2>/dev/null | paste -sd, -)
+          layers="${layers:+$layers,}F.Silkscreen,B.Silkscreen,Edge.Cuts"
+          run kicad-cli pcb export svg --mode-multi --layers "$layers" --black-and-white --exclude-drawing-sheet \
+            --page-size-mode 0 -o /r/svg/pcb/ "$PROJECT_DIR/$NAME.kicad_pcb" > /dev/null \
+            && run python3 /r/renders.py --kind pcb --svg /r/svg/pcb --prefix "$NAME" --out /r/png \
+            || echo "::warning::PCB renders for the compare page skipped"
+        fi
+        rm -rf "$r/svg" "$r/renders.py"
+        du -sh "$r/png" 2>/dev/null || true
 
     - name: Report
       id: report
@@ -490,21 +607,22 @@ runs:
         PACKAGE: ${{ steps.package.outputs.name }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         PORTAL_URL: ${{ steps.portal.outputs.url }}
+        FAB_PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
         r="$OUT/reports"
         python3 "$GITHUB_ACTION_PATH/scripts/report.py" \
           --name "$NAME" --bom "$r/bom-parts.csv" --base-bom "$r/bom-parts-base.csv" --base-ref "${BASE_REF:-base}" \
-          --erc "$r/erc.json" --drc "$r/drc.json" \
+          --erc "$r/erc.json" --drc "$r/drc.json" --drc-fab "$r/drc-fab.json" --fab-profile "$FAB_PROFILE" \
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
+          --variants "$r/variants.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
           --portal-url "$PORTAL_URL" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
-        for k in erc_errors drc_errors missing_fields; do
+        for k in erc_errors drc_errors missing_fields requirements_failed; do
           echo "$k=$(jq -r ".$k // \"-\"" "$r/counts.json")" >> "$GITHUB_OUTPUT"
         done
 
@@ -575,14 +693,35 @@ runs:
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         TITLE: ${{ github.event.pull_request.title }}
+        REF_NAME: ${{ github.ref_name }}
+        HISTORY: ${{ inputs.history }}
+        HIST_DEST: ${{ steps.portal.outputs.history_dest }}
       run: |
         set -uo pipefail
         site="$RUNNER_TEMP/kicad-hub-portal"
         rm -rf "$site"
-        python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --site "$site" --out "$OUT" \
-          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --label "$LABEL" --kind "$KIND" \
-          --sha "$SHA" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --title "$TITLE" \
-          --base-ref "$BASE_REF" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        # commit of this build (a PR is checked out as a merge commit: nothing to say there)
+        commit=()
+        if [ "$KIND" != pr ]; then
+          # (--opt=value: a message starting with "-" is still a value)
+          commit=(--commit-date="$(git log -1 --format=%cI)" --commit-author="$(git log -1 --format=%an)" --commit-message="$(git log -1 --format=%s)")
+        fi
+        renders=()
+        [ -f "$RUNNER_TEMP/kicad-hub-renders/png/renders.json" ] && renders=(--renders "$RUNNER_TEMP/kicad-hub-renders/png")
+        branch=""; [ "$KIND" = branch ] && branch="$REF_NAME"
+        portal() { python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --out "$OUT" \
+          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
+          --server "$GITHUB_SERVER_URL" --title "$TITLE" --base-ref "$BASE_REF" --branch "$branch" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "${commit[@]}" "${renders[@]}" "$@"; }
+        portal --site "$site" --label "$LABEL" --kind "$KIND"
+        # light snapshot of this commit for the timeline (default branch only)
+        hist=""
+        if [ -n "$HIST_DEST" ]; then
+          hist="$RUNNER_TEMP/kicad-hub-portal-history"
+          rm -rf "$hist"
+          portal --site "$hist" --label "${SHA:0:7}" --kind history --light || hist=""
+        fi
+        case "$HISTORY" in ''|*[!0-9]*) keep=-1 ;; *) keep=$HISTORY ;; esac
         # The site branch is one commit, replaced on every publish (no history of zips and
         # PDFs piling up). --force-with-lease keeps concurrent runs from losing each other's
         # pages: the loser retries on top of the winner.
@@ -597,7 +736,11 @@ runs:
             git worktree add -q --detach "$wt" && git -C "$wt" rm -rqf . > /dev/null
           fi
           rm -rf "${wt:?}/$DEST" && mkdir -p "$(dirname "$wt/$DEST")" && cp -r "$site" "$wt/$DEST"
-          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL"
+          if [ -n "$hist" ]; then
+            rm -rf "${wt:?}/$HIST_DEST" && mkdir -p "$(dirname "$wt/$HIST_DEST")" && cp -r "$hist" "$wt/$HIST_DEST"
+          fi
+          # index also prunes history/ to the newest $keep snapshots (-1 = leave it alone)
+          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --keep-history "$keep"
           git -C "$wt" checkout -q --orphan "site-$try"
           git -C "$wt" add -A
           git -C "$wt" -c user.name="github-actions[bot]" \
@@ -642,8 +785,10 @@ runs:
       env:
         ERC: ${{ steps.report.outputs.erc_errors }}
         DRC: ${{ steps.report.outputs.drc_errors }}
+        REQS: ${{ steps.report.outputs.requirements_failed }}
       run: |
         fail=0
         [ "$ERC" = 0 ] || { echo "::error::ERC reports $ERC errors"; fail=1; }
         [ "$DRC" = 0 ] || [ "$DRC" = - ] || [ "$DRC" = null ] || { echo "::error::DRC reports $DRC errors"; fail=1; }
+        [ "$REQS" = 0 ] || [ "$REQS" = - ] || [ "$REQS" = null ] || { echo "::error::$REQS requirements failed"; fail=1; }
         exit $fail

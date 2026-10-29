@@ -1,0 +1,48 @@
+(version 1)
+# JLCPCB standard process (rigid FR-4, 2-layer and multilayer, 1 oz copper).
+# Source: https://jlcpcb.com/capabilities/Capabilities  (read 2026-10-29)
+# Only the values the page states; where 2-layer and multilayer differ, the value
+# safe for BOTH (the 2-layer one) is used, because KiCad rules can't test the layer count.
+#   track/space 1 oz: 0.10 mm 2-layer, 0.09 mm multilayer
+#   annular ring:     0.18 mm 2-layer minimum, 0.15 mm multilayer (0.25 / 0.20 recommended)
+# Not checked (no KiCad constraint): silkscreen line width 0.15 mm, mask bridge 0.10 mm,
+# PTH-to-track 0.28 mm.
+# Not checked on purpose: silkscreen to pad 0.15 mm. The fab clips silkscreen off pads
+# and mask openings itself, and the rule flooded the report (hundreds of findings on the
+# example board) without anything that would stop an order.
+# Later rules win over earlier ones in KiCad, so specific rules come after general ones.
+
+(rule "JLC min track width"
+  (constraint track_width (min 0.10mm)))
+
+(rule "JLC min clearance"
+  (constraint clearance (min 0.10mm)))
+
+(rule "JLC min drill (via and plated hole)"
+  (constraint hole_size (min 0.15mm)))
+
+(rule "JLC min non-plated hole"
+  (constraint hole_size (min 0.50mm))
+  (condition "A.Pad_Type == 'NPTH, mechanical'"))
+
+(rule "JLC min via diameter"
+  (constraint via_diameter (min 0.25mm))
+  (condition "A.Type == 'Via'"))
+
+(rule "JLC min annular ring"
+  (constraint annular_width (min 0.18mm)))
+
+(rule "JLC hole to hole (pads)"
+  (constraint hole_to_hole (min 0.45mm)))
+
+(rule "JLC hole to hole (vias)"
+  (constraint hole_to_hole (min 0.20mm))
+  (condition "A.Type == 'Via' && B.Type == 'Via'"))
+
+(rule "JLC copper to board edge"
+  (constraint edge_clearance (min 0.20mm)))
+
+(rule "JLC silkscreen text"
+  (constraint text_thickness (min 0.15mm))
+  (constraint text_height (min 1.0mm))
+  (condition "A.Layer == 'F.Silkscreen' || A.Layer == 'B.Silkscreen'"))

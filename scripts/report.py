@@ -21,6 +21,8 @@ ap.add_argument("--bom", required=True, help="per-reference BOM CSV of this comm
 ap.add_argument("--base-bom", help="per-reference BOM CSV of the target branch")
 ap.add_argument("--base-ref", default="base")
 ap.add_argument("--erc")
+ap.add_argument("--drc-fab", help="DRC JSON run with the fab profile's rules added")
+ap.add_argument("--fab-profile", default="generic")
 ap.add_argument("--drc")
 ap.add_argument("--required", default="Footprint,Datasheet,MPN|LCSC",
                 help="comma-separated fields; 'A|B' means A or B is enough")
@@ -30,6 +32,7 @@ ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
 ap.add_argument("--portal-url", default="", help="this build's page in the design portal")
+ap.add_argument("--requirements", help="JSON from requirements.py")
 ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
 ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
 ap.add_argument("--package", default="", help="file name of the fab package zip")
@@ -91,6 +94,44 @@ md += [table(["Check", "Errors", "Warnings", "Unconnected"], [
 ]), ""]
 if not drc:
     md += ["_No board outline yet: DRC and PCB outputs skipped._", ""]
+
+# DRC again with a fab's rules added (never fails the build: `strict` is the project DRC only)
+drc_fab = json.load(open(args.drc_fab, encoding="utf-8")) if args.drc_fab and os.path.exists(args.drc_fab) else None
+if drc_fab and args.fab_profile != "generic":
+    def vkey(v):
+        return (v.get("type"), tuple((i.get("description"), i.get("pos", {}).get("x"), i.get("pos", {}).get("y"))
+                                     for i in v.get("items", [])))
+    known = {vkey(v) for v in drc_v}
+    fab_v = [v for v in drc_fab["violations"] if v.get("severity") in ("error", "warning")]
+    new = [v for v in fab_v if vkey(v) not in known]
+    counts.update(fab_profile=args.fab_profile, drc_fab_violations=len(fab_v), drc_fab_new=len(new))
+    md += [f"**DRC vs {args.fab_profile} rules: {len(fab_v)} violations** "
+           f"({len(new)} beyond the project's own DRC)", ""]
+    if new:
+        kinds = {}
+        for v in new:
+            # "Annular width (rule 'X' min ...; actual 0.1 mm)" -> "Annular width: X"
+            m = re.match(r"(.*?) \(rule '([^']+)'", v["description"])
+            k = f"{m.group(1)}: {m.group(2)}" if m else v["description"]
+            kinds[k] = kinds.get(k, 0) + 1
+        md += [table(["Fab rule violated", "Count"],
+                     [[k, str(n)] for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])]), ""]
+
+# --- Requirements ---------------------------------------------------------------
+if args.requirements and os.path.exists(args.requirements):
+    reqs = json.load(open(args.requirements, encoding="utf-8"))
+    icon = {"pass": "✅ pass", "fail": "❌ fail", "unknown": "❔ unknown"}
+    n = {s: sum(1 for r in reqs if r["status"] == s) for s in icon}
+    counts.update(requirements_total=len(reqs), requirements_passed=n["pass"],
+                  requirements_failed=n["fail"], requirements_unknown=n["unknown"])
+    md += ["### Requirements",
+           f"**{n['pass']} of {len(reqs)} met**" + (f" · {n['fail']} failed" if n["fail"] else "")
+           + (f" · {n['unknown']} unknown (no data to check them)" if n["unknown"] else "") + ".", "",
+           table(["ID", "Requirement", "Result", "Measured"],
+                 [[r["id"], r["text"], icon[r["status"]], r["measured"]] for r in reqs]), ""]
+    why = [f"- **{r['id']}**: {r['detail']}" for r in reqs if r["status"] != "pass" and r["detail"]]
+    if why:
+        md += why[:MAX_ROWS] + [""]
 
 # --- BOM diff ----------------------------------------------------------------
 head = load_bom(args.bom) or {}
