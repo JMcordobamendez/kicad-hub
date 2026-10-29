@@ -1,0 +1,36 @@
+# KiCad CI with kicad-hub: checks, BOM review, prices, before/after images and the
+# fab package on every push and pull request; a GitHub Release on tags vX.Y.
+# Docs: https://github.com/JMcordobamendez/kicad-hub#usage
+name: KiCad
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]         # tagging vX.Y publishes the fab package as a release
+  pull_request:
+
+permissions:
+  contents: write        # releases and the PR before/after images
+  pull-requests: write   # PR comment with the report
+
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: JMcordobamendez/kicad-hub@main
+        with:
+          project-dir: .                 # folder with the .kicad_pro
+          # strict: true                 # fail on ERC/DRC errors
+          # boards: "1,5,10,100"         # batch sizes to price
+          # currency: EUR
+          # Optional suppliers, with your own free API keys stored as repository
+          # secrets (Settings → Secrets and variables → Actions). Unset = skipped.
+          # How to get them: https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys
+          mouser-api-key: ${{ secrets.MOUSER_API_KEY }}
+          farnell-api-key: ${{ secrets.FARNELL_API_KEY }}
+          # farnell-store: es.farnell.com
+          digikey-client-id: ${{ secrets.DIGIKEY_CLIENT_ID }}
+          digikey-client-secret: ${{ secrets.DIGIKEY_CLIENT_SECRET }}

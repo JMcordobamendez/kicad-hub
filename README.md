@@ -118,6 +118,12 @@ jobs:
           project-dir: hardware/my-board   # folder with the .kicad_pro
 ```
 
+Ready-made workflows are in [`template/.github/workflows/`](template/.github/workflows/):
+`kicad.yml` (the one above, with every option and the supplier keys) and
+`kicad-hub-cleanup.yml`, which removes a pull request's before/after images from the
+`kicad-hub-images` branch when it is closed (or by hand, *Run workflow* with a PR
+number). Copy both to `.github/workflows/` in your board repository.
+
 While kicad-hub is private, enable *Settings → Actions → General → Access →
 "Accessible from repositories owned by the user"* in kicad-hub so your other repos
 can use it.
@@ -268,12 +274,14 @@ kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
 .github/workflows/test.yml  runs the action on the example board on every push/PR/tag
+.github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images (same file as the template's)
 docs/                       roadmap and mockups
 ```
 
 New board repositories start from [`template/`](template/): folder layout,
 `.gitignore`, `.gitattributes` (LF for KiCad files, Git LFS for 3D models),
-project libraries through `${KIPRJMOD}` and a PR design review checklist.
+project libraries through `${KIPRJMOD}`, a PR design review checklist and the CI
+workflows.
 
 ## Development
 

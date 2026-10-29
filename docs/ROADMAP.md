@@ -78,6 +78,8 @@ Lives in `template/`.
 - [x] Project libraries referenced with `${KIPRJMOD}` paths
 - [x] Pull request template with a design review checklist (decoupling,
       clearances, fiducials…)
+- [x] CI workflows in `template/.github/workflows/`: `kicad.yml` (every option,
+      supplier keys from secrets) and `kicad-hub-cleanup.yml` (2026-10-29)
 - [ ] Try it on a real personal board and adjust
 - [ ] Make it usable as a GitHub template repository (or a `new-board` script)
 
@@ -203,7 +205,9 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          (e.g. PRs from forks) they stay in the artifact only (`visual/`)
    - [x] Confirmed on GitHub with a demo PR (kicad-hub #3, 2026-10-29: R5 value and
          position → nRF54L15 sheet, F.Cu and F.Silkscreen)
-   - [ ] Clean up `kicad-hub-images` folders of closed PRs
+   - [x] Clean up `kicad-hub-images` folders of closed PRs: workflow
+         `kicad-hub-cleanup.yml` (on PR close, or by hand with a PR number), in the
+         template and in this repo
    - [ ] Reuse the engine for phase 4 (visual diff in the portal)
 
 ## Phase 3 — Web portal (~2–3 days)

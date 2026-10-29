@@ -1,0 +1,42 @@
+# Removes a closed pull request's before/after images from the kicad-hub-images
+# branch, so it doesn't keep growing. Old PR comments keep showing their images:
+# they link to the commit that added them, which stays in the branch history.
+name: Clean up PR images
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number whose images to remove
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove pr-<N>/ from kicad-hub-images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          set -euo pipefail
+          git init -q images && cd images
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git fetch -q --depth=1 origin kicad-hub-images; then
+            echo "No kicad-hub-images branch: nothing to clean"; exit 0
+          fi
+          git checkout -q FETCH_HEAD
+          if [ ! -d "pr-$PR" ]; then
+            echo "No images for PR #$PR"; exit 0
+          fi
+          git rm -rq "pr-$PR"
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898699+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "PR #$PR closed: remove its images"
+          git push -q origin HEAD:refs/heads/kicad-hub-images
+          echo "Removed the images of PR #$PR"
