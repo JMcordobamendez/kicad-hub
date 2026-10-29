@@ -28,6 +28,8 @@ outputs:
       html:
         # Datasheet column rendered as a clickable link
         datasheet_as_link: Datasheet
+        logo: false
+        title: 'Bill of materials'
 
   # --- From the PCB (only when the board has an outline) ------------------
   - name: ibom

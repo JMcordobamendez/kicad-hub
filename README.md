@@ -179,9 +179,16 @@ Every push to a branch, tag and pull request publishes a page to the
 
 - `/<branch>/` (e.g. `/main/`), `/releases/<tag>/`, `/pr-<N>/`, and a front page
   listing them all;
-- each page has tabs: **Schematic** and **PCB** (pan, zoom, select parts, layers),
-  **Interactive BOM**, **Report**, **BOM**, **Suppliers**, **Datasheets** and
-  **Downloads** (fab package, schematic PDF, BOM CSV).
+- each page has tabs: **Schematic** (sheet picker) and **PCB** (top/bottom, layer
+  list with presets), both with pan, zoom and a side panel that shows the clicked
+  part (value, footprint, nets, datasheet, best supplier offers); on pull requests,
+  **Changes vs <base>** (BOM changes and before/after images); then **Interactive
+  BOM**, **BOM**, **Suppliers**, **Report**, **Datasheets** and **Downloads** (fab
+  package, schematic PDF, BOM CSV, commit history);
+- a version picker in the top bar jumps between branches, releases and PRs.
+
+The viewer is a pinned copy of KiCanvas (`scripts/vendor/`, see its README), not
+loaded from a third-party site, so published pages don't change under you.
 
 **Turn it on once:** after the first run, *Settings → Pages → Build and deployment →
 Source: Deploy from a branch → `kicad-hub-site` / `(root)` → Save*. The PR comment

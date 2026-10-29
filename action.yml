@@ -380,6 +380,7 @@ runs:
         # Revision: the tag on releases, else the board's title block, else the commit
         rev=$(grep -oP '\(rev "\K[^"]+' "$pcb" | head -n 1 || true)
         [ "$REF_TYPE" != tag ] || rev="$REF_NAME"
+        board_rev="$rev"
         rev=${rev:-$(git rev-parse --short HEAD)}
         rev=$(printf '%s' "$rev" | tr -c 'A-Za-z0-9._-' '_')
         base="$NAME-$rev"
@@ -430,6 +431,7 @@ runs:
         (cd "$pkg" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
         (cd "$OUT/package" && zip -qr "$base-fab.zip" "$base")
         echo "rev=$rev" >> "$GITHUB_OUTPUT"
+        echo "board_rev=$board_rev" >> "$GITHUB_OUTPUT"
         echo "zip=$OUT/package/$base-fab.zip" >> "$GITHUB_OUTPUT"
         echo "name=$base-fab.zip" >> "$GITHUB_OUTPUT"
 
@@ -546,7 +548,8 @@ runs:
         LABEL: ${{ steps.portal.outputs.label }}
         KIND: ${{ steps.portal.outputs.kind }}
         URL: ${{ steps.portal.outputs.url }}
-        REV: ${{ steps.package.outputs.rev }}
+        REV: ${{ steps.package.outputs.board_rev }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         TITLE: ${{ github.event.pull_request.title }}
       run: |
@@ -556,7 +559,7 @@ runs:
         python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --site "$site" --out "$OUT" \
           --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --label "$LABEL" --kind "$KIND" \
           --sha "$SHA" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --title "$TITLE" \
-          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          --base-ref "$BASE_REF" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
         # The site branch is one commit, replaced on every publish (no history of zips and
         # PDFs piling up). --force-with-lease keeps concurrent runs from losing each other's
         # pages: the loser retries on top of the winner.

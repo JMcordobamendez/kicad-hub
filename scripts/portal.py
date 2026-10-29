@@ -34,6 +34,7 @@ b.add_argument("--repo", required=True, help="owner/name")
 b.add_argument("--server", default="https://github.com")
 b.add_argument("--run-url", default="")
 b.add_argument("--title", default="", help="pull request title")
+b.add_argument("--base-ref", default="", help="pull request target branch")
 i = sub.add_parser("index")
 i.add_argument("--root", required=True, help="checkout of the site branch")
 i.add_argument("--repo", required=True)
@@ -96,6 +97,51 @@ def part_info(out, site):
                     parts[ref]["offers"] = offers[:4]
                     parts[ref]["currency"] = s["currency"]
     return parts
+
+
+def ref_key(ref):
+    m = re.match(r"([A-Za-z_#]*)(\d*)", ref)
+    return (m.group(1), int(m.group(2) or 0), ref)
+
+
+def load_bom(path):
+    import csv
+    if not os.path.exists(path):
+        return None
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        return {r["Reference"]: r for r in csv.DictReader(f) if r.get("Reference")}
+
+
+def changes(out, site):
+    """What this pull request changes: visual diff pages and BOM lines against the base branch."""
+    visual = []
+    vpath = os.path.join(out, "reports", "visual.json")
+    if os.path.exists(vpath):
+        for p in json.load(open(vpath, encoding="utf-8")):
+            img, full = (os.path.join(out, "visual", p.get(k) or "") for k in ("image", "full"))
+            if not (os.path.isfile(img) and os.path.isfile(full)):
+                continue
+            os.makedirs(os.path.join(site, "visual"), exist_ok=True)
+            for f in (img, full):
+                shutil.copy2(f, os.path.join(site, "visual", os.path.basename(f)))
+            visual.append({"kind": p["kind"], "title": p["title"], "status": p.get("status"), "areas": p.get("areas"),
+                           "image": "visual/" + os.path.basename(img), "full": "visual/" + os.path.basename(full)})
+    head = load_bom(os.path.join(out, "reports", "bom-parts.csv")) or {}
+    base = load_bom(os.path.join(out, "reports", "bom-parts-base.csv"))
+    bom = None
+    if base is not None:
+        compare = [c for c in (next(iter(head.values())).keys() if head else []) if c != "Reference"]
+
+        def line(r, src):
+            return {"ref": r, "value": src[r].get("Value") or "", "footprint": (src[r].get("Footprint") or "").split(":")[-1]}
+        bom = {"added": [line(r, head) for r in sorted(set(head) - set(base), key=ref_key)],
+               "removed": [line(r, base) for r in sorted(set(base) - set(head), key=ref_key)], "changed": []}
+        for ref in sorted(set(head) & set(base), key=ref_key):
+            diffs = [f"{c}: {(base[ref].get(c) or '').strip() or '—'} → {(head[ref].get(c) or '').strip() or '—'}"
+                     for c in compare if (base[ref].get(c) or "").strip() != (head[ref].get(c) or "").strip()]
+            if diffs:
+                bom["changed"].append({"ref": ref, "value": head[ref].get("Value") or "", "diffs": diffs})
+    return {"base": args.base_ref, "visual": visual, "bom": bom}
 
 
 def build():
@@ -174,7 +220,8 @@ def build():
             "sha": args.sha, "repo": args.repo, "server": args.server, "run_url": args.run_url,
             "title": args.title, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sheets": [f"design/{s}" for s in sheets], "pcb": pcb, "views": views, "downloads": downloads,
-            "report": md, "counts": counts, "cost": cost, "parts": parts}
+            "report": md, "counts": counts, "cost": cost, "parts": parts,
+            "changes": changes(out, site) if args.kind == "pr" else None}
     page(info, os.path.join(site, "index.html"))
     summary = {k: info[k] for k in ("name", "rev", "label", "kind", "sha", "date", "title", "counts", "cost")}
     with open(os.path.join(site, "build.json"), "w", encoding="utf-8") as f:
@@ -194,6 +241,10 @@ def index():
     # the front page reads builds.json, so the cleanup workflow only has to rewrite that
     with open(os.path.join(args.root, "builds.json"), "w", encoding="utf-8") as f:
         json.dump(builds, f, indent=1)
+    assets = os.path.join(args.root, "assets")  # viewer libraries shared by every page
+    os.makedirs(assets, exist_ok=True)
+    for js in glob.glob(os.path.join(HERE, "vendor", "*.js")):
+        shutil.copy2(js, assets)
     page({"mode": "index", "repo": args.repo, "server": args.server}, os.path.join(args.root, "index.html"))
     open(os.path.join(args.root, ".nojekyll"), "w").close()  # serve files as they are, no Jekyll
 

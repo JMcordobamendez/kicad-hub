@@ -220,11 +220,26 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
       (fab zip, schematic PDF, BOM and offers CSV) on each page
 - [x] PR comment links to the PR's page ("Open this design in the browser")
 - [x] Cleanup workflow removes a closed PR's page and updates the front page
-- [ ] Owner enables Pages on `kicad-hub-site` in this repo and checks it live
+- [x] Pages enabled on `kicad-hub-site` in this repo (2026-10-29)
+- [x] Layout like the mockup (2026-10-29): dark top bar with check status, viewer
+      with a side panel (clicked part with nets, datasheet and supplier offers;
+      layers; checks; downloads), PCB fitted to the board, Top/Bottom, layer list
+      with presets, schematic sheet picker opening on the root sheet
+- [x] Version control in the portal: version picker (branches, releases, PRs),
+      "Changes vs <base>" tab on PRs (BOM diff + before/after images), links to
+      the commit history
+- [x] Independent review of the UI (three blind reviewers, 2026-10-29): fixed the
+      viewer height on laptops, the "rev" pill showing the PR merge hash (now only
+      the title-block revision or tag), the front-page table, sheet names, report
+      HTML sanitised (DOMPurify), KiBot banner removed, tab scrolled into view on
+      phones. KiCanvas, marked and DOMPurify vendored and pinned (`scripts/vendor/`)
+- [ ] 3D view (KiCanvas has none; maybe a render on releases)
 
 ## Phase 4 — Visual diff (~1–2 days)
-- [ ] Kiri or KiDiff comparing the PR branch with the target branch
-- [ ] Diff HTML published in the portal and linked from the PR comment
+- [x] Before/after images of the changed sheets and layers in the portal's
+      "Changes" tab (same engine as 2b.7)
+- [ ] Interactive diff: the two versions overlaid in the viewer (KiCanvas), with a
+      slider or toggle, instead of static images
 
 ## Phase 5 (optional) — Comments on the design
 The only piece no existing tool provides. A small web app on top of KiCanvas:
