@@ -216,7 +216,7 @@ function buildPage() {
     (D.views.ibom ? `<li><span>Interactive BOM</span><a href="#ibom">open</a></li>` : "") + `</ul>`;
   const checks = () => {
     const row = (l, v, soft) => v == null ? "" : `<div class="chk"><span>${l}</span><b class="${v === 0 ? "ok" : soft ? "warn" : "bad"}">${v}</b></div>`;
-    return row("ERC errors", c.erc_errors) + row("DRC errors", c.drc_errors) + row("Parts missing fields", c.missing_fields, true) +
+    return row("ERC errors", c.erc_errors) + row("DRC errors", c.drc_errors) + row("Parts missing fields", c.missing_fields, true) + row("Requirements failed", c.requirements_failed) +
       (ch ? `<div class="chk"><span>Changes vs ${esc(ch.base || "base")}</span><a href="#changes">${nChanges}</a></div>` : "") +
       (D.cost && D.cost.total != null ? `<div class="chk"><span>Parts for ${D.cost.boards} board${D.cost.boards > 1 ? "s" : ""}</span><b>${money(D.cost.total, D.cost.currency)}</b></div>` : "") +
       `<div class="chk"><span>Full report</span><a href="#report">open</a></div>`;

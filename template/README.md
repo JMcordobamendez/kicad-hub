@@ -57,6 +57,9 @@ before/after images in the PR comment and the fab package (artifact
   [how to get them](https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys).
 - Supplier picked per part: open `sourcing.html` from the artifact, choose, and
   commit the downloaded `kicad-hub-sourcing.csv` next to the `.kicad_pro`.
+- Requirements: `kicad-hub-requirements.yaml` lists what the board must meet (cost,
+  layers, size, stock...); CI checks it and shows a pass/fail table. Uncomment the
+  ones you need.
 - Design portal (schematic and PCB in the browser, iBOM, downloads): after the
   first run, *Settings → Pages → Deploy from a branch → `kicad-hub-site` / (root)*.
   Pages is free for public repositories.
