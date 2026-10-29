@@ -71,11 +71,12 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** phases 1–5 done (phase 5 as a prototype confirmed in a browser). Merged on
-2026-10-29 after v1.1.0: fab profiles, requirements, approval flows, timeline and compare
-any two versions, comments pinned on the board. In progress: the Activity page (visual
-branch history, PRs, reviews, comments, pushes). Next: release v1.2.0, then net
-navigation and measuring in the viewer, sharing private boards, target price last.
+**Now:** v1.2.0 released (2026-10-29, `v1` moved to it): phases 1–5 (phase 5 as a
+prototype confirmed in a browser) plus fab profiles, requirements, approval flows,
+timeline and compare any two versions, Activity page, net navigation and measuring,
+target prices, user manual (`docs/manual.md`). Suppliers confirmed with real keys: LCSC,
+JLCPCB, Mouser, Farnell. Next: sharing private boards, the "Improvements to what's done"
+list, then a full run on one of the owner's real boards.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
