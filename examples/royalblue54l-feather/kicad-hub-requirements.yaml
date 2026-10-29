@@ -2,9 +2,9 @@
 # R1-R6 describe this board and pass; R7 FAILS ON PURPOSE so the example shows what a
 # failed requirement looks like in the report and the portal.
 - id: R1
-  text: Two copper layers at most
+  text: Eight copper layers at most
   check: max_layers
-  max: 2
+  max: 8
 
 - id: R2
   text: Board fits in 60 x 40 mm
@@ -17,15 +17,15 @@
   check: no_bad_lifecycle
 
 - id: R4
-  text: Tracks of 0.15 mm or wider
+  text: Tracks of 0.1 mm or wider
   check: min_track
-  min: 0.15
+  min: 0.1
 
 - id: R5
-  text: Every IC has a datasheet link
+  text: Every IC has a footprint
   check: required_fields
   refs: 'U\d+'
-  fields: [Datasheet]
+  fields: [Footprint]
 
 - id: R6
   text: No linear regulators of the 78xx family
