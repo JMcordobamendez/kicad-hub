@@ -210,6 +210,10 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          variant on the base (when the base has it), table per variant in the PR comment
    - [x] Warn when a variant changes a part's value but keeps its MPN or LCSC code (the
          order would bring the old part; example: lite's C10)
+   - [x] Variant selector in the portal viewer (DNP marked on PCB and schematic, variant
+         values in the Selected panel) — 2026-10-30: picker in both toolbars, kept in the URL
+         (`?variant=`), data embedded per build from `variants.json` and the per-variant BOMs
+         (`scripts/variants-view.js`)
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)

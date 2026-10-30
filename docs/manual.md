@@ -261,7 +261,9 @@ branches, `main`'s history, releases and PRs, and opens the timeline or compare 
 ### 5.2 Schematic
 
 Sheet picker to switch between hierarchical sheets; pan, zoom, click a symbol to see it
-in the side panel.
+in the side panel. With design variants there is a **Variant** picker too (see
+[6.2](#62-variants)): the symbols not fitted in the chosen variant get KiCad's DNP cross, on
+every sheet.
 
 ### 5.3 PCB
 
@@ -269,7 +271,12 @@ in the side panel.
 - **Layers** card: tick to show or hide; presets **All**, **None**, **Copper**, **Front**, **Back**;
   **click a layer's name to bring it to the front**.
 - **Selected** panel (click a footprint): reference, value, footprint, **nets** of its pads,
-  the **datasheet** (local copy if found) and the best **supplier offers**.
+  the **datasheet** (local copy if found) and the best **supplier offers**. With a variant
+  chosen it shows that variant's values and offers (see **Variant** below).
+- **Variant** (only if the design has variants): the footprints not fitted in the chosen
+  variant are covered by a hatched box with a red X and a "DNP" label (just a faint outline
+  for the side of the board you are not looking at). The overlay never catches clicks, so
+  selecting, Measure and the nets work as usual. See [6.2](#62-variants).
 - **Nets**: click a net in the Selected panel, a track on the board, or search it in the
   **Nets** card (type-ahead over every net). The net's tracks, vias, pads and zones are
   highlighted and the rest dimmed; the card shows its pads, tracks (with length), vias and
@@ -386,6 +393,23 @@ KiCad 10 design variants are read from the project (input `variants`: `auto` = a
 a list, or `none`). The report lists what each variant fits, omits or changes, diffs each
 variant in PRs, and the fab package gets a BOM and pick & place per variant under
 `assembly/<variant>/`.
+
+**Variant picker in the portal.** If the design has variants, the toolbar of the Schematic
+and PCB tabs shows **Variant: default | lite | …**. The choice is shared by both tabs and
+kept in the address (`?variant=lite`: send that link and it opens on that variant; it works
+on `main`, release, history and PR pages). Next to the picker, a legend reads e.g.
+"lite: 5 parts not fitted · 1 changed" (hover for the references).
+
+- **PCB**: each footprint not fitted is covered by a hatched grey box with a red X and a
+  "DNP" label over its courtyard; those on the other side of the board are faint outlines.
+- **Schematic**: the symbols not fitted get KiCad's DNP look (a red X over the symbol), on
+  whichever sheet you are viewing.
+- **Selected** panel: the variant's own values (`10uF (default: 100nF)`), "Not fitted in
+  lite" for a part left out (and no offers: it is not ordered), and the offers of the part
+  the variant orders, if they differ from the default.
+
+The data comes from the per-variant BOMs the action already builds, so what you see is what
+the report and the fab package use, not what the PCB's own DNP flags say.
 
 ### 6.3 Requirements
 
