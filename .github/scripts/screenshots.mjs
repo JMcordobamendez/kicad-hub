@@ -244,6 +244,8 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
                 card: (document.querySelector(".xp-card") || {}).hidden === false ? document.querySelector(".xp-card").innerText.replace(/\s+/g, " ").slice(0, 300) : null};
       });
       const clickAt = async (label, pt) => {
+        await page.mouse.click(sbox.x + 8, sbox.y + sbox.height - 8);  // KiCanvas asks for a click again after a tab change
+        await page.waitForTimeout(500);
         const w = await where(pt);
         if (!w.inside) { console.log(label, "point outside the view", JSON.stringify(pt)); return false; }
         await page.mouse.move(w.x, w.y);
@@ -345,7 +347,10 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
           let best = null, c = 0; for (const [s, k] of votes) if (k > c) { best = s; c = k; }
           if (!best) out.nopins++;
           else if (best.name === e.name) out.same++;
-          else { out.other++; if (out.diff.length < 25) out.diff.push([e.name, best.name]); }
+          else {
+            out.other++;
+            if (out.diff.length < 40) out.diff.push([e.name, best.name, e.name.startsWith("Net-(") ? best.pins.map(p => `${p.reference}-${p.name || "Pad" + p.number}`).join(" ") : ""]);
+          }
         }
         out.nets = sv.netlist.nets.length;
         return out;

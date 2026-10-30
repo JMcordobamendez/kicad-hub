@@ -390,9 +390,11 @@
   }
   // the sheet instances a net is drawn on, in the order of the sheet picker
   function nativePages(idx, sv, snet) {
-    const paths = new Set(snet.sheet_paths);
-    return idx.pages.filter(i => paths.has(i.page.sheet_path))
-      .map(i => ({info: i, items: netItems(sv, snet, i.page.sheet_path)})).filter(p => p.items.length);
+    const paths = new Set(snet.sheet_paths), nl = sv.netlist;
+    // the project's pages may not be the netlist's sheet instances (files loaded one by one): go by the document
+    const pathOf = i => [i.page.sheet_path, ...nl.paths_of(i.doc)].find(p => paths.has(p));
+    return idx.pages.map(i => ({info: i, path: pathOf(i)})).filter(p => p.path)
+      .map(p => ({info: p.info, items: netItems(sv, snet, p.path)})).filter(p => p.items.length);
   }
   // the schematic net of a net of the board: the one most of its pads' pins are on, else the one named alike
   function snetOfPcb(sv, pv, net) {
