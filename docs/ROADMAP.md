@@ -332,8 +332,26 @@ Picked by the owner (2026-10-29):
       ("Use this template" button)
 - [x] **Cross-probing PCB ↔ schematic**: Show in schematic / Show on PCB for parts and nets,
       optional sync mode (requested by the owner on 2026-10-30, from the commercial-platform
-      review; done 2026-10-30). KiCanvas cannot pick pins, labels or wires, so from the
-      schematic a net is reached through the nets listed for the selected part
+      review; done 2026-10-30). Stock KiCanvas cannot pick pins, labels or wires, so at first
+      a net in the schematic was marked with rings and reached from the selected part: see the
+      next item, which replaces that
+- [x] **Click a net in the schematic** (owner, 2026-10-30): a click on a wire, bus, junction,
+      label, power symbol or pin picks its net, highlighted natively on the sheet (the rest
+      dimmed) and on the other sheets, with Show on PCB and Sync. Done in a **fork of
+      KiCanvas** (https://github.com/JMcordobamendez/kicanvas, branch
+      `feat/schematic-net-select`, pinned in `scripts/vendor/README.md`): it builds the
+      schematic's connectivity (wires, junctions, labels by scope, power symbols, sheet pins,
+      bus members, invisible power pins), names nets like KiCad as far as reasonable, picks
+      items, highlights nets (`viewer.highlight_net`) and has unit and viewer tests.
+      Chosen over a netlist exported in CI: it works on every page with no extra CI step, and
+      a net of the board is its schematic net by the pins on its pads, not by name. The fork
+      also reads a `kicad-cli sch export netlist` (`viewer.apply_netlist(text)`) to take KiCad's
+      own names: not wired in CI yet, add it if the names matter. Checked in a real browser
+      through the "Docs screenshots" workflow (`xprobe` page) on the example board.
+      Limits: nets that run through bus entries are not tied to their bus (only bus members
+      by name), ties between drivers of the same priority are broken alphabetically, local
+      power symbols are treated as global, and a click on a part's pin picks the net, not
+      the part
 - **Variant limits** (owner, 2026-10-30), see 2b.5:
   - [ ] *In progress* (`feat/variant-viewer`): variant selector in the portal viewer —
         parts not fitted marked on the PCB and the schematic, the variant's values in the
@@ -426,6 +444,15 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       screenshot (2026-10-30)
 
 ## Decisions so far
+- **KiCanvas fork for schematic nets** (2026-10-30): the vendored KiCanvas is a build of
+  JMcordobamendez/kicanvas (upstream b031159 plus the net features), see
+  `scripts/vendor/README.md` to update it. **Not offered upstream**: the maintainer of
+  theacodes/kicanvas wrote on 2026-10-14 (PR #201) that he will not accept LLM-assisted or
+  generated code, the project has had no commit since 2026-04-29 and PRs from September
+  (#198, #200) have no reply, and a feature this size without an agreed issue is against
+  its README (file an issue first). The request for it exists (issue #129 "Highlight net",
+  open). The owner decides whether to open an issue there or to write a smaller version
+  by hand; the code lives in `src/kicad/schematic-nets.ts` and `src/viewers/schematic/`.
 - **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation
   note. Versions: `vX.Y.Z` tags plus a moving major tag (`v1`) that users pin;
   `main` is development. Tags `v*` run the tests but don't attach the example's fab
