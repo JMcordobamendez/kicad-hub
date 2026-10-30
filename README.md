@@ -236,6 +236,11 @@ Every push to a branch, tag and pull request publishes a page to the
   compare: swipe, fade, side by side or red/green changes, with zoom and pan); then **Interactive
   BOM**, **BOM**, **Suppliers**, **Report**, **Datasheets** and **Downloads** (fab
   package, schematic PDF, BOM CSV, commit history);
+- **cross-probing**: with a footprint selected, **Show in schematic** opens the sheet that
+  has the symbol (a multi-unit part opens on its first unit) and selects it, and **Show on
+  PCB** does the reverse (turning the board to the footprint's side); a highlighted net
+  has **Show in schematic**, which marks its pins and labels sheet by sheet (Prev / Next
+  sheet); the nets of a selected symbol highlight on the board. An optional **Sync** toggle (`?sync=1`) selects the part in both tabs;
 - a version picker in the top bar jumps between branches, the history of `main`,
   releases and PRs, and opens the timeline or the compare page;
 - **History** (front page, `#history`): the last commits of `main` (input `history`,

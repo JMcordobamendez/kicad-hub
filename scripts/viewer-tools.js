@@ -251,6 +251,8 @@
   function renderCard(view) {
     if (!view.card) return;
     const box = view.card.querySelector(".kt-active"), e = view.net != null && view.index.byNumber.get(view.net);
+    // scripts/crossprobe.js adds Show in schematic to this card for the net
+    document.dispatchEvent(new CustomEvent("kh:net", {detail: {net: e ? e.n : null, name: e ? e.name : ""}}));
     box.hidden = !e;
     view.card.querySelector(".kt-hint").hidden = !!e;
     if (!e) return;
@@ -528,6 +530,13 @@
       document.addEventListener("kh:viewer", e => attach(e.detail.kind, e.detail.viewer));
       for (const [kind, v] of Object.entries(c.viewers)) attach(kind, v);
       requestAnimationFrame(tick);
+    },
+    // highlight a net of the board and frame it (the cross-probing buttons); false if it has nothing to show
+    showNet: function (n) {
+      const view = T.views.pcb, e = view && view.index && view.index.byNumber.get(n);
+      if (!e) return false;
+      setNet(view, n, {fit: true});
+      return true;
     },
   };
 })();

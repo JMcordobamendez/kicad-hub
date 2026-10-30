@@ -196,6 +196,8 @@ function buildPage() {
   load("viewer-tools.js").then(() => KHTools.init({D, viewers, findProject})).catch(() => {});
   // variant picker, parts not fitted marked on the board and the schematic (scripts/variants-view.js)
   if ((D.variants || []).length) load("variants-view.js").then(() => KHVariants.init({D, viewers, findProject, reshow})).catch(() => {});
+  // Show in schematic / Show on PCB for parts and nets, optional sync mode (scripts/crossprobe.js)
+  if (D.sheets.length && D.pcb) load("crossprobe.js").then(() => KHCross.init({D, viewers, findProject, reshow})).catch(() => {});
   // comments pinned on the board: pull request pages on github.com only (scripts/pins.js)
   if (D.kind === "pr" && D.pr && D.server === "https://github.com")
     load("pins.js").then(() => KHPins.init({D, viewers, findProject})).catch(() => {});
@@ -482,7 +484,9 @@ function reshow() { for (const k in lastSel) if (lastSel[k]) showPart(k, lastSel
 function showPart(kind, item) {
   const box = document.getElementById("sel-" + kind); if (!box) return;
   lastSel[kind] = item || null;
-  const ref = item && item.reference;
+  // a field of a symbol picked in the schematic stands for its symbol
+  const part = item && !item.reference && item.parent && item.parent.reference ? item.parent : item;
+  const ref = part && part.reference;
   if (!ref || ref === "?") { box.innerHTML = `<h3>Selected</h3><div class="muted">Nothing selected.</div>`; return; }
   const base = D.parts[ref] || {};
   // the variant chosen in the toolbar (scripts/variants-view.js): its values, not fitted or not, its own offers
@@ -494,9 +498,9 @@ function showPart(kind, item) {
   // nets of the clicked footprint (PCB only), each a button that highlights the net (scripts/viewer-tools.js)
   let nets = "";
   try {
-    if (item.pads) {
+    if (part.pads) {
       const seen = new Map();
-      for (const pad of item.pads.values()) if (pad.net && pad.net.name && pad.net.number > 0) seen.set(pad.net.number, pad.net.name);
+      for (const pad of part.pads.values()) if (pad.net && pad.net.name && pad.net.number > 0) seen.set(pad.net.number, pad.net.name);
       const all = [...seen].sort((a, b) => (+a[1].startsWith("unconnected-") - +b[1].startsWith("unconnected-")) || a[1].localeCompare(b[1]));
       nets = all.slice(0, 12).map(([n, name]) => `<button type="button" class="netbtn" data-net="${n}" title="Highlight this net on the board">${esc(name)}</button>`).join(" ") +
         (all.length > 12 ? ` <span class="muted">+${all.length - 12} more: search them under Nets</span>` : "");
@@ -506,13 +510,14 @@ function showPart(kind, item) {
       ` <span class="sub mono">${esc(o.sku)}</span></span><b>${money(o.price, p.currency, 4)}</b>` +
       `<span class="sub ${o.stock < 1 ? "short" : ""}">${o.stock.toLocaleString()} in stock</span><span class="sub">min ${o.moq}</span></div>`).join("");
   box.innerHTML = `<h3>Selected</h3><div class="sel-ref">${esc(ref)} <span class="mono muted" style="font-size:14px;font-weight:500">${esc(p.mpn || p.lcsc || "")}</span></div>` +
-    `<div class="sel-val">${esc(p.value || item.value || "")}${was("value")}${vp ? (p.dnp ? ` · <b>Not fitted in ${esc(vp.variant)}</b>` : "") : p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
+    `<div class="sel-val">${esc(p.value || part.value || "")}${was("value")}${vp ? (p.dnp ? ` · <b>Not fitted in ${esc(vp.variant)}</b>` : "") : p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
     (vp ? kv("Variant", esc(vp.variant)) : "") +
     kv("Footprint", esc(p.footprint), "footprint") + kv("Nets", nets) + kv("Manufacturer", esc(p.manufacturer), "manufacturer") + kv("MPN", esc(p.mpn), "mpn") +
     kv("LCSC", esc(p.lcsc), "lcsc") + kv("Voltage", esc(p.voltage), "voltage") + kv("Datasheet", ds) +
     (vp && vp.notFitted && base.offers ? `<div class="muted" style="margin-top:8px">Not ordered in ${esc(vp.variant)}.</div>` : "") +
     (offers ? `<h3 style="margin-top:12px">Suppliers · unit price</h3>${offers}<div class="kv"><span></span><a href="#sourcing">compare all</a></div>` : "") +
     (!D.parts[ref] ? `<div class="muted">Not in the BOM.</div>` : "");
+  if (window.KHCross) KHCross.decorate(kind, box, item);   // Show in schematic / Show on PCB (scripts/crossprobe.js)
 }
 
 /* ---------- front page ---------- */

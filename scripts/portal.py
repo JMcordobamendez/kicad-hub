@@ -415,6 +415,7 @@ def index():
         shutil.copy2(js, assets)
     shutil.copy2(os.path.join(HERE, "viewer-tools.js"), assets)  # nets and measuring in the viewer
     shutil.copy2(os.path.join(HERE, "variants-view.js"), assets)  # variant selector in the viewer
+    shutil.copy2(os.path.join(HERE, "crossprobe.js"), assets)  # PCB <-> schematic cross-probing
     shutil.copy2(os.path.join(HERE, "compare.js"), assets)  # compare widget, shared by both pages
     # activity.json (scripts/activity.py) is in the site root when the activity input is on
     has_activity = os.path.isfile(os.path.join(args.root, "activity.json"))
