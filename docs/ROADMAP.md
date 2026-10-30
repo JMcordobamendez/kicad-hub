@@ -339,6 +339,10 @@ Picked by the owner (2026-10-29):
   - [ ] Releases per customer: tags like `acme-v1.0` → release, fab zip and portal page
         named after the customer
   - [ ] A standing "vs main" view on the branch's page (BOM, sheets, layers)
+  - [ ] Feature branches off a customer branch (e.g. `feature-1` from `customer/acme`):
+        a PR into `customer/acme` is already checked against it (BOM diff, visual
+        changes, Changes tab); make it explicit in the docs and let Compare pick any two
+        branches or builds (customer branch vs its feature, vs `main`, vs a release)
   - [ ] Drift indicator: "`main` has 23 commits this branch doesn't, 4 touch the PCB", with
         the list, to decide what to carry over (by hand or cherry-pick: KiCad files merge
         badly). Only-assembly differences belong in KiCad variants on `main`, not a branch
@@ -404,7 +408,8 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       name kicad-hub is kept with a "not affiliated with the KiCad project" note
 - [x] Tags `v1.0.0` and moving `v1`; examples use `@v1`
 - [x] Repository public (2026-10-29)
-- [x] User manual: docs/manual.md (2026-10-29)
+- [x] User manual: docs/manual.md (2026-10-29); pinned comments section with a
+      screenshot (2026-10-30)
 
 ## Decisions so far
 - **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation

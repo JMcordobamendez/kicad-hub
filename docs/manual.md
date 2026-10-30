@@ -332,8 +332,42 @@ merged, closed), pushes and releases.
 
 ### 5.10 Pinned comments (PR pages)
 
-Reading pins needs nothing. **Posting** from the page needs a fine-grained token (one
-time, in GitHub):
+Pin a review note to a part or a point of the board; it is posted as a comment on the
+pull request and drawn back on the board for everyone.
+
+![A pinned comment: numbered marker on the board, its popover, and the Comments card](screenshots/portal-comments.png)
+
+**Make a comment** (PCB or Schematic tab of a PR's page):
+
+1. Press **Comment** in the viewer toolbar.
+2. Click a part (its reference is filled in) or any empty point of the board. The form in
+   the side panel shows **Part**, **Layer**, **X / Y (mm)**; you can still edit them, and
+   clicking the board again moves the pin. **Esc** or **Cancel** stops.
+3. Write the note.
+4. Post it:
+   - **Without a token**: **Copy and open the pull request** copies the formatted comment
+     and opens the PR. Paste it in the comment box at the bottom and press **Comment**.
+     Back on the portal the comment is read again on its own (or press **Refresh**) and
+     the form closes when it appears.
+   - **With a token** (see below): **Post to the pull request** posts it directly.
+
+What it looks like on GitHub:
+
+```
+📍 **U2** (x 146.85, y 104.57 mm, F.Cu) — missing decoupling
+[Open on the board](https://<owner>.github.io/<repo>/pr-21/?at=146.85,104.57&ref=U2#pcb)
+```
+
+plus a hidden `<!-- kicad-hub-pin {...} -->` marker with the coordinates, layer and commit
+(not shown by GitHub; the portal reads it).
+
+**Read comments**: the **Comments** card lists every pinned comment of the PR (number,
+author, part, coordinates, text, link to GitHub); the same numbers appear as markers on
+the board, following zoom, pan and Top/Bottom (pins on the other side are dimmed).
+Clicking a marker or a list entry zooms to it; **Open on the board** links in the PR land
+on the same spot. A comment made on an older commit is flagged "older commit".
+
+**Posting from the page** needs a fine-grained token (one time, in GitHub):
 
 1. Profile photo (top right) → **Settings** → **Developer settings** (bottom of the left
    sidebar).
