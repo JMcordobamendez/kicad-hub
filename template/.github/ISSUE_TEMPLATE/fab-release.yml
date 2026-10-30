@@ -1,0 +1,53 @@
+name: Fab release
+description: Request a release to order boards
+title: "[Release] "
+labels: ["fab-release"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Once approved, tag the revision (`vX.Y`) so CI publishes the fab package. If the release job is behind an Environment, a reviewer must approve it there too (see docs/approvals.md).
+  - type: input
+    id: revision
+    attributes:
+      label: Revision and tag
+      placeholder: "B, v1.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: fab
+    attributes:
+      label: Fab house
+      options:
+        - JLCPCB
+        - PCBWay
+        - Eurocircuits
+        - Other (say which below)
+    validations:
+      required: true
+  - type: input
+    id: quantity
+    attributes:
+      label: Quantity
+      placeholder: "10 boards, 5 assembled"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist before ordering
+      options:
+        - label: ERC and DRC pass on the tagged commit
+          required: true
+        - label: Design review done and approved
+          required: true
+        - label: BOM checked, no part out of stock or end-of-life
+          required: true
+        - label: Revision updated in the title block and on the silkscreen
+          required: true
+        - label: Gerbers and pick-and-place from CI reviewed
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes for the fab house

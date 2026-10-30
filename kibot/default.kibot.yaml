@@ -1,0 +1,44 @@
+# Default KiBot outputs used by the kicad-hub action.
+# ERC/DRC, the BOM checks and the fab package (Gerbers, drill, IPC-D-356, pick & place)
+# are made with kicad-cli in the action itself, so KiBot is always called with `-s all`
+# and only for the outputs below.
+kibot:
+  version: 1
+
+outputs:
+  # --- From the schematic -------------------------------------------------
+  - name: schematic_pdf
+    comment: Schematic as a single PDF
+    type: pdf_sch_print
+    dir: schematic
+
+  - name: bom_csv
+    comment: Bill of materials (CSV)
+    type: bom
+    dir: bom
+    options:
+      format: CSV
+
+  - name: bom_html
+    comment: Bill of materials (HTML)
+    type: bom
+    dir: bom
+    options:
+      format: HTML
+      html:
+        # Datasheet column rendered as a clickable link
+        datasheet_as_link: Datasheet
+        logo: false
+        title: 'Bill of materials'
+
+  # --- From the PCB (only when the board has an outline) ------------------
+  - name: ibom
+    comment: Interactive BOM
+    type: ibom
+    dir: ibom
+    options:
+      # Pull Datasheet from the netlist and show it; iBOM turns URL values into links,
+      # but group only by Value/Footprint so the datasheet doesn't split the rows.
+      extra_fields: Datasheet
+      show_fields: Value,Footprint,Datasheet
+      group_fields: Value,Footprint

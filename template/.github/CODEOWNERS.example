@@ -1,0 +1,23 @@
+# Rename to CODEOWNERS (in .github/, the repo root or docs/) to enable it.
+# With branch protection "Require review from Code Owners", a pull request that
+# touches a file needs approval from its owner. The last matching pattern wins.
+# Owners are @user or @org/team. Replace the placeholders below.
+
+# Default owner for everything
+# *                       @your-org/hardware-leads
+
+# One PCB owner at a time (KiCad PCB files do not merge)
+# *.kicad_pcb             @pcb-owner
+
+# Schematic: one owner per hierarchical sheet
+# board.kicad_sch         @schematic-lead
+# power.kicad_sch         @power-engineer
+# mcu.kicad_sch           @firmware-hw-engineer
+
+# Project libraries
+# /lib/                   @library-owners
+# *.kicad_sym             @library-owners
+# *.kicad_mod             @library-owners
+
+# CI and repository rules
+# /.github/               @your-org/hardware-leads

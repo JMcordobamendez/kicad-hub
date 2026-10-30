@@ -1,0 +1,61 @@
+# KiCad CI with kicad-hub: checks, BOM review, prices, before/after images and the
+# fab package on every push and pull request; a GitHub Release on tags vX.Y.
+# Docs: https://github.com/JMcordobamendez/kicad-hub#usage
+name: KiCad
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]         # tagging vX.Y publishes the fab package as a release
+  pull_request:
+
+permissions:
+  contents: write        # releases and the PR before/after images
+  pull-requests: write   # PR comment with the report
+
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: JMcordobamendez/kicad-hub@v1
+        with:
+          project-dir: .                 # folder with the .kicad_pro
+          # strict: true                 # fail on ERC/DRC errors
+          # fab-profile: jlcpcb          # also DRC with that fab's rules + its BOM/CPL (jlcpcb | pcbway | eurocircuits)
+          # boards: "1,5,10,100"         # batch sizes to price
+          # requirements: kicad-hub-requirements.yaml   # checked when the file exists (template/ has a commented one)
+          # currency: EUR
+          # history: 10                  # light snapshots of the last N commits of main (timeline and
+          #                              # compare page in the portal); 0 = off
+          # activity: 500                # activity page: graph of the last N commits of all branches, PRs,
+          #                              # reviews, comments, pushes (no e-mails published); 0 = off
+          # Optional suppliers, with your own free API keys stored as repository
+          # secrets (Settings → Secrets and variables → Actions). Unset = skipped.
+          # How to get them: https://github.com/JMcordobamendez/kicad-hub#supplier-api-keys
+          mouser-api-key: ${{ secrets.MOUSER_API_KEY }}
+          farnell-api-key: ${{ secrets.FARNELL_API_KEY }}
+          # farnell-store: es.farnell.com
+          digikey-client-id: ${{ secrets.DIGIKEY_CLIENT_ID }}
+          digikey-client-secret: ${{ secrets.DIGIKEY_CLIENT_SECRET }}
+
+  # Optional: require an approval before a tag publishes the release.
+  # 1. Create the Environment "fab-release" with required reviewers
+  #    (Settings → Environments), see docs/approvals.md.
+  # 2. Add to the job "board" above:  if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  # 3. Uncomment this job (copy the same "with:" options as above). On a tag it
+  #    waits for a reviewer before running, so nothing is released unapproved.
+  #
+  # release:
+  #   if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  #   runs-on: ubuntu-latest
+  #   environment: fab-release
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         lfs: true
+  #     - uses: JMcordobamendez/kicad-hub@v1
+  #       with:
+  #         project-dir: .
