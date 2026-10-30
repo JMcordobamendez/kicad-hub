@@ -330,6 +330,10 @@ Picked by the owner (2026-10-29):
       doesn't produce yet
 - [ ] **Template repository**: make the board template a GitHub template repository
       ("Use this template" button)
+- [x] **Cross-probing PCB ↔ schematic**: Show in schematic / Show on PCB for parts and nets,
+      optional sync mode (requested by the owner on 2026-10-30, from the commercial-platform
+      review; done 2026-10-30). KiCanvas cannot pick pins, labels or wires, so from the
+      schematic a net is reached through the nets listed for the selected part
 - **Variant limits** (owner, 2026-10-30), see 2b.5:
   - [ ] *In progress* (`feat/variant-viewer`): variant selector in the portal viewer —
         parts not fitted marked on the PCB and the schematic, the variant's values in the

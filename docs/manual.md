@@ -265,6 +265,23 @@ in the side panel. With design variants there is a **Variant** picker too (see
 [6.2](#62-variants)): the symbols not fitted in the chosen variant get KiCad's DNP cross, on
 every sheet.
 
+**Cross-probing** (the Schematic and PCB tabs work together, see also 5.3):
+
+- Click a symbol: **Show on PCB** switches to the PCB tab, turns the board to the side the
+  footprint is on, selects it and zooms to it. Power symbols, parts excluded from the board
+  and parts without a footprint on the board get a message instead. A part not fitted in the
+  chosen variant is still shown, with a note (its footprint stays on the board, drawn as DNP).
+- A multi-unit part lists its other units under the buttons: click one to open it.
+- Once the PCB tab has been opened, the nets of the selected part are listed under the
+  button: click one to highlight it on the board. KiCanvas only lets you pick symbols, not
+  labels, wires or pins, so there is no "click a net" in the schematic.
+- After **Show in schematic** for a net (see 5.3) a **Net in the schematic** card lists the
+  sheet being shown ("Sheet 2 of 3"); **Prev sheet / Next sheet** walk through the sheets
+  where the net is, **Show on PCB** highlights it on the board again and **Clear** or **Esc**
+  removes the rings.
+- **Sync** (toolbar, off by default, kept in the link as `?sync=1`): selecting a part in one
+  tab selects it in the other, so switching tabs lands on it.
+
 ### 5.3 PCB
 
 - **Top / Bottom** flips the board; **Board**, **Whole page**, **Zoom to selection** change the view.
@@ -282,6 +299,16 @@ every sheet.
   highlighted and the rest dimmed; the card shows its pads, tracks (with length), vias and
   zones. **Prev / Next pad** centres each pad in turn ("J3 pad B6 · 2 of 5", turning the
   board for the other side); **Fit** frames the whole net; **Clear** or **Esc** ends it.
+- **Cross-probing**: with a footprint selected, **Show in schematic** (Selected panel)
+  switches to the Schematic tab, opens the sheet that has the symbol (looked up on every
+  sheet, also on hierarchical sheets used more than once), selects it and zooms to it.
+  With a net highlighted, **Show in schematic** (Nets card) goes to the sheets where the net
+  is and draws a ring on each connected pin (yellow) and on each label or power symbol of
+  the net (orange), because KiCanvas has no net highlight in the schematic. The pins come
+  from the board's pads and the labels from their names, so a net with no label and no pin
+  on a symbol gets a message instead. It works on branch, release, history and PR pages, and
+  follows the chosen variant. Comment and Measure keep working: the buttons act on a normal
+  selection and do not start or end those modes.
 - **Measure** (PCB and schematic): press **Measure**, click point A, then point B. The
   distance and its dx / dy legs are drawn and shown in the toolbar (on the PCB, points snap
   to a pad centre nearby). **Esc** clears. Measure and **Comment** are exclusive modes.
