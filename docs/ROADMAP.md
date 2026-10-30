@@ -320,6 +320,28 @@ Picked by the owner (2026-10-29):
       doesn't produce yet
 - [ ] **Template repository**: make the board template a GitHub template repository
       ("Use this template" button)
+- **Variant limits** (owner, 2026-10-30), see 2b.5:
+  - [ ] *In progress* (`feat/variant-viewer`): variant selector in the portal viewer —
+        parts not fitted marked on the PCB and the schematic, the variant's values in the
+        Selected panel, `?variant=` links
+  - [ ] *In progress* (`feat/variant-sync-check`): schematic vs PCB check per variant
+        (DNP, attributes, values), in the report and as a requirement
+  - Boards that differ physically (another outline, stackup or layout) are a new PCB,
+    not a variant: see "Long-lived customer branches" below
+- **Long-lived customer branches** (owner, 2026-10-30): a board in `main` reworked for one
+  customer lives in its own branch (e.g. `customer/acme`), taken from `main`, never
+  merged back, while `main` keeps maturing. Already works: PRs into that branch are
+  checked against it, Compare can show it against `main`, Activity draws it as its own
+  lane. To do:
+  - [ ] Template workflow runs on those branches too (a `customer/**` pattern), so each
+        gets its portal page
+  - [ ] History per long-lived branch (snapshots and timeline, not only `main`)
+  - [ ] Releases per customer: tags like `acme-v1.0` → release, fab zip and portal page
+        named after the customer
+  - [ ] A standing "vs main" view on the branch's page (BOM, sheets, layers)
+  - [ ] Drift indicator: "`main` has 23 commits this branch doesn't, 4 touch the PCB", with
+        the list, to decide what to carry over (by hand or cherry-pick: KiCad files merge
+        badly). Only-assembly differences belong in KiCad variants on `main`, not a branch
 
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
