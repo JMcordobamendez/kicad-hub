@@ -71,7 +71,8 @@
     const n = dnpSet(V.cur).size, entry = V.byName.get(V.cur);
     const changed = entry ? Object.keys(entry.set || {}).length : 0;
     if (!V.cur) return {text: n ? `default: ${plural(n, "part")} not fitted` : "", title: n ? [...dnpSet("")].join(", ") : ""};
-    const bits = [`${plural(n, "part")} not fitted`];
+    const dflt = defaultDnp().size;   // the default build may leave some out already
+    const bits = [`${plural(n, "part")} not fitted${dflt ? ` (${dflt} in default)` : ""}`];
     if (changed) bits.push(`${changed} changed`);
     const title = [entry.description, n ? "Not fitted: " + [...dnpSet(V.cur)].join(", ") : "",
                    changed ? "Changed: " + Object.keys(entry.set).join(", ") : ""].filter(Boolean).join("\n");
