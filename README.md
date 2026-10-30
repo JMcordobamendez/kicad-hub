@@ -56,7 +56,12 @@ On every push and pull request of a KiCad project, the action:
 - **Builds every design variant** (KiCad 10 variants, read from the project): the
   report lists what each one fits, leaves out or changes, warns when a variant
   changes a value but keeps the part number, diffs each variant in pull requests,
-  and the fab package gets a BOM and pick & place per variant.
+  and the fab package gets a BOM and pick & place per variant. Pick & place follows the
+  schematic's per-variant DNP, so the report also compares the schematic with the PCB
+  (DNP, excluded-from-BOM / position-files attributes, references, values, and the
+  PCB's own per-variant overrides when the board stores them) and shows a "Schematic vs
+  PCB" line per build: "in sync" or a table to fix with *Update PCB from Schematic*. The
+  fab notes warn when a build's pick & place disagrees with the PCB.
 - **Shows before/after images** of the schematic sheets and PCB layers changed in a
   pull request, right in the PR comment: removed in red, added in green, each
   changed area boxed.
@@ -474,6 +479,7 @@ and a working one in [`examples/royalblue54l-feather/`](examples/royalblue54l-fe
 | `min_track` | `min` (mm) | Narrowest track used ≥ `min` |
 | `min_drill` | `min` (mm) | Smallest drill used (vias and plated pad holes) ≥ `min` |
 | `required_fields` | `refs`, `fields`, `variant` | Every fitted part whose reference matches the regex `refs` (whole reference, e.g. `U\d+`) has all `fields` filled. Fields are the exported BOM columns (see `required-fields`) |
+| `variants_in_sync` | `max` (default 0), `variant` | Differences between the schematic and the PCB (DNP, attributes, missing references, values) ≤ `max`, for every build or only `variant` |
 | `forbidden_parts` | `pattern`, `variant` | No fitted part has an MPN or value matching the regex `pattern` (case-insensitive) |
 
 `variant` is the name of a design variant; leave it out for the default build.
@@ -518,7 +524,7 @@ the commit hash.
 action.yml                  the action
 fab-profiles/               optional per-fab DRC rules and assembly column layouts
 scripts/                    fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
-                            variant_cpl.py, visual_diff.py, renders.py (page renders for the
+                            variant_cpl.py, variant_sync.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
                             compare.js, the compare page and its shared widget;

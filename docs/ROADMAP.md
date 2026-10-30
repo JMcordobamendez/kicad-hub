@@ -210,6 +210,12 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          variant on the base (when the base has it), table per variant in the PR comment
    - [x] Warn when a variant changes a part's value but keeps its MPN or LCSC code (the
          order would bring the old part; example: lite's C10)
+   - [x] Schematic vs PCB variant check (DNP/attributes/values per variant), shown in the
+         report; requirement `variants_in_sync` (2026-10-30). `scripts/variant_sync.py`
+         reads the .kicad_pcb as text (footprint `attr`, and `(variant (name …) …)` nodes if
+         the board has them) and compares with the BOMs; variants are only compared when the PCB
+         has per-variant data. The fab notes warn when the pick & place disagrees with the
+         PCB. The example board has none (KiCad 9 format): default in sync, `lite` not checked
    - [x] Variant selector in the portal viewer (DNP marked on PCB and schematic, variant
          values in the Selected panel) — 2026-10-30: picker in both toolbars, kept in the URL
          (`?variant=`), data embedded per build from `variants.json` and the per-variant BOMs
@@ -324,6 +330,32 @@ Picked by the owner (2026-10-29):
       doesn't produce yet
 - [ ] **Template repository**: make the board template a GitHub template repository
       ("Use this template" button)
+- **Variant limits** (owner, 2026-10-30), see 2b.5:
+  - [ ] *In progress* (`feat/variant-viewer`): variant selector in the portal viewer —
+        parts not fitted marked on the PCB and the schematic, the variant's values in the
+        Selected panel, `?variant=` links
+  - [ ] *In progress* (`feat/variant-sync-check`): schematic vs PCB check per variant
+        (DNP, attributes, values), in the report and as a requirement
+  - Boards that differ physically (another outline, stackup or layout) are a new PCB,
+    not a variant: see "Long-lived customer branches" below
+- **Long-lived customer branches** (owner, 2026-10-30): a board in `main` reworked for one
+  customer lives in its own branch (e.g. `customer/acme`), taken from `main`, never
+  merged back, while `main` keeps maturing. Already works: PRs into that branch are
+  checked against it, Compare can show it against `main`, Activity draws it as its own
+  lane. To do:
+  - [ ] Template workflow runs on those branches too (a `customer/**` pattern), so each
+        gets its portal page
+  - [ ] History per long-lived branch (snapshots and timeline, not only `main`)
+  - [ ] Releases per customer: tags like `acme-v1.0` → release, fab zip and portal page
+        named after the customer
+  - [ ] A standing "vs main" view on the branch's page (BOM, sheets, layers)
+  - [ ] Feature branches off a customer branch (e.g. `feature-1` from `customer/acme`):
+        a PR into `customer/acme` is already checked against it (BOM diff, visual
+        changes, Changes tab); make it explicit in the docs and let Compare pick any two
+        branches or builds (customer branch vs its feature, vs `main`, vs a release)
+  - [ ] Drift indicator: "`main` has 23 commits this branch doesn't, 4 touch the PCB", with
+        the list, to decide what to carry over (by hand or cherry-pick: KiCad files merge
+        badly). Only-assembly differences belong in KiCad variants on `main`, not a branch
 
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
@@ -386,7 +418,8 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       name kicad-hub is kept with a "not affiliated with the KiCad project" note
 - [x] Tags `v1.0.0` and moving `v1`; examples use `@v1`
 - [x] Repository public (2026-10-29)
-- [x] User manual: docs/manual.md (2026-10-29)
+- [x] User manual: docs/manual.md (2026-10-29); pinned comments section with a
+      screenshot (2026-10-30)
 
 ## Decisions so far
 - **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation
