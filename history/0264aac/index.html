@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KiCad design</title>
+<!-- KiCanvas's icon font, requested early so its buttons don't show their names while it loads -->
+<link rel="stylesheet" crossorigin="anonymous"
+  href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0&family=Nunito:wght@300;400;500;600;700&display=block">
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --brand: #e8622c; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e;
+    --bar: #1c2128; --bar-fg: #e6edf3; --bar-muted: #9198a1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --card: #151b23; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #1c2128;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --bar: #010409;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
+  a { color: var(--accent); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+
+  /* top bar */
+  .bar { background: var(--bar); color: var(--bar-fg); display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+         padding: 10px 20px; }
+  .logo { width: 30px; height: 30px; border-radius: 7px; background: var(--brand); color: #fff; font-weight: 700;
+          display: grid; place-items: center; font-size: 13px; flex: none; text-decoration: none; }
+  .crumb { min-width: 0; font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .crumb a { color: var(--bar-fg); text-decoration: none; }
+  .crumb .sep { color: var(--bar-muted); font-weight: 400; }
+  .pill { font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 10px; background: #30363d; color: var(--bar-fg); }
+  .bar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--bar-muted); font-size: 13px; }
+  .bar .right a { color: var(--bar-muted); }
+  .status { font-size: 13px; font-weight: 600; padding: 3px 12px; border-radius: 12px; color: #fff; }
+  .status.ok { background: #1f883d; } .status.bad { background: #cf222e; } .status.none { background: #57606a; }
+
+  /* tabs */
+  nav { background: var(--card); border-bottom: 1px solid var(--line); display: flex; gap: 4px; padding: 0 20px; overflow-x: auto; }
+  nav a { padding: 11px 14px; text-decoration: none; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav a.on { color: var(--fg); border-bottom-color: var(--brand); font-weight: 600; }
+  @media (max-width: 900px) { nav { padding: 0 8px; mask-image: linear-gradient(90deg, #000 85%, transparent); } }
+  .bar select { background: #30363d; color: var(--bar-fg); border: 1px solid #484f58; border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 13px; max-width: 220px; }
+  .seg { display: inline-flex; }
+  .seg .btn { border-radius: 0; } .seg .btn:first-child { border-radius: 6px 0 0 6px; } .seg .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+  .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .layer { display: flex; align-items: center; gap: 6px; padding: 1px 0; font-size: 13px; }
+  .lname { display: flex; align-items: center; gap: 8px; flex: 1; text-align: left; background: none; border: 1px solid transparent;
+           border-radius: 5px; padding: 2px 6px; color: var(--fg); font: inherit; cursor: pointer; }
+  .lname:hover { border-color: var(--line); }
+  .layer.focus .lname { border-color: var(--accent); background: var(--soft); font-weight: 600; }
+  .layer i { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid var(--line); }
+  .netbtn { border: 1px solid var(--line); background: var(--card); color: var(--accent); border-radius: 10px; padding: 0 8px; margin: 1px 0 1px 4px;
+            font: inherit; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+  .netbtn:hover, .netbtn:focus-visible { border-color: var(--accent); background: var(--soft); }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+  .presets .btn { padding: 2px 8px; font-size: 12px; }
+  .diffimg { margin: 6px 0 18px; } .diffimg img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; }
+  /* the interactive compare (.cmp) is styled by assets/compare.js, shared with compare.html */
+  .tl .mono { white-space: nowrap; } .tl td.act { white-space: nowrap; }
+
+  main { flex: 1; padding: 16px 20px; display: flex; min-width: 0; }
+  section { flex: 1; display: none; min-width: 0; }
+  section.on { display: flex; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; width: 100%; }
+  .split > * { min-width: 0; }
+  /* wide screens: the viewer fills the window instead of growing the page */
+  @media (min-width: 901px) {
+    html, body { height: 100%; } body { min-height: 0; }
+    main, section, .split { min-height: 0; }
+    .split { height: 100%; grid-template-rows: minmax(0, 1fr); }
+    .viewer { min-height: 0; }
+    kicanvas-embed { min-height: 0; }
+    aside { overflow-y: auto; }        /* a long layer list scrolls on its own */
+    aside > .card { flex: none; }
+    .doc { max-height: 100%; }         /* long tabs scroll inside their card */
+  }
+  @media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } main { padding: 12px 16px; } }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .viewer { display: flex; flex-direction: column; min-height: 72vh; }
+  .vbar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .vbar .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 4px 12px; border-radius: 6px;
+         cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); }
+  kicanvas-embed { flex: 1; width: 100%; max-width: 100%; min-height: 60vh; display: block; overflow: hidden; }
+  @media (max-width: 900px) { .viewer { min-height: 0; } kicanvas-embed { min-height: 55vh; } .vbar .hint { display: none; } }
+  iframe.full { flex: 1; width: 100%; min-height: 75vh; border: 0; background: var(--card); border-radius: 10px; }
+
+  aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .side { padding: 14px 16px; }
+  .side h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .sel-ref { font-size: 20px; font-weight: 700; }
+  .sel-val { color: var(--muted); margin-bottom: 6px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .kv span:first-child { color: var(--muted); flex: none; }
+  .kv span:last-child { text-align: right; overflow-wrap: anywhere; }
+  .offer { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .offer .sub { color: var(--muted); font-size: 12px; }
+  .offer .short { color: var(--bad); }
+  .muted { color: var(--muted); }
+  .chk { display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .chk b.ok { color: var(--good); } .chk b.bad { color: var(--bad); } .chk b.warn { color: var(--warn); }
+
+  .doc { overflow: auto; padding: 18px 22px; width: 100%; max-width: 1100px; margin: 0 auto; align-self: flex-start; }
+  /* Markdown tables (report, changes); the front page's .list keeps its own style */
+  .doc table:not(.list) { border-collapse: collapse; margin: 8px 0; display: block; overflow-x: auto; }
+  .doc table:not(.list) th, .doc table:not(.list) td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+  .doc table:not(.list) th { background: var(--soft); }
+  .card:has(> .list) { overflow-x: auto; }
+  .doc img { max-width: 100%; }
+  ul.files { list-style: none; padding: 0; margin: 0; }
+  ul.files li { padding: 8px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+  ul.files li:first-child { border-top: 0; }
+  .list { width: 100%; border-collapse: collapse; }
+  .list td, .list th { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .list th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--soft); }
+  h2 { font-size: 15px; margin: 4px 0 10px; }
+  .group { margin-bottom: 18px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
+  .chip.ok { color: var(--good); border-color: var(--good); } .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
+</style>
+</head>
+<body>
+<header id="head"></header>
+<main id="main"></main>
+<footer>Made with <a href="https://github.com/JMcordobamendez/kicad-hub">kicad-hub</a> · viewer:
+  <a href="https://kicanvas.org">KiCanvas</a> · not affiliated with the KiCad project</footer>
+<script>
+const D = {"mode":"build","name":"RoyalBlue54L-Feather","rev":"","label":"0264aac","kind":"history","sha":"0264aac47e4cfab1549e7b577f0d818d09c8b0e9","repo":"JMcordobamendez/kicad-hub","server":"https://github.com","run_url":"https://github.com/JMcordobamendez/kicad-hub/actions/runs/40925121268","title":"","date":"2026-10-29 17:52 UTC","sheets":["design/RoyalBlue54L-Feather.kicad_sch","design/sch/Connectors.kicad_sch","design/sch/nPM1300.kicad_sch","design/sch/nRF54L15.kicad_sch","design/sch/Debugger.kicad_sch"],"pcb":"design/RoyalBlue54L-Feather.kicad_pcb","views":{},"downloads":[],"report":"**docs(roadmap): v1.2.0 (#33)**\n\nJos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez \u00b7 2026-10-29 18:50\n\n| Check | |\n|---|---|\n| ERC errors | 5 |\n| DRC errors | 237 |\n| Parts missing fields | 36 |\n\n_Light snapshot kept for the timeline: no fab package, supplier offers or PDFs. The full build of the latest commit is under `main/`; releases keep their full pages._","counts":{"erc_errors":5,"drc_errors":237,"fab_profile":"jlcpcb","drc_fab_violations":408,"drc_fab_new":138,"requirements_total":7,"requirements_passed":6,"requirements_failed":1,"requirements_unknown":0,"variants":1,"variant_mismatches":1,"variant_bom_changes":0,"unannotated":0,"pending_values":0,"missing_fields":36,"datasheets_found":6,"datasheets_broken":0,"above_target":1,"sourcing_warnings":0,"fab_warnings":1},"cost":null,"parts":{"C1":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"C2":{"value":"10uF","footprint":"C_0603_1608Metric","lcsc":"C96446","dnp":false},"C3":{"value":"10uF","footprint":"C_0603_1608Metric","lcsc":"C96446","dnp":false},"C4":{"value":"10uF","footprint":"C_0603_1608Metric","lcsc":"C96446","dnp":false},"C5":{"value":"1uF","footprint":"C_0603_1608Metric","lcsc":"C15849","dnp":false},"C6":{"value":"1uF","footprint":"C_0603_1608Metric","lcsc":"C15849","dnp":false},"C7":{"value":"4.7uF","footprint":"C_0402_1005Metric","lcsc":"C23733","dnp":false},"C8":{"value":"10uF","footprint":"C_0603_1608Metric","lcsc":"C96446","dnp":false},"C9":{"value":"4.7uF","footprint":"C_0402_1005Metric","lcsc":"C23733","dnp":false},"C10":{"value":"4.7uF","footprint":"C_0402_1005Metric","lcsc":"C23733","dnp":false},"C11":{"value":"2.2uF","footprint":"C_0603_1608Metric","lcsc":"C23630","dnp":false},"C12":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"C13":{"value":"300pF","footprint":"C_0402_1005Metric","lcsc":"C126505","dnp":false},"C14":{"value":"300pF","footprint":"C_0402_1005Metric","lcsc":"C126505","dnp":false},"C15":{"value":"1uF","footprint":"C_0402_1005Metric","lcsc":"C52923","dnp":false},"C16":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"C17":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"C18":{"value":"12pF","footprint":"C_0402_1005Metric","lcsc":"C1547","dnp":false},"C19":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"C20":{"value":"12pF","footprint":"C_0402_1005Metric","lcsc":"C1547","dnp":false},"C21":{"value":"100pF","footprint":"C_0402_1005Metric","lcsc":"C1546","dnp":false},"C22":{"value":"1uF","footprint":"C_0402_1005Metric","lcsc":"C52923","dnp":false},"C23":{"value":"4.7uF","footprint":"C_0402_1005Metric","lcsc":"C23733","dnp":false},"C24":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"C25":{"value":"100nF","footprint":"C_0402_1005Metric","lcsc":"C307331","dnp":false},"D1":{"value":"LED_Small","footprint":"LED_0603_1608Metric","lcsc":"C125103","dnp":false},"D3":{"value":"LED_ARGB","footprint":"LED_Wurth_150044M155260","lcsc":"C404280","dnp":false},"J3":{"value":"USB_C_Receptacle_USB2.0_16P","footprint":"USB_C_Receptacle_HRO_TYPE-C-31-M-12","lcsc":"C165948","dnp":false},"J4":{"value":"Conn_01x02_MountingPin","footprint":"JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal","lcsc":"C295747","dnp":false},"J5":{"value":"Conn_01x04_MountingPin","footprint":"JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal","lcsc":"C3029343","dnp":false},"J6":{"value":"Conn_01x05_MountingPin","footprint":"CONN-SMD_5P-P0.50_HCTL_HC-FPC-05-09-5RLTAG","dnp":false},"L1":{"value":"2.2uH","footprint":"L_0603_1608Metric","lcsc":"C337910","dnp":false},"R1":{"value":"100kR","footprint":"R_0402_1005Metric","lcsc":"C25741","dnp":false},"R4":{"value":"330kR","footprint":"R_0402_1005Metric","lcsc":"C25778","dnp":false},"R5":{"value":"10kR","footprint":"R_0402_1005Metric","lcsc":"C25744","dnp":false},"R6":{"value":"470R","footprint":"R_0402_1005Metric","lcsc":"C25117","dnp":false},"R7":{"value":"10kR","footprint":"R_0402_1005Metric","lcsc":"C25744","dnp":false},"R8":{"value":"100kR","footprint":"R_0402_1005Metric","lcsc":"C25741","dnp":false},"SW1":{"value":"SW_Push","footprint":"SW_Push_1P1T_NO_Vertical_Wuerth_434133025816","lcsc":"C139797","dnp":false},"SW2":{"value":"SW_Push","footprint":"SW_Push_1P1T_NO_Vertical_Wuerth_434133025816","lcsc":"C139797","dnp":false},"TP1":{"value":"TestPoint","footprint":"TestPoint_Pad_D2.0mm","dnp":true},"TP2":{"value":"TestPoint","footprint":"TestPoint_Pad_D2.0mm","dnp":true},"TP3":{"value":"TestPoint","footprint":"TestPoint_Pad_D2.0mm","dnp":true},"TP5":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP6":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP7":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP8":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP9":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP10":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP11":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"TP12":{"value":"TestPoint","footprint":"TestPoint_Pad_D1.5mm","dnp":true},"U1":{"value":"BM15x","footprint":"BM15x-LGA-45_15.8x10mm","lcsc":"C9900148376","dnp":false},"U2":{"value":"nPM1300-QEXX","footprint":"QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm_ThermalVias","lcsc":"C7466043","dnp":false},"U3":{"value":"TPD3E001DRLR","footprint":"SOT-553","lcsc":"C2999113","dnp":false},"U4":{"value":"W25Q16JVUXIQ","footprint":"Winbond_USON-8-1EP_3x2mm_P0.5mm_EP0.2x1.6mm","lcsc":"C2843335","dnp":false},"U5":{"value":"nRF52833-QDXX","footprint":"QFN-40-1EP_5x5mm_P0.4mm_EP3.6x3.6mm_ThermalVias","lcsc":"C2895249","dnp":false},"U6":{"value":"TXB0106RGY","footprint":"Texas_RGY_R-PVQFN-N16_EP2.05x2.55mm","lcsc":"C2652978","dnp":false},"Y1":{"value":"32.768KHz","footprint":"Crystal_SMD_3215-2Pin_3.2x1.5mm","lcsc":"C32346","dnp":false},"Y2":{"value":"32MHz","footprint":"Crystal_SMD_2016-4Pin_2.0x1.6mm","lcsc":"C2682773","dnp":false}},"branch":"main","commit":{"date":"2026-10-29T18:50:15+01:00","author":"Jos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez","message":"docs(roadmap): v1.2.0 (#33)"},"light":true,"activity":true,"changes":null,"pr":null};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const repoUrl = `${D.server}/${D.repo}`;
+const repoName = D.repo.split("/")[1];
+const money = (v, cur, max = 2) => new Intl.NumberFormat(undefined, {style: "currency", currency: cur, maximumFractionDigits: max}).format(v);
+const size = n => n == null ? "" : n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
+// pages live at <root>/<branch>/, <root>/pr-N/, <root>/releases/<tag>/ or <root>/history/<sha>/
+const HOME = D.mode === "index" ? "./" : D.kind === "release" || D.kind === "history" ? "../../" : "../";
+// when a build was made: its commit's date if known, else the publish time
+const when = b => Date.parse((b.commit && b.commit.date) || "") || Date.parse(String(b.date || "").replace(" UTC", "Z").replace(" ", "T")) || 0;
+const ownPath = () => decodeURIComponent(new URL(".", location.href).pathname.slice(new URL(HOME, location.href).pathname.length));
+// vendored scripts (pinned copies, see scripts/vendor/README.md), each loaded once
+const loaded = {};
+function load(file, module) {
+  return loaded[file] ??= new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    if (module) s.type = "module";
+    s.src = HOME + "assets/" + file; s.onload = ok; s.onerror = fail;
+    document.head.appendChild(s);
+  });
+}
+
+function status(c) {
+  if (c.erc_errors == null && c.drc_errors == null) return `<span class="status none">no checks</span>`;
+  const n = (c.erc_errors || 0) + (c.drc_errors || 0);
+  return n ? `<span class="status bad">✕ ${n} check error${n > 1 ? "s" : ""}</span>` : `<span class="status ok">✓ checks passed</span>`;
+}
+function chips(c, cost) {
+  const out = [], add = (l, v, soft) => { if (v != null) out.push(`<span class="chip ${v === 0 ? "ok" : soft ? "warn" : "bad"}">${l} ${v}</span>`); };
+  add("ERC", c.erc_errors); add("DRC", c.drc_errors); add(`DRC ${esc(c.fab_profile || "")}`, c.drc_fab_violations, true); add("missing fields", c.missing_fields, true);
+  if (cost && cost.total != null) out.push(`<span class="chip">${money(cost.total, cost.currency)} / ${cost.boards} board${cost.boards > 1 ? "s" : ""}</span>`);
+  return out.join("");
+}
+function topbar(crumbs, right) {
+  return `<div class="bar"><a class="logo" href="${HOME}" title="All builds">kh</a>` +
+    `<div class="crumb">${crumbs}</div><div class="right">${right}</div></div>`;
+}
+
+/* ---------- one build ---------- */
+function buildPage() {
+  load("kicanvas.js", true);
+  document.title = `${D.name}${D.rev ? " rev " + D.rev : ""} · ${D.label}`;
+  const c = D.counts || {};
+  const pr = D.kind === "pr" ? D.label.replace(/^PR #/, "") : "";
+  const where = pr ? `pull request <a href="${repoUrl}/pull/${esc(pr)}"><b>#${esc(pr)}</b></a>`
+    : D.kind === "release" ? `release <a href="${repoUrl}/releases/tag/${encodeURIComponent(D.label)}"><b>${esc(D.label)}</b></a>`
+    : D.kind === "history" ? `snapshot of <b class="mono">${esc(D.branch || "main")}</b>`
+    : `branch <b class="mono">${esc(D.label)}</b>`;
+  const history = pr ? `${repoUrl}/pull/${esc(pr)}/commits` : `${repoUrl}/commits/${esc(D.sha)}`;
+  document.getElementById("head").innerHTML = topbar(
+    `<a href="${HOME}">${esc(repoName)}</a><span class="sep">/</span><span>${esc(D.name)}</span>` +
+      (D.rev ? `<span class="pill">rev ${esc(D.rev)}</span>` : ""),
+    `<select id="version" title="Other versions of this design" hidden></select>` +
+    `<span>${where} · commit <a class="mono" href="${repoUrl}/commit/${esc(D.sha)}">${esc(D.sha.slice(0, 7))}</a>` +
+    ` · <a href="${history}">history</a>${D.activity ? ` · <a href="${HOME}activity.html">activity</a>` : ""}</span>${status(c)}`) + `<nav id="tabs"></nav>`;
+  versions();
+  // net highlight, pad walk and measuring in the viewers (scripts/viewer-tools.js)
+  load("viewer-tools.js").then(() => KHTools.init({D, viewers, findProject})).catch(() => {});
+  // comments pinned on the board: pull request pages on github.com only (scripts/pins.js)
+  if (D.kind === "pr" && D.pr && D.server === "https://github.com")
+    load("pins.js").then(() => KHPins.init({D, viewers, findProject})).catch(() => {});
+
+  const ch = D.changes;
+  const nChanges = ch ? (ch.visual || []).length + (ch.bom ? ch.bom.added.length + ch.bom.removed.length + ch.bom.changed.length : 0) : 0;
+  const tabs = [];
+  if (D.sheets.length) tabs.push(["schematic", "Schematic"]);
+  if (D.pcb) tabs.push(["pcb", "PCB"]);
+  if (ch) tabs.push(["changes", `Changes vs ${esc(ch.base || "base")}${nChanges ? ` (${nChanges})` : ""}`]);
+  if (D.views.ibom) tabs.push(["ibom", "Interactive BOM"]);
+  if (D.views.bom) tabs.push(["bom", "BOM"]);
+  if (D.views.sourcing) tabs.push(["sourcing", "Suppliers"]);
+  tabs.push(["report", "Report"]);
+  if (D.views.datasheets) tabs.push(["datasheets", "Datasheets"]);
+  tabs.push(["downloads", "Downloads"]);
+  document.getElementById("tabs").innerHTML = tabs.map(([id, t]) => `<a href="#${id}" data-tab="${id}">${t}</a>`).join("");
+
+  const downloads = `<ul class="files">${D.downloads.map(f =>
+      `<li><span>${esc(f.label.split(" (")[0])}</span><a href="${esc(f.file)}" download>${esc(f.file.split(".").pop())}</a></li>`).join("")}` +
+    (D.views.ibom ? `<li><span>Interactive BOM</span><a href="#ibom">open</a></li>` : "") + `</ul>`;
+  const checks = () => {
+    const row = (l, v, soft) => v == null ? "" : `<div class="chk"><span>${l}</span><b class="${v === 0 ? "ok" : soft ? "warn" : "bad"}">${v}</b></div>`;
+    return row("ERC errors", c.erc_errors) + row("DRC errors", c.drc_errors) + row(`DRC vs ${esc(c.fab_profile || "fab")} rules`, c.drc_fab_violations, true) + row("Parts missing fields", c.missing_fields, true) + row("Requirements failed", c.requirements_failed) +
+      (ch ? `<div class="chk"><span>Changes vs ${esc(ch.base || "base")}</span><a href="#changes">${nChanges}</a></div>` : "") +
+      (D.cost && D.cost.total != null ? `<div class="chk"><span>Parts for ${D.cost.boards} board${D.cost.boards > 1 ? "s" : ""}</span><b>${money(D.cost.total, D.cost.currency)}</b></div>` : "") +
+      `<div class="chk"><span>Full report</span><a href="#report">open</a></div>`;
+  };
+  const side = kind => `<aside>
+      <div class="card side" id="sel-${kind}"><h3>Selected</h3><div class="muted">Click a ${kind === "pcb" ? "footprint" : "symbol"} to see its part, datasheet and suppliers.</div></div>
+      ${kind === "pcb" ? `<div class="card side"><h3>Layers</h3><div id="layers" class="muted">Loading…</div></div>` : ""}
+      <div class="card side"><h3>Checks</h3>${checks()}</div>
+      <div class="card side"><h3>Downloads</h3>${downloads}</div></aside>`;
+  const viewer = (kind, inner, buttons) => `<div class="split"><div class="card viewer">
+      <div class="vbar">${buttons}<span class="hint">scroll to zoom · drag to pan · click a part to inspect · KiCanvas</span></div>
+      ${inner}</div>${side(kind)}</div>`;
+  const frame = src => `<iframe class="full card" src="${esc(src)}" loading="lazy" title="${esc(src)}"></iframe>`;
+
+  const S = {
+    schematic: () => viewer("sch", `<kicanvas-embed id="kc-sch" controls="basic">${D.sheets.map(s => `<kicanvas-source src="${esc(s)}"></kicanvas-source>`).join("")}</kicanvas-embed>`,
+      `<select class="btn" id="sheet-sel" hidden title="Sheet"></select><button class="btn" data-fit="sch-page">Whole sheet</button><button class="btn" data-fit="sch-sel">Zoom to selection</button>`),
+    pcb: () => viewer("pcb", `<kicanvas-embed id="kc-pcb" src="${esc(D.pcb)}" controls="basic"></kicanvas-embed>`,
+      `<span class="seg"><button class="btn on" data-side="top">Top</button><button class="btn" data-side="bottom">Bottom</button></span>` +
+      `<button class="btn" data-fit="pcb-board">Board</button><button class="btn" data-fit="pcb-page">Whole page</button><button class="btn" data-fit="pcb-sel">Zoom to selection</button>`),
+    changes: () => changesView(ch),
+    ibom: () => frame(D.views.ibom),
+    bom: () => frame(D.views.bom),
+    sourcing: () => frame(D.views.sourcing),
+    datasheets: () => frame(D.views.datasheets + "/index.html"),
+    report: () => `<div class="card doc" id="report-doc"><p class="muted">Loading…</p></div>`,
+    downloads: () => `<div class="card doc"><h2>Downloads</h2><ul class="files">${D.downloads.map(f =>
+        `<li><a href="${esc(f.file)}" download>${esc(f.label)}</a><span class="muted">${esc(f.file)} · ${size(f.size)}</span></li>`).join("")}` +
+      `<li><a href="${repoUrl}/tree/${esc(D.sha)}">Source files at this commit</a><span class="muted">GitHub</span></li>` +
+      `<li><a href="${history}">Commit history</a><span class="muted">GitHub</span></li></ul>` +
+      (D.run_url ? `<p class="muted">Built by <a href="${esc(D.run_url)}">this CI run</a> on ${esc(D.date)}.</p>` : "") + `</div>`,
+  };
+  document.getElementById("main").innerHTML = tabs.map(([id]) => `<section id="s-${id}"></section>`).join("");
+  const done = new Set();
+  function show() {
+    const want = location.hash.slice(1).split("&")[0];
+    const id = tabs.some(t => t[0] === want) ? want : tabs[0][0];  // e.g. #changes on a page without it
+    if (!done.has(id)) {
+      document.getElementById("s-" + id).innerHTML = S[id]();
+      if (id === "schematic" || id === "pcb") hook(id === "pcb" ? "pcb" : "sch");
+      if (id === "report") renderReport();
+      if (id === "changes") load("compare.js").then(() => document.querySelectorAll(".cmp").forEach(KHCompare.mount));
+      done.add(id);
+    }
+    document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "s-" + id));
+    document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.tab === id));
+    document.querySelector("nav a.on")?.scrollIntoView({block: "nearest", inline: "nearest"});
+  }
+  window.addEventListener("hashchange", show);
+  show();
+}
+
+/* Other published versions of the same repo (the front page's list), the history of main
+   and the way into the compare page */
+function versions() {
+  fetch(HOME + "builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
+    const sel = document.getElementById("version");
+    if (!sel || builds.length < 2) return;
+    const here = ownPath();
+    const order = {branch: 0, history: 1, release: 2, pr: 3};
+    const group = {branch: "Branches", history: "History of main", release: "Releases", pr: "Pull requests"};
+    builds.sort((a, b) => ((order[a.kind] ?? 9) - (order[b.kind] ?? 9)) || (when(b) - when(a)));
+    const text = b => b.kind === "history"
+      ? `${b.label} · ${new Date(when(b)).toISOString().slice(0, 10)}${b.commit && b.commit.message ? " · " + b.commit.message.slice(0, 40) : ""}`
+      : `${b.label}${b.title ? " · " + b.title.slice(0, 40) : ""}`;
+    let html = "", last = "";
+    for (const b of builds) {
+      if (b.kind !== last) { html += `${last ? "</optgroup>" : ""}<optgroup label="${group[b.kind] || b.kind}">`; last = b.kind; }
+      html += `<option value="${esc(b.path)}" ${b.path === here ? "selected" : ""}>${esc(text(b))}</option>`;
+    }
+    html += `</optgroup><optgroup label="Timeline"><option value="@history">All history…</option><option value="@compare">Compare this with…</option></optgroup>`;
+    sel.innerHTML = html;
+    sel.hidden = false;
+    sel.onchange = () => {
+      const v = sel.value;
+      sel.value = here;  // the picker stays on this build if the browser comes back here
+      if (v === "@history") location.href = HOME + "#history";
+      else if (v === "@compare") location.href = HOME + "compare.html?a=" + encodeURIComponent(here);
+      else location.href = HOME + v + location.hash;
+    };
+  });
+}
+
+function changesView(ch) {
+  const out = [`<div class="card doc"><h2>Changes vs <code>${esc(ch.base || "base")}</code></h2>`];
+  const b = ch.bom;
+  if (b) {
+    const n = b.added.length + b.removed.length + b.changed.length;
+    out.push(`<h3>BOM</h3>`);
+    if (!n) out.push(`<p class="muted">No BOM changes.</p>`);
+    else {
+      out.push(`<p><b>＋${b.added.length} added · −${b.removed.length} removed · ~${b.changed.length} changed</b></p>`);
+      if (b.added.length || b.removed.length)
+        out.push(`<table><tr><th>Part</th><th>Value</th><th>Footprint</th></tr>` +
+          b.added.map(p => `<tr><td>＋ ${esc(p.ref)}</td><td>${esc(p.value)}</td><td>${esc(p.footprint)}</td></tr>`).join("") +
+          b.removed.map(p => `<tr><td>− ${esc(p.ref)}</td><td>${esc(p.value)}</td><td>${esc(p.footprint)}</td></tr>`).join("") + `</table>`);
+      if (b.changed.length)
+        out.push(`<table><tr><th>Part</th><th>Value</th><th>Change</th></tr>` +
+          b.changed.map(p => `<tr><td>${esc(p.ref)}</td><td>${esc(p.value)}</td><td>${p.diffs.map(esc).join("<br>")}</td></tr>`).join("") + `</table>`);
+    }
+  }
+  const v = ch.visual || [];
+  out.push(`<h3>Schematic and PCB</h3>`);
+  if (!v.length) out.push(`<p class="muted">No visual changes in the schematic or the board.</p>`);
+  else {
+    out.push(`<p class="muted">Removed in red, added in green, changed areas boxed in orange.</p>`);
+    v.forEach((p, i) => {
+      const head = `<b>${p.kind === "pcb" ? "PCB" : "Schematic"} · ${esc(p.title)}</b>` +
+        ` <span class="muted">${p.status === "changed" ? `${p.areas} area${p.areas !== 1 ? "s" : ""}` : esc(p.status)} · <a href="${esc(p.full)}" target="_blank">full page</a></span>`;
+      if (!(p.before && p.after)) {  // older builds: the static before/after image only
+        out.push(`<div class="diffimg">${head}<a href="${esc(p.full)}" target="_blank"><img src="${esc(p.image)}" alt="${esc(p.title)} before and after" loading="lazy"></a></div>`);
+        return;
+      }
+      out.push(`<div class="cmp" data-cmp="${i}">${head}
+        <div class="cmp-bar"><span class="seg">${[["swipe", "Swipe"], ["fade", "Fade"], ["side", "Side by side"], ["diff", "Changes"]]
+          .map(([m, l], k) => `<button class="btn ${k === 0 ? "on" : ""}" data-mode="${m}">${l}</button>`).join("")}</span>
+          <input type="range" min="0" max="100" value="50" aria-label="Before / after">
+          <button class="btn" data-fit>Fit</button><span class="muted" style="font-size:12px">scroll to zoom · drag to pan</span></div>
+        <div class="cmp-view"><div class="cmp-stage">
+          <img class="a" src="${esc(p.before)}" alt="${esc(p.title)} on ${esc(ch.base || "base")}">
+          <img class="b" src="${esc(p.after)}" alt="${esc(p.title)} in this pull request">
+          <img class="d" src="${esc(p.full)}" alt="${esc(p.title)} changes" hidden>
+        </div><div class="cmp-line"></div>
+        <span class="cmp-tag" style="left:8px">Before · ${esc(ch.base || "base")}</span><span class="cmp-tag" style="right:8px">After · this PR</span></div></div>`);
+    });
+  }
+  return out.join("") + `</div>`;
+}
+
+function renderReport() {
+  Promise.all([load("marked.min.js"), load("purify.min.js")]).then(() => {
+    // the report carries text from the design (values, descriptions): sanitise it
+    const html = DOMPurify.sanitize(marked.parse(D.report || "_No report._"), {ADD_TAGS: ["details", "summary"]});
+    document.getElementById("report-doc").innerHTML = html;
+  }).catch(() => { document.getElementById("report-doc").innerHTML = `<pre>${esc(D.report)}</pre>`; });
+}
+
+/* KiCanvas keeps its viewer inside shadow DOM: find it to zoom and to follow selections */
+function findViewer(root) {
+  for (const el of root.querySelectorAll("*")) {
+    if ((el.localName === "kc-board-viewer" || el.localName === "kc-schematic-viewer") && el.viewer) return el.viewer;
+    if (el.shadowRoot) { const v = findViewer(el.shadowRoot); if (v) return v; }
+  }
+  return null;
+}
+function findProject(root) {
+  for (const el of root.querySelectorAll("*")) {
+    if (el.project && typeof el.project.set_active_page === "function") return el.project;
+    if (el.shadowRoot) { const p = findProject(el.shadowRoot); if (p) return p; }
+  }
+  return null;
+}
+const viewers = {};
+function hook(kind) {
+  const embed = document.getElementById("kc-" + kind);
+  let tries = 0;
+  const timer = setInterval(() => {
+    const root = embed && (embed.shadowRoot || embed);
+    const v = root && findViewer(root);
+    if (v && v.document) {
+      clearInterval(timer);
+      viewers[kind] = v;
+      v.addEventListener("kicanvas:select", e => showPart(kind, e.detail && e.detail.item));
+      if (kind === "pcb") setTimeout(() => { try { v.zoom_to_board(); v.draw(); } catch (e) {} layerPanel(v); }, 150);
+      if (kind === "sch") sheetPicker(findProject(root));
+      document.dispatchEvent(new CustomEvent("kh:viewer", {detail: {kind, viewer: v}}));  // pins.js
+    }
+    if (++tries > 200) clearInterval(timer);
+  }, 300);
+}
+
+/* Sheet list for the schematic viewer: KiCanvas's own one lives in the sidebar we hide */
+function sheetPicker(project) {
+  const sel = document.getElementById("sheet-sel");
+  if (!project || !sel) return;
+  // root sheet first, then in the order the root lists them (D.sheets comes sorted that way)
+  const rel = p => String(p.filename || "");
+  const order = D.sheets.map(s => s.replace(/^design\//, ""));
+  const rank = p => { const f = rel(p), i = order.findIndex(o => o === f || o.endsWith("/" + f) || f.endsWith("/" + o)); return i < 0 ? 999 : i; };
+  const pages = [...project.pages()].filter(p => p.type === "schematic").sort((a, b) => rank(a) - rank(b));
+  if (pages.length < 2) return;
+  const name = p => p.name || rel(p).split("/").pop().replace(/\.kicad_sch$/, "");
+  sel.innerHTML = pages.map((p, i) => `<option value="${i}">${esc((rank(p) === 0 ? "Root" : String(i + 1)) + " · " + name(p))}</option>`).join("");
+  sel.hidden = false;
+  const sync = () => { const i = pages.indexOf(project.active_page); if (i >= 0) sel.value = String(i); };
+  sel.onchange = () => { project.set_active_page(pages[+sel.value]); };
+  project.addEventListener("change", sync);
+  // open on the root sheet, like KiCad does
+  if (rank(pages[0]) === 0 && project.active_page !== pages[0]) project.set_active_page(pages[0]);
+  sync();
+}
+
+/* Layer list for the PCB viewer: show / hide each layer, quick presets */
+function layerPanel(v) {
+  const box = document.getElementById("layers");
+  if (!box || !v.layers) return;
+  const all = [...v.layers.in_ui_order()];
+  // a layer is used if it or one of KiCanvas's derived layers (":In1.Cu:Zones",
+  // ":In1.Cu:BBViaHoles"…) has something drawn: inner planes keep their copper only there
+  const drawn = [...v.layers.in_order()].filter(l => l.items && l.items.length).map(l => l.name);
+  const used = all.filter(l => drawn.some(n => n === l.name || n.startsWith(":" + l.name + ":")));
+  const layers = used.length ? used : all;
+  const nice = n => n.replace(/\.SilkS$/, ".Silkscreen").replace(/\.CrtYd$/, ".Courtyard").replace(/\.Adhes$/, ".Adhesive");
+  const color = l => { try { return l.color.to_css(); } catch (e) { return "transparent"; } };
+  const presets = {
+    all: () => true,
+    none: () => false,
+    copper: l => /\.Cu$/.test(l.name) || l.name === "Edge.Cuts",
+    front: l => /^F\./.test(l.name) || l.name === "Edge.Cuts",
+    back: l => /^B\./.test(l.name) || l.name === "Edge.Cuts",
+  };
+  let focus = null;  // layer drawn on top, the others dimmed (KiCanvas "highlight")
+  const setFocus = l => {
+    focus = l;
+    if (l) l.visible = true;
+    try { v.layers.highlight(l || null); } catch (e) {}
+    v.draw(); render();
+  };
+  const render = () => {
+    box.classList.remove("muted");
+    box.innerHTML = `<div class="presets">${Object.keys(presets).map(k => `<button class="btn" data-preset="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>` +
+      layers.map((l, i) => `<div class="layer ${l === focus ? "focus" : ""}"><input type="checkbox" data-layer="${i}" ${l.visible ? "checked" : ""} aria-label="Show ${esc(nice(l.name))}">` +
+        `<button class="lname" data-focus="${i}" title="Bring to front"><i style="background:${color(l)}"></i>${esc(nice(l.name))}</button></div>`).join("") +
+      `<div class="muted" style="font-size:12px;margin-top:6px">Tick to show or hide · click a name to bring it to the front${focus ? " · click it again to go back" : ""}.</div>`;
+  };
+  box.onchange = e => {
+    const i = e.target.dataset.layer; if (i == null) return;
+    layers[+i].visible = e.target.checked;
+    if (!e.target.checked && layers[+i] === focus) setFocus(null); else v.draw();
+  };
+  box.onclick = e => {
+    const el = e.target.closest("[data-preset],[data-focus]"); if (!el) return;
+    if (el.dataset.focus != null) { const l = layers[+el.dataset.focus]; setFocus(l === focus ? null : l); return; }
+    const k = el.dataset.preset;
+    layers.forEach(l => { l.visible = presets[k](l); });
+    if (focus && !focus.visible) setFocus(null); else { v.draw(); render(); }
+  };
+  render();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target, f = t.dataset && t.dataset.fit, side = t.dataset && t.dataset.side;
+  if (side) {  // Top / Bottom: KiCanvas mirrors the view
+    const v = viewers.pcb; if (!v) return;
+    const flipped = !!(v.viewport && v.viewport.camera && v.viewport.camera.flipped);
+    if ((side === "bottom") !== flipped) { try { v.flip_view(); } catch (err) {} }
+    t.parentElement.querySelectorAll(".btn").forEach(b => b.classList.toggle("on", b === t));
+    return;
+  }
+  if (!f) return;
+  const [kind, what] = f.split("-"), v = viewers[kind]; if (!v) return;
+  try { what === "board" ? v.zoom_to_board() : what === "page" ? v.zoom_to_page() : v.zoom_to_selection(); v.draw(); } catch (err) {}
+});
+
+function showPart(kind, item) {
+  const box = document.getElementById("sel-" + kind); if (!box) return;
+  const ref = item && item.reference;
+  if (!ref || ref === "?") { box.innerHTML = `<h3>Selected</h3><div class="muted">Nothing selected.</div>`; return; }
+  const p = D.parts[ref] || {};
+  const kv = (k, v) => v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : "";
+  const ds = p.datasheet ? `<a href="${esc(p.datasheet)}" target="_blank" rel="noopener">${esc(p.datasheet.split("/").pop().split("?")[0] || "open")}</a>` : "";
+  // nets of the clicked footprint (PCB only), each a button that highlights the net (scripts/viewer-tools.js)
+  let nets = "";
+  try {
+    if (item.pads) {
+      const seen = new Map();
+      for (const pad of item.pads.values()) if (pad.net && pad.net.name && pad.net.number > 0) seen.set(pad.net.number, pad.net.name);
+      const all = [...seen].sort((a, b) => (+a[1].startsWith("unconnected-") - +b[1].startsWith("unconnected-")) || a[1].localeCompare(b[1]));
+      nets = all.slice(0, 12).map(([n, name]) => `<button type="button" class="netbtn" data-net="${n}" title="Highlight this net on the board">${esc(name)}</button>`).join(" ") +
+        (all.length > 12 ? ` <span class="muted">+${all.length - 12} more: search them under Nets</span>` : "");
+    }
+  } catch (e) {}
+  const offers = (p.offers || []).map(o => `<div class="offer"><span><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.supplier)}</a>` +
+      ` <span class="sub mono">${esc(o.sku)}</span></span><b>${money(o.price, p.currency, 4)}</b>` +
+      `<span class="sub ${o.stock < 1 ? "short" : ""}">${o.stock.toLocaleString()} in stock</span><span class="sub">min ${o.moq}</span></div>`).join("");
+  box.innerHTML = `<h3>Selected</h3><div class="sel-ref">${esc(ref)} <span class="mono muted" style="font-size:14px;font-weight:500">${esc(p.mpn || p.lcsc || "")}</span></div>` +
+    `<div class="sel-val">${esc(p.value || item.value || "")}${p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
+    kv("Footprint", esc(p.footprint)) + kv("Nets", nets) + kv("Manufacturer", esc(p.manufacturer)) + kv("MPN", esc(p.mpn)) +
+    kv("LCSC", esc(p.lcsc)) + kv("Voltage", esc(p.voltage)) + kv("Datasheet", ds) +
+    (offers ? `<h3 style="margin-top:12px">Suppliers · unit price</h3>${offers}<div class="kv"><span></span><a href="#sourcing">compare all</a></div>` : "") +
+    (!D.parts[ref] ? `<div class="muted">Not in the BOM.</div>` : "");
+}
+
+/* ---------- front page ---------- */
+function indexPage() {
+  document.title = `${repoName} · designs`;
+  document.getElementById("head").innerHTML = topbar(`<span>${esc(repoName)}</span><span class="pill">KiCad designs</span>`,
+    `${D.activity ? `<a href="activity.html">Activity</a>` : ""}<a href="compare.html">Compare versions</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a>`) +
+    `<nav id="tabs"><a href="#builds" data-tab="builds">Builds</a><a href="#history" data-tab="history">History</a>` +
+    `${D.activity ? `<a href="activity.html">Activity</a>` : ""}<a href="compare.html">Compare versions</a></nav>`;
+  document.getElementById("main").innerHTML = `<div class="doc"><p class="muted">Loading…</p></div>`;
+  // builds.json is rewritten on every publish and by the cleanup workflow
+  fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
+    const views = {builds: () => buildsView(builds), history: () => timelineView(builds)};
+    const show = () => {
+      const id = views[location.hash.slice(1)] ? location.hash.slice(1) : "builds";
+      document.getElementById("main").innerHTML = `<div class="doc">${views[id]()}</div>`;
+      document.querySelectorAll("nav a").forEach(a => a.classList.toggle("on", a.dataset.tab === id));
+    };
+    window.addEventListener("hashchange", show);
+    show();
+  });
+}
+
+function buildsView(builds) {
+  builds = builds.filter(b => b.kind !== "history").sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const group = (kind, title) => {
+    const rows = builds.filter(b => b.kind === kind);
+    if (!rows.length) return "";
+    return `<div class="group"><h2>${title}</h2><div class="card"><table class="list"><tr><th>Build</th><th>Checks</th><th>Board</th><th>Commit</th><th>Updated</th></tr>` +
+      rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="muted">${esc(b.title)}</div>` : ""}</td>` +
+        `<td><div class="chips">${chips(b.counts || {}, b.cost)}</div></td>` +
+        `<td>${esc(b.name)}${b.rev ? ` <span class="muted">rev ${esc(b.rev)}</span>` : ""}</td>` +
+        `<td><a class="mono" href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="muted">${esc(b.date)}</td></tr>`).join("") +
+      `</table></div></div>`;
+  };
+  return builds.length ? group("branch", "Branches") + group("release", "Releases") + group("pr", "Pull requests")
+                       : `<p class="muted">Nothing published yet.</p>`;
+}
+
+/* Timeline: the last commits of main (light snapshots in history/) and the releases, newest
+   first, each one opening its page or going to the compare page */
+function timelineView(builds) {
+  const rows = builds.filter(b => b.kind === "history" || b.kind === "release").sort((a, b) => when(b) - when(a));
+  const intro = `<h2>History</h2><p class="muted">Last commits of main and releases. Pick any two versions in <a href="compare.html">Compare versions</a>.</p>`;
+  if (!rows.length) return intro + `<p class="muted">No history yet: it starts with the next push to main (input <code>history</code> of the action).</p>`;
+  // "previous" is the next older entry of the same kind: commit before commit, release before release
+  const prev = {};
+  for (const kind of ["history", "release"]) {
+    const list = rows.filter(r => r.kind === kind);
+    list.forEach((r, i) => { prev[r.path] = list[i + 1]; });
+  }
+  const link = (a, b) => `compare.html?${a ? "a=" + encodeURIComponent(a) : ""}${a && b ? "&" : ""}${b ? "b=" + encodeURIComponent(b) : ""}`;
+  const day = b => when(b) ? new Date(when(b)).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
+  return intro + `<div class="card"><table class="list tl"><tr><th>Date</th><th>Version</th><th>Message</th><th>Author</th><th>Checks</th><th></th></tr>` +
+    rows.map(r => {
+      const full = r.kind === "history" ? builds.find(b => b.kind === "branch" && b.sha === r.sha) : null;  // the full /main/ page of the same commit
+      const p = prev[r.path], c = r.counts || {};
+      const checks = c.erc_errors == null && c.drc_errors == null ? `<span class="muted">no checks</span>`
+        : `<div class="chips">${chips({erc_errors: c.erc_errors, drc_errors: c.drc_errors}, null)}</div>`;
+      return `<tr><td class="muted">${esc(day(r))}</td>` +
+        `<td>${r.kind === "release" ? `<b>${esc(r.label)}</b> <span class="chip">release</span>`
+          : `<a class="mono" href="${repoUrl}/commit/${esc(r.sha)}">${esc(r.sha.slice(0, 7))}</a>${full ? ` <span class="chip">${esc(full.label)}</span>` : ""}`}</td>` +
+        `<td>${esc((r.commit && r.commit.message) || r.title || "")}</td><td class="muted">${esc((r.commit && r.commit.author) || "")}</td><td>${checks}</td>` +
+        `<td class="act"><a href="${esc((full || r).path)}">Open</a>` +
+        (p ? ` · <a href="${link(p.path, r.path)}">Compare with previous</a>` : "") +
+        ` · <a href="${link(r.path, "")}">Compare with…</a></td></tr>`;
+    }).join("") + `</table></div>`;
+}
+
+D.mode === "index" ? indexPage() : buildPage();
+</script>
+</body>
+</html>

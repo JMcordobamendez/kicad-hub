@@ -1,0 +1,47 @@
+Row,Description,Part,References,Value,Footprint,Quantity Per PCB,Status,Datasheet,LCSC,Sim.Pin
+1,"Unpolarized capacitor, small symbol",C_Small,C18 C20,12pF,C_0402_1005Metric,2, ,~,C1547,
+2,"Unpolarized capacitor, small symbol",C_Small,C21,100pF,C_0402_1005Metric,1, ,~,C1546,
+3,"Unpolarized capacitor, small symbol",C_Small,C13 C14,300pF,C_0402_1005Metric,2, ,~,C126505,
+4,"Unpolarized capacitor, small symbol",C_Small,C1 C12 C16 C17 C19 C24 C25,100nF,C_0402_1005Metric,7, ,~,C307331,
+5,"Unpolarized capacitor, small symbol",C_Small,C15 C22,1uF,C_0402_1005Metric,2, ,~,C52923,
+6,"Unpolarized capacitor, small symbol",C_Small,C5 C6,1uF,C_0603_1608Metric,2, ,~,C15849,
+7,"Unpolarized capacitor, small symbol",C_Small,C11,2.2uF,C_0603_1608Metric,1, ,~,C23630,
+8,"Unpolarized capacitor, small symbol",C_Small,C7 C9 C10 C23,4.7uF,C_0402_1005Metric,4, ,~,C23733,
+9,"Unpolarized capacitor, small symbol",C_Small,C2 C3 C4 C8,10uF,C_0603_1608Metric,4, ,~,C96446,
+10,"RGB LED, anode/red/green/blue",LED_ARGB,D3,LED_ARGB,LED_Wurth_150044M155260,1, ,~,C404280,
+11,"Light emitting diode, small symbol",LED_Small,D1,LED_Small,LED_0603_1608Metric,1, ,~,C125103,1=K 2=A
+12,,Conn_01x02_MountingPin,J4,Conn_01x02_MountingPin,JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal,1, ,~,C295747,
+13,,Conn_01x04_MountingPin,J5,Conn_01x04_MountingPin,JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal,1, ,~,C3029343,
+14,"Generic connectable mounting pin connector, single row, 01x05, script generated (kicad-library-utils/schlib/autogen/connector/)",Conn_01x05_MountingPin,J6,Conn_01x05_MountingPin,CONN-SMD_5P-P0.50_HCTL_HC-FPC-05-09-5RLTAG,1, ,~,C5213747,
+15,USB 2.0-only 16P Type-C Receptacle connector,USB_C_Receptacle_USB2.0_16P,J3,USB_C_Receptacle_USB2.0_16P,USB_C_Receptacle_HRO_TYPE-C-31-M-12,1, ,https://www.usb.org/sites/default/files/documents/usb_type-c.zip,C165948,
+16,"Inductor, small symbol",L_Small,L1,2.2uH,L_0603_1608Metric,1, ,~,C337910,
+17,"Resistor, small US symbol",R_Small_US,R6,470R,R_0402_1005Metric,1, ,~,C25117,
+18,"Resistor, small US symbol",R_Small_US,R5 R7,10kR,R_0402_1005Metric,2, ,~,C25744,
+19,"Resistor, small US symbol",R_Small_US,R1 R8,100kR,R_0402_1005Metric,2, ,~,C25741,
+20,"Resistor, small US symbol",R_Small_US,R4,330kR,R_0402_1005Metric,1, ,~,C25778,
+21,"Push button switch, generic, two pins",SW_Push,SW1 SW2,SW_Push,SW_Push_1P1T_NO_Vertical_Wuerth_434133025816,2, ,~,C139797,
+22,,BM15x,U1,BM15x,BM15x-LGA-45_15.8x10mm,1, ,https://static1.squarespace.com/static/561459a2e4b0b39f5cefa12e/t/66c3d7591cc204465c3f6e4f/1724110684125/BM15C+Product+Specifications.pdf,C9900148376,
+23,TPD3E001 Low-Capacitance 3-Channel ESD-Protection for High-Speed Data Interfaces,TPD3E001DRLR,U3,TPD3E001DRLR,SOT-553,1, ,http://www.ti.com/lit/ds/symlink/tpd3e001.pdf,C2999113,
+24,"6-Bit Bidirectional Voltage-Level Translator, Auto Direction Sensing and ±15-kV ESD Protection, 1.2 - 3.6V APort, 1.65 - 5.5V BPort, VQFN-16",TXB0106RGY,U6,TXB0106RGY,Texas_RGY_R-PVQFN-N16_EP2.05x2.55mm,1, ,http://www.ti.com/lit/ds/symlink/txb0106.pdf,C2652978,
+25,"32Mbit / 4MiB Serial Flash Memory, Standard/Dual/Quad SPI, 2.7-3.6V, WSON-8",W25Q32JVZP,U4,W25Q16JVUXIQ,Winbond_USON-8-1EP_3x2mm_P0.5mm_EP0.2x1.6mm,1, ,http://www.winbond.com/resource-files/w25q32jv%20revg%2003272018%20plus.pdf,C2843335,
+26,"PMIC, LED Driver, Battery Charger, QFN-32",nPM1300-QEXX,U2,nPM1300-QEXX,QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm_ThermalVias,1, ,https://docs.nordicsemi.com/bundle/ps_npm1300,C7466043,
+27,,nRF52833-QDXX,U5,nRF52833-QDXX,QFN-40-1EP_5x5mm_P0.4mm_EP3.6x3.6mm_ThermalVias,1, ,,C2895249,
+28,"Two pin crystal, small symbol",Crystal_Small,Y1,32.768KHz,Crystal_SMD_3215-2Pin_3.2x1.5mm,1, ,~,C32346,
+29,"Four pin crystal, GND on pins 2 and 4, small symbol",Crystal_GND24_Small_EZRoute,Y2,32MHz,Crystal_SMD_2016-4Pin_2.0x1.6mm,1, ,~,C2682773,
+
+
+
+
+
+Project info:
+Schematic:,RoyalBlue54L-Feather
+Variant:,default
+Revision:,0.0.1
+Date:,2025-01-25
+KiCad Version:,10.0.4-10.0.4~ubuntu25.10.1
+Statistics:
+Component Groups:,29
+Component Count:,48
+Fitted Components:,48
+Number of PCBs:,1
+Total Components:,48

@@ -1,0 +1,41 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "",
+ "label": "e7d8606",
+ "kind": "history",
+ "sha": "e7d86067db7528de897b53433bd956c886d5572c",
+ "date": "2026-10-29 17:48 UTC",
+ "title": "",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "fab_profile": "jlcpcb",
+  "drc_fab_violations": 408,
+  "drc_fab_new": 138,
+  "requirements_total": 7,
+  "requirements_passed": 6,
+  "requirements_failed": 1,
+  "requirements_unknown": 0,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "above_target": 1,
+  "sourcing_warnings": 0,
+  "fab_warnings": 1
+ },
+ "cost": null,
+ "branch": "main",
+ "commit": {
+  "date": "2026-10-29T18:45:34+01:00",
+  "author": "Jos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez",
+  "message": "feat(portal): net navigation and measuring in the viewer (#31)"
+ },
+ "bom": "bom-parts.csv",
+ "renders": "renders/renders.json",
+ "light": true
+}

@@ -1,0 +1,42 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "",
+ "label": "3b49aea",
+ "kind": "history",
+ "sha": "3b49aea68fe575a190a4f6256dd00888bbff4c3f",
+ "date": "2026-10-30 10:13 UTC",
+ "title": "",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "fab_profile": "jlcpcb",
+  "drc_fab_violations": 408,
+  "drc_fab_new": 138,
+  "requirements_total": 7,
+  "requirements_passed": 6,
+  "requirements_failed": 1,
+  "requirements_unknown": 0,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "variant_sync_issues": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "above_target": 1,
+  "sourcing_warnings": 0,
+  "fab_warnings": 1
+ },
+ "cost": null,
+ "branch": "main",
+ "commit": {
+  "date": "2026-10-30T11:10:46+01:00",
+  "author": "Jos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez",
+  "message": "feat(portal): variant selector in the viewer (#36)"
+ },
+ "bom": "bom-parts.csv",
+ "renders": "renders/renders.json",
+ "light": true
+}

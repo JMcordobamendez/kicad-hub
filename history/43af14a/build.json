@@ -1,0 +1,41 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "",
+ "label": "43af14a",
+ "kind": "history",
+ "sha": "43af14a4a426bfdf2043148d5567b090f29a54a6",
+ "date": "2026-10-30 09:54 UTC",
+ "title": "",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "fab_profile": "jlcpcb",
+  "drc_fab_violations": 408,
+  "drc_fab_new": 138,
+  "requirements_total": 7,
+  "requirements_passed": 6,
+  "requirements_failed": 1,
+  "requirements_unknown": 0,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "above_target": 1,
+  "sourcing_warnings": 2,
+  "fab_warnings": 1
+ },
+ "cost": null,
+ "branch": "main",
+ "commit": {
+  "date": "2026-10-30T10:52:00+01:00",
+  "author": "Jos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez",
+  "message": "docs(roadmap): variant limits to solve (#34)"
+ },
+ "bom": "bom-parts.csv",
+ "renders": "renders/renders.json",
+ "light": true
+}
