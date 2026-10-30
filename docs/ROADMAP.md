@@ -71,17 +71,16 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** v1.2.0 released (2026-10-29, `v1` moved to it): phases 1–5 (phase 5 as a
-prototype confirmed in a browser) plus fab profiles, requirements, approval flows,
-timeline and compare any two versions, Activity page, net navigation and measuring,
-target prices, user manual (`docs/manual.md`). Suppliers confirmed with real keys: LCSC,
-JLCPCB, Mouser, Farnell. Next: sharing private boards, the "Improvements to what's done"
-list, then a full run on one of the owner's real boards.
+**Now:** v1.3.0 released (2026-10-30, `v1` moved to it): everything in v1.2.0 plus
+variant selector in the viewer, schematic vs PCB variant check, cross-probing between
+PCB and schematic, and picking a net by clicking a wire, label or pin in the schematic
+(KiCanvas fork). The viewer is frozen (see decisions). Next: a full run on one of the
+owner's real boards, cutting the noise it shows; then GitLab and Altium.
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
 
-*Last update: 2026-10-29. Update the classes (`:::done`, `:::doing`, `:::todo`)
+*Last update: 2026-10-30. Update the classes (`:::done`, `:::doing`, `:::todo`)
 whenever a task changes state.*
 
 ## Phase 1 — Project template (~1 day)

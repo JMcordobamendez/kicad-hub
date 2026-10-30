@@ -10,8 +10,8 @@ and GitHub Pages. No extra server to maintain.
 kicad-hub is an independent project, not affiliated with or endorsed by the KiCad
 project. KiCad is a trademark of its respective owners.
 
-> **Status:** v1.1 — CI checks, BOM review, suppliers, fab package and the design
-> portal with interactive compare work and are tested on every push with a real
+> **Status:** v1.3 — CI checks, BOM review, suppliers, fab package, variants and the
+> design portal (compare, comments, nets, cross-probing) work and are tested on every push with a real
 > board (see [what works today](#what-works-today)). Next steps: the
 > [roadmap](docs/ROADMAP.md).
 
