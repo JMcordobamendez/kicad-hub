@@ -348,6 +348,8 @@ Picked by the owner (2026-10-29):
       also reads a `kicad-cli sch export netlist` (`viewer.apply_netlist(text)`) to take KiCad's
       own names: not wired in CI yet, add it if the names matter. Checked in a real browser
       through the "Docs screenshots" workflow (`xprobe` page) on the example board.
+      Names against the board's on the example board: 66 of 68 nets with pins get the name
+      the board has (the 2 left are bus nets, UART.RX / UART.TX).
       Limits: nets that run through bus entries are not tied to their bus (only bus members
       by name), ties between drivers of the same priority are broken alphabetically, local
       power symbols are treated as global, and a click on a part's pin picks the net, not

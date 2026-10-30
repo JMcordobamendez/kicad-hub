@@ -4,7 +4,7 @@ Used by the design portal (`scripts/portal.html`); `portal.py index` copies them
 
 | File | What | Source | License | sha256 |
 |---|---|---|---|---|
-| kicanvas.js | KiCanvas with schematic net picking and highlight: the fork https://github.com/JMcordobamendez/kicanvas, branch `feat/schematic-net-select`, commit 3f3ffa1ae7bb222a1c27e22f48246b69f6e9cafd on top of upstream b031159 (the build we had before, from https://kicanvas.org downloaded 2026-10-29). Built by the fork's "Fork CI" run 41058199795 (2026-10-30), `npm run build` | fork of https://github.com/theacodes/kicanvas | MIT | 931b32d63c7a0b3c5f36f4ac2441c164ef99806e6b015341d41a8f3a0b1acd01 |
+| kicanvas.js | KiCanvas with schematic net picking and highlight: the fork https://github.com/JMcordobamendez/kicanvas, branch `feat/schematic-net-select`, commit 3f3ffa1ae7bb222a1c27e22f48246b69f6e9cafd (e4c945f on the branch only formats it) on top of upstream b031159 (the build we had before, from https://kicanvas.org downloaded 2026-10-29). Built by the fork's "Fork CI" run 41058199795 (2026-10-30), `npm run build` | fork of https://github.com/theacodes/kicanvas | MIT | 931b32d63c7a0b3c5f36f4ac2441c164ef99806e6b015341d41a8f3a0b1acd01 |
 | marked.min.js | marked v12.0.2, Markdown to HTML | jsdelivr (npm `marked@12.0.2`) | MIT | 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894 |
 | purify.min.js | DOMPurify 3.1.6, HTML sanitizer | jsdelivr (npm `dompurify@3.1.6`) | Apache-2.0 / MPL-2.0 | c0845096a7c4a6741f362ac506c94c1c7d27dc603bcc1bf64a587f76f2dbe3a1 |
 
