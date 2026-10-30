@@ -31,6 +31,7 @@ ap.add_argument("--datasheets", help="JSON from datasheets.py")
 ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
                 help="reference prefixes that don't need a datasheet")
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
+ap.add_argument("--variant-sync", help="JSON from variant_sync.py (schematic vs PCB, per build)")
 ap.add_argument("--portal-url", default="", help="this build's page in the design portal")
 ap.add_argument("--requirements", help="JSON from requirements.py")
 ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
@@ -240,6 +241,24 @@ if variants:
         else:
             md += [f"No variant BOM changes vs `{args.base_ref}`.", ""]
     counts.update(variants=len(variants), variant_mismatches=len(mismatched), variant_bom_changes=len(pr_rows))
+
+# --- Schematic vs PCB -----------------------------------------------------------
+sync = json.load(open(args.variant_sync, encoding="utf-8")) if args.variant_sync and os.path.exists(args.variant_sync) else None
+if sync:
+    md += ["**Schematic vs PCB**" if variants else "### Schematic vs PCB", ""]
+    total = 0
+    for b in sync["builds"]:
+        label = "default build" if b["name"] == "default" else f"variant `{b['name']}`"
+        total += len(b["issues"])
+        if not b["issues"]:
+            md += [f"- {label}: in sync", ""]
+            continue
+        md += [f"- {label}: ⚠️ {len(b['issues'])} difference(s). In KiCad: *Tools → Update PCB from Schematic*", "",
+               table(["Ref", "Schematic says", "PCB says"],
+                     [[i["ref"], cell(i["schematic"]), cell(i["pcb"])] for i in b["issues"][:MAX_ROWS]]), ""]
+    if not sync.get("pcb_variant_data") and any(b["name"] != "default" for b in sync["builds"]):
+        md += ["_The PCB stores no per-variant data, so variants are compared with the PCB's base attributes._", ""]
+    counts["variant_sync_issues"] = total
 
 # --- Design to finish ------------------------------------------------------------
 # Parts still to annotate (KiBot can't load a schematic with them) and values still

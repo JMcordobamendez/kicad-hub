@@ -210,6 +210,12 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          variant on the base (when the base has it), table per variant in the PR comment
    - [x] Warn when a variant changes a part's value but keeps its MPN or LCSC code (the
          order would bring the old part; example: lite's C10)
+   - [x] Schematic vs PCB variant check (DNP/attributes/values per variant), shown in the
+         report; requirement `variants_in_sync` (2026-10-30). `scripts/variant_sync.py`
+         reads the .kicad_pcb as text (footprint `attr`, and `(variant (name …) …)` nodes if
+         the board has them) and compares with the per-variant BOMs; the fab notes warn
+         when the pick & place disagrees with the PCB. The example board has no variant data
+         on its footprints (KiCad 9 format), so only base attributes are compared there
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)
