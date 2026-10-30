@@ -213,9 +213,9 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
    - [x] Schematic vs PCB variant check (DNP/attributes/values per variant), shown in the
          report; requirement `variants_in_sync` (2026-10-30). `scripts/variant_sync.py`
          reads the .kicad_pcb as text (footprint `attr`, and `(variant (name …) …)` nodes if
-         the board has them) and compares with the per-variant BOMs; the fab notes warn
-         when the pick & place disagrees with the PCB. The example board has no variant data
-         on its footprints (KiCad 9 format), so only base attributes are compared there
+         the board has them) and compares with the BOMs; variants are only compared when the PCB
+         has per-variant data. The fab notes warn when the pick & place disagrees with the
+         PCB. The example board has none (KiCad 9 format): default in sync, `lite` not checked
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)

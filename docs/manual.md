@@ -393,7 +393,8 @@ So the report adds a **Schematic vs PCB** line per build (default and each varia
 sync", or a table (ref, what the schematic says, what the PCB says) covering DNP, "exclude
 from BOM" / "exclude from position files", references present on one side only and value
 differences, using the PCB's per-variant overrides if the board file stores them. Fix it in
-KiCad with *Tools → Update PCB from Schematic*. It never fails the build by itself (add the
+KiCad with *Tools → Update PCB from Schematic*. Variants are compared only when the PCB stores per-variant data; otherwise the report
+says "not checked" for them and only the default build is compared. It never fails the build by itself (add the
 `variants_in_sync` requirement for that), the number is `variant_sync_issues` in
 `counts.json`, and the fab package `README.txt` warns when a build's pick & place
 disagrees with the PCB.

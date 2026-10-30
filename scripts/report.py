@@ -250,14 +250,15 @@ if sync:
     for b in sync["builds"]:
         label = "default build" if b["name"] == "default" else f"variant `{b['name']}`"
         total += len(b["issues"])
+        if not b.get("checked", True):
+            md += [f"- {label}: not checked (the PCB stores no per-variant data to compare with)", ""]
+            continue
         if not b["issues"]:
             md += [f"- {label}: in sync", ""]
             continue
         md += [f"- {label}: ⚠️ {len(b['issues'])} difference(s). In KiCad: *Tools → Update PCB from Schematic*", "",
                table(["Ref", "Schematic says", "PCB says"],
                      [[i["ref"], cell(i["schematic"]), cell(i["pcb"])] for i in b["issues"][:MAX_ROWS]]), ""]
-    if not sync.get("pcb_variant_data") and any(b["name"] != "default" for b in sync["builds"]):
-        md += ["_The PCB stores no per-variant data, so variants are compared with the PCB's base attributes._", ""]
     counts["variant_sync_issues"] = total
 
 # --- Design to finish ------------------------------------------------------------

@@ -10,7 +10,7 @@ copies it when the designer runs "Update PCB from Schematic". For every build th
 
 The board file is read as plain text (s-expressions), so no KiCad install is needed. Per-
 variant data on footprints is picked up from any `(variant (name ...) ...)` node inside a
-footprint, with `dnp`, `exclude_from_bom`, `exclude_from_pos_files` flags and `field` /
+footprint (variants are only compared when the board has some; otherwise the PCB can't hold them), with `dnp`, `exclude_from_bom`, `exclude_from_pos_files` flags and `field` /
 `property` overrides; a board without any (older format, or never updated) just has none.
 
 Usage: variant_sync.py <board.kicad_pcb> <reports dir> <output JSON> [warnings txt]
@@ -173,7 +173,10 @@ def main():
     vpath = os.path.join(reports, "variants.json")
     if os.path.exists(vpath):
         builds += [(v["name"], v["name"], v["bom"]) for v in json.load(open(vpath, encoding="utf-8"))]
-    result = [{"name": name, "issues": compare(variant, load_bom(p), board)}
+    # Without per-variant data the PCB can only hold the default build: comparing a variant's
+    # DNP/values with it would just repeat the variant's own differences, so it isn't checked.
+    result = [{"name": name, "checked": not (variant and not has_variant_data),
+               "issues": compare(variant, load_bom(p), board) if not (variant and not has_variant_data) else []}
               for name, variant, p in builds if os.path.exists(p)]
     with open(out, "w", encoding="utf-8") as f:
         json.dump({"pcb_variant_data": has_variant_data, "builds": result}, f, indent=1)

@@ -218,6 +218,8 @@ def variants_in_sync(req):
     builds = [b for b in sync["builds"] if not name or b["name"] == name]
     if name and not builds:
         raise Unknown(f"variant '{name}' was not checked")
+    if name and not builds[0].get("checked", True):
+        raise Unknown(f"variant '{name}' not checked: the PCB stores no per-variant data")
     issues = [(b["name"], i["ref"]) for b in builds for i in b["issues"]]
     one = bool(name) or len(builds) == 1
     return verdict(len(issues) <= limit, f"{len(issues)} differences",
