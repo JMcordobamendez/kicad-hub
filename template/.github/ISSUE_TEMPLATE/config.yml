@@ -1,5 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: kicad-hub documentation
-    url: https://github.com/JMcordobamendez/kicad-hub#usage
-    about: How the CI report, BOM review and portal work.

@@ -1,4 +1,0 @@
-(fp_lib_table
-  (version 7)
-  (lib (name "project")(type "KiCad")(uri "${KIPRJMOD}/lib/project.pretty")(options "")(descr "Footprints specific to this board"))
-)
