@@ -452,6 +452,11 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       screenshot (2026-10-30)
 
 ## Decisions so far
+- **Viewer frozen** (2026-10-30): after schematic net picking (#39) no more viewer
+  features (buttons, modes, KiCanvas changes) unless a real use asks for it. Each one
+  costs more than the last and adds to the KiCanvas fork to maintain; reviewers who
+  need more open the design in KiCad. Fixes are still welcome. Next: try kicad-hub
+  on a real personal board and cut the noise it shows, then release.
 - **KiCanvas fork for schematic nets** (2026-10-30): the vendored KiCanvas is a build of
   JMcordobamendez/kicanvas (upstream b031159 plus the net features), see
   `scripts/vendor/README.md` to update it. **Not offered upstream**: the maintainer of
