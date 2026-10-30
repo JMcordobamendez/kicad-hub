@@ -510,6 +510,11 @@ runs:
         if [ -n "$variant_lines" ]; then
           printf '\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n%s' "$variant_lines" >> "$pkg/README.txt"
         fi
+        # Schematic vs PCB (DNP, attributes, values): the pick & place above follows the schematic
+        python3 "$GITHUB_ACTION_PATH/scripts/variant_sync.py" "$pcb" "$OUT/reports" "$OUT/reports/variant-sync.json" "$OUT/reports/variant-sync.txt" || rm -f "$OUT/reports/variant-sync.json"
+        if [ -s "$OUT/reports/variant-sync.txt" ]; then
+          { printf '\nSCHEMATIC vs PCB MISMATCH\n'; sed 's/^/  /' "$OUT/reports/variant-sync.txt"; } >> "$pkg/README.txt"
+        fi
         while IFS= read -r w; do echo "::warning::$w"; done < "$OUT/reports/fab-warnings.txt"
 
         (cd "$pkg" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
@@ -625,7 +630,7 @@ runs:
           --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
+          --variants "$r/variants.json" --variant-sync "$r/variant-sync.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
           --portal-url "$PORTAL_URL" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"

@@ -421,6 +421,18 @@ a list, or `none`). The report lists what each variant fits, omits or changes, d
 variant in PRs, and the fab package gets a BOM and pick & place per variant under
 `assembly/<variant>/`.
 
+Pick & place is filtered with the schematic's per-variant DNP, because
+`kicad-cli pcb export pos --variant` reads DNP from the PCB, which may not be updated yet.
+So the report adds a **Schematic vs PCB** line per build (default and each variant): "in
+sync", or a table (ref, what the schematic says, what the PCB says) covering DNP, "exclude
+from BOM" / "exclude from position files", references present on one side only and value
+differences, using the PCB's per-variant overrides if the board file stores them. Fix it in
+KiCad with *Tools → Update PCB from Schematic*. Variants are compared only when the PCB stores per-variant data; otherwise the report
+says "not checked" for them and only the default build is compared. It never fails the build by itself (add the
+`variants_in_sync` requirement for that), the number is `variant_sync_issues` in
+`counts.json`, and the fab package `README.txt` warns when a build's pick & place
+disagrees with the PCB.
+
 ### 6.3 Requirements
 
 Put `kicad-hub-requirements.yaml` next to the `.kicad_pro` and uncomment what you need.
@@ -436,7 +448,8 @@ Each entry has `id`, `text`, `check` and parameters:
 
 Checks: `erc_errors_max`, `drc_errors_max`, `max_parts`, `max_unique_parts`, `max_cost`,
 `in_stock`, `no_bad_lifecycle`, `max_layers`, `max_board_size`, `min_track`, `min_drill`,
-`required_fields`, `forbidden_parts`, `max_above_target` (parts above their target price;
+`required_fields`, `forbidden_parts`, `variants_in_sync` (schematic vs PCB differences;
+default max 0), `max_above_target` (parts above their target price;
 default max 0) — parameters in the README. Result is **pass**, **fail**
 or **unknown** (missing data: never fails the job). Failed requirements fail the job only
 with `strict: true`. No file = nothing checked.

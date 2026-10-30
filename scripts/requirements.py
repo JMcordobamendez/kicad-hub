@@ -209,6 +209,23 @@ def max_above_target(req):
     return verdict(len(over) <= limit, f"{len(over)} above target at {n} boards", "; ".join(over[:12]) or f"limit {limit}")
 
 
+def variants_in_sync(req):
+    limit = number(req, "max", default=0)
+    sync = load_json("variant-sync.json")
+    if sync is None:
+        raise Unknown("no schematic vs PCB data (needs a board)")
+    name = req.get("variant")
+    builds = [b for b in sync["builds"] if not name or b["name"] == name]
+    if name and not builds:
+        raise Unknown(f"variant '{name}' was not checked")
+    if name and not builds[0].get("checked", True):
+        raise Unknown(f"variant '{name}' not checked: the PCB stores no per-variant data")
+    issues = [(b["name"], i["ref"]) for b in builds for i in b["issues"]]
+    one = bool(name) or len(builds) == 1
+    return verdict(len(issues) <= limit, f"{len(issues)} differences",
+                   refs_text([r if one else f"{n}:{r}" for n, r in issues]) if issues else "")
+
+
 BAD_LIFECYCLE = re.compile(r"obsolete|end of life|\beol\b|not recommended|nrnd|not for new|last time|"
                            r"no_longer_manufactured|discontinued", re.I)
 
@@ -307,6 +324,7 @@ CHECKS = {
     "in_stock": (in_stock, {"batch", "variant"}),
     "max_above_target": (max_above_target, {"max", "batch", "variant"}),
     "no_bad_lifecycle": (no_bad_lifecycle, {"variant"}),
+    "variants_in_sync": (variants_in_sync, {"max", "variant"}),
     "max_layers": (max_layers, {"max"}),
     "max_board_size": (max_board_size, {"width", "height"}),
     "min_track": (min_track, {"min"}),
