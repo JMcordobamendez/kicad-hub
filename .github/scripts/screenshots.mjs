@@ -98,6 +98,59 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
     await page.screenshot({ path: `${OUT}/extra-${name}-phone.png`, fullPage: true });
     await page.setViewportSize({ width: 1440, height: 900 });
   }
+  if (name === "variants") try {  // variant selector (scripts/variants-view.js): open on ?variant=lite#pcb
+    const shot = async step => { await page.waitForTimeout(1500); await page.screenshot({ path: `${OUT}/extra-variants-${step}.png` }); };
+    const box = await page.locator("#kc-pcb").boundingBox();
+    await page.mouse.click(box.x + 8, box.y + box.height - 8);  // first click only wakes KiCanvas
+    await page.waitForTimeout(800);
+    console.log("url:", page.url(), "| pickers:", await page.locator(".kv-select, .kv-pick select").count(),
+      "| legend:", JSON.stringify(await page.locator(".kv-legend").first().textContent()),
+      "| overlay polygons:", await page.locator(".kv-dnp polygon").count());
+    await page.mouse.move(box.x + box.width + 20, box.y + 20);
+    await shot("1-pcb");
+    await page.evaluate(() => { viewers.pcb.select("C10"); viewers.pcb.zoom_to_selection(); });
+    await shot("2-pcb-c10");
+    console.log("C10 card:", JSON.stringify((await page.locator("#sel-pcb").innerText()).slice(0, 300)));
+    await page.evaluate(() => { viewers.pcb.select("U5"); viewers.pcb.zoom_to_selection(); });
+    await shot("3-pcb-u5");
+    console.log("U5 card:", JSON.stringify((await page.locator("#sel-pcb").innerText()).slice(0, 300)));
+    await page.getByRole("button", { name: "Bottom" }).click();
+    await page.evaluate(() => viewers.pcb.zoom_to_board());
+    await shot("4-pcb-bottom");
+    await page.getByRole("button", { name: "Top" }).click();
+    await page.evaluate(() => viewers.pcb.zoom_to_board());
+    await shot("5-pcb-top");
+    await page.locator("#s-pcb select.kv-select, #s-pcb .kv-pick select").first().selectOption("");
+    await shot("6-pcb-default");
+    await page.locator("#s-pcb .kv-pick select").first().selectOption("lite");
+    // the schematic: same variant, sheet with the debugger (U5, U6, Y2)
+    await page.locator('nav a[data-tab="schematic"]').click();
+    await page.waitForTimeout(3000);
+    const sheet = page.locator("#sheet-sel");
+    if (await sheet.count()) {
+      const opt = await sheet.locator("option", { hasText: "Debugger" }).first().getAttribute("value");
+      await sheet.selectOption(opt);
+      await page.waitForTimeout(3000);
+    }
+    const sbox = await page.locator("#kc-sch").boundingBox();
+    await page.mouse.click(sbox.x + 8, sbox.y + sbox.height - 8);
+    await page.waitForTimeout(800);
+    console.log("sch picker value:", await page.locator("#s-schematic .kv-pick select").first().inputValue(),
+      "| legend:", JSON.stringify(await page.locator("#s-schematic .kv-legend").first().textContent()),
+      "| url:", page.url());
+    await page.mouse.move(sbox.x + sbox.width + 20, sbox.y + 20);
+    await shot("7-sch-lite");
+    await page.evaluate(() => { viewers.sch.select("U5"); viewers.sch.zoom_to_selection(); });
+    await shot("8-sch-u5");
+    console.log("sch U5 card:", JSON.stringify((await page.locator("#sel-sch").innerText()).slice(0, 300)));
+    await page.locator("#s-schematic .kv-pick select").first().selectOption("");
+    await page.evaluate(() => viewers.sch.zoom_to_page());
+    await shot("9-sch-default");
+  } catch (e) {
+    console.log("variants step failed:", String(e.message).slice(0, 300));
+    errors.push(`[variants step] ${String(e.message).slice(0, 300)}`);
+    await page.screenshot({ path: `${OUT}/extra-variants-failed.png` });
+  }
   if (name === "nets") try {  // net highlight, pad walk and measuring (scripts/viewer-tools.js)
     const shot = async step => { await page.waitForTimeout(1200); await page.screenshot({ path: `${OUT}/extra-nets-${step}.png` }); };
     const box = await page.locator("#kc-pcb").boundingBox();

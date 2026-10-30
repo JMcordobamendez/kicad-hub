@@ -263,6 +263,14 @@ Every push to a branch, tag and pull request publishes a page to the
   clicks or taps (on the PCB the points snap to a pad centre when you click near one).
   **Esc** or **Clear** drops the highlight and the measurement. Measure and **Comment** are
   exclusive. The schematic has no net highlight (the viewer doesn't offer one);
+- **Design variants** in the viewer: when the design has KiCad variants, the Schematic and
+  PCB toolbars get a **Variant** picker (default | each variant), the same in both tabs and
+  kept in the URL (`?variant=lite`, so a link opens that variant). The parts not fitted are
+  marked: on the PCB a hatched box with a red X and a "DNP" label over each footprint
+  (the other side of the board as a faint outline), on the schematic KiCad's own DNP cross
+  over the symbol. The toolbar says how many parts the variant leaves out and changes, and
+  the **Selected** card shows that variant's values (`C10: 10uF (default: 100nF)`), "Not
+  fitted in lite" for a part left out, and its own offers if the variant orders another part;
 - on pull request pages, **comments pinned on the board** (see below).
 
 The viewer is a pinned copy of KiCanvas (`scripts/vendor/`, see its README), not
@@ -521,7 +529,8 @@ scripts/                    fab_assembly.py, report.py, requirements.py, datashe
                             portal.py (+ portal.html, the design portal; compare.html and
                             compare.js, the compare page and its shared widget;
                             pins.js, comments pinned on the board;
-                            viewer-tools.js, nets and measuring; activity.py +
+                            viewer-tools.js, nets and measuring;
+                            variants-view.js, variant picker and DNP marks; activity.py +
                             activity.html, the activity page)
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository

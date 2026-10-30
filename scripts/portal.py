@@ -69,6 +69,27 @@ def first(pattern):
 LIGHT_DESIGN_MAX = 6_000_000  # bytes of KiCad files a light snapshot keeps for the viewer
 
 
+def part_fields(r):
+    """One BOM row as the side panel shows it (empty and "~" cells left out)."""
+    return {k: v for k, v in {
+        "value": r.get("Value"), "footprint": (r.get("Footprint") or "").split(":")[-1],
+        "mpn": r.get("MPN"), "manufacturer": r.get("Manufacturer"), "lcsc": r.get("LCSC"),
+        "voltage": r.get("Voltage"), "dnp": bool((r.get("DNP") or "").strip())}.items() if v not in ("", None, "~")}
+
+
+def line_offers(line, n):
+    """The best offers of a sourcing line for n parts, cheapest first, those with stock before the rest."""
+    offers = []
+    for o in line.get("offers", []):
+        if not o.get("ladders"):
+            continue
+        price = next((p for q, p in reversed(o["ladders"]) if n >= q), o["ladders"][0][1])
+        offers.append({"supplier": o["supplier"], "sku": o["sku"], "stock": o["stock"],
+                       "moq": o["moq"], "price": price, "url": o.get("url", "")})
+    offers.sort(key=lambda o: (o["stock"] < n, o["price"]))
+    return offers[:4]
+
+
 def part_info(out, site, light=False):
     """Reference -> what the side panel shows when the part is clicked in the viewer."""
     import csv
@@ -80,10 +101,7 @@ def part_info(out, site, light=False):
         for r in csv.DictReader(f):
             if not r.get("Reference"):
                 continue
-            parts[r["Reference"]] = {k: v for k, v in {
-                "value": r.get("Value"), "footprint": (r.get("Footprint") or "").split(":")[-1],
-                "mpn": r.get("MPN"), "manufacturer": r.get("Manufacturer"), "lcsc": r.get("LCSC"),
-                "voltage": r.get("Voltage"), "dnp": bool((r.get("DNP") or "").strip())}.items() if v not in ("", None, "~")}
+            parts[r["Reference"]] = part_fields(r)
     if light:  # snapshots carry no datasheets or supplier offers
         return parts
     ds_path = os.path.join(out, "reports", "datasheets.json")
@@ -101,19 +119,68 @@ def part_info(out, site, light=False):
         s = json.load(open(src_path, encoding="utf-8"))
         for line in s.get("lines", []):
             refs = line.get("refs", {}).get("default") or []
-            offers = []
-            for o in line.get("offers", []):
-                if not o.get("ladders"):
-                    continue
-                price = next((p for q, p in reversed(o["ladders"]) if len(refs) >= q), o["ladders"][0][1])
-                offers.append({"supplier": o["supplier"], "sku": o["sku"], "stock": o["stock"],
-                               "moq": o["moq"], "price": price, "url": o.get("url", "")})
-            offers.sort(key=lambda o: (o["stock"] < len(refs), o["price"]))
+            offers = line_offers(line, len(refs))
             for ref in refs:
                 if ref in parts:
-                    parts[ref]["offers"] = offers[:4]
+                    parts[ref]["offers"] = offers
                     parts[ref]["currency"] = s["currency"]
     return parts
+
+
+VARIANT_FIELDS = ("value", "footprint", "mpn", "manufacturer", "lcsc", "voltage")
+
+
+def variant_info(out, parts, light=False):
+    """What each design variant changes, for the viewer's variant selector (scripts/variants-view.js):
+    [{name, description, dnp: [refs not fitted], set: {ref: {field: value}} (only the fields that differ
+    from the default build, "" = cleared), offers: {ref: [...]} (only parts ordered differently)}].
+    Read from variants.json and the per-variant BOMs the action writes next to bom-parts.csv."""
+    import csv
+    path = os.path.join(out, "reports", "variants.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        listed = json.load(open(path, encoding="utf-8"))
+    except ValueError:
+        return []
+    lines, currency = [], ""
+    src_path = os.path.join(out, "reports", "sourcing.json")
+    if not light and os.path.exists(src_path):
+        s = json.load(open(src_path, encoding="utf-8"))
+        lines, currency = s.get("lines", []), s.get("currency", "")
+    found = []
+    for v in listed:
+        bom = os.path.join(out, "reports", os.path.basename(v.get("bom") or ""))  # the path is as the runner saw it
+        if not v.get("name") or not os.path.isfile(bom):
+            continue
+        entry = {"name": v["name"], "description": v.get("description") or "", "dnp": [], "set": {}}
+        with open(bom, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                ref = r.get("Reference")
+                if not ref:
+                    continue
+                now = part_fields(r)
+                if now.get("dnp"):
+                    entry["dnp"].append(ref)
+                was = parts.get(ref)
+                diff = {k: now.get(k, "") for k in VARIANT_FIELDS if was is not None and now.get(k, "") != was.get(k, "")}
+                if diff:
+                    entry["set"][ref] = diff
+        entry["dnp"].sort(key=ref_key)
+        # parts the variant orders differently from the default build (another MPN or LCSC code)
+        offers = {}
+        for line in lines:
+            refs = line.get("refs", {}).get(v["name"]) or []
+            fitted_default = set(line.get("refs", {}).get("default") or [])
+            offer = None
+            for ref in refs:
+                if ref not in fitted_default and ref in parts:
+                    offer = offer or line_offers(line, len(refs))
+                    offers[ref] = offer
+        if offers:
+            entry["offers"], entry["currency"] = offers, currency
+        found.append(entry)
+    return found
 
 
 def ref_key(ref):
@@ -280,7 +347,7 @@ def build():
             "sha": args.sha, "repo": args.repo, "server": args.server, "run_url": args.run_url,
             "title": args.title, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             "sheets": [f"design/{s}" for s in sheets], "pcb": pcb, "views": views, "downloads": downloads,
-            "report": md, "counts": counts, "cost": cost, "parts": parts,
+            "report": md, "counts": counts, "cost": cost, "parts": parts, "variants": variant_info(out, parts, args.light),
             "branch": args.branch, "commit": commit, "light": args.light, "activity": args.activity,
             "changes": changes(out, site) if args.kind == "pr" else None,
             "pr": int(pr.group(1)) if pr else None}
@@ -347,6 +414,7 @@ def index():
     for js in glob.glob(os.path.join(HERE, "vendor", "*.js")) + [os.path.join(HERE, "pins.js")]:
         shutil.copy2(js, assets)
     shutil.copy2(os.path.join(HERE, "viewer-tools.js"), assets)  # nets and measuring in the viewer
+    shutil.copy2(os.path.join(HERE, "variants-view.js"), assets)  # variant selector in the viewer
     shutil.copy2(os.path.join(HERE, "compare.js"), assets)  # compare widget, shared by both pages
     # activity.json (scripts/activity.py) is in the site root when the activity input is on
     has_activity = os.path.isfile(os.path.join(args.root, "activity.json"))

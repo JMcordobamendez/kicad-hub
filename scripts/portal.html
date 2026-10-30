@@ -194,6 +194,8 @@ function buildPage() {
   versions();
   // net highlight, pad walk and measuring in the viewers (scripts/viewer-tools.js)
   load("viewer-tools.js").then(() => KHTools.init({D, viewers, findProject})).catch(() => {});
+  // variant picker, parts not fitted marked on the board and the schematic (scripts/variants-view.js)
+  if ((D.variants || []).length) load("variants-view.js").then(() => KHVariants.init({D, viewers, findProject, reshow})).catch(() => {});
   // comments pinned on the board: pull request pages on github.com only (scripts/pins.js)
   if (D.kind === "pr" && D.pr && D.server === "https://github.com")
     load("pins.js").then(() => KHPins.init({D, viewers, findProject})).catch(() => {});
@@ -296,7 +298,10 @@ function versions() {
       sel.value = here;  // the picker stays on this build if the browser comes back here
       if (v === "@history") location.href = HOME + "#history";
       else if (v === "@compare") location.href = HOME + "compare.html?a=" + encodeURIComponent(here);
-      else location.href = HOME + v + location.hash;
+      else { // the variant being looked at goes along (?variant=lite), if the other build has it it opens on it
+        const var_ = new URLSearchParams(location.search).get("variant");
+        location.href = HOME + v + (var_ ? "?variant=" + encodeURIComponent(var_) : "") + location.hash;
+      }
     };
   });
 }
@@ -472,12 +477,19 @@ document.addEventListener("click", e => {
   try { what === "board" ? v.zoom_to_board() : what === "page" ? v.zoom_to_page() : v.zoom_to_selection(); v.draw(); } catch (err) {}
 });
 
+const lastSel = {};  // what each viewer has selected, to redraw the card when the variant changes
+function reshow() { for (const k in lastSel) if (lastSel[k]) showPart(k, lastSel[k]); }
 function showPart(kind, item) {
   const box = document.getElementById("sel-" + kind); if (!box) return;
+  lastSel[kind] = item || null;
   const ref = item && item.reference;
   if (!ref || ref === "?") { box.innerHTML = `<h3>Selected</h3><div class="muted">Nothing selected.</div>`; return; }
-  const p = D.parts[ref] || {};
-  const kv = (k, v) => v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : "";
+  const base = D.parts[ref] || {};
+  // the variant chosen in the toolbar (scripts/variants-view.js): its values, not fitted or not, its own offers
+  const vp = window.KHVariants && KHVariants.part(ref);
+  const p = vp ? Object.assign({}, base, vp.set, vp.offers ? {offers: vp.offers, currency: vp.currency} : {}, {dnp: vp.notFitted}) : base;
+  const was = k => vp && k in vp.set ? ` <span class="muted">(default: ${esc(base[k] || "none")})</span>` : "";
+  const kv = (k, v, key) => v ? `<div class="kv"><span>${k}</span><span>${v}${key ? was(key) : ""}</span></div>` : "";
   const ds = p.datasheet ? `<a href="${esc(p.datasheet)}" target="_blank" rel="noopener">${esc(p.datasheet.split("/").pop().split("?")[0] || "open")}</a>` : "";
   // nets of the clicked footprint (PCB only), each a button that highlights the net (scripts/viewer-tools.js)
   let nets = "";
@@ -490,13 +502,15 @@ function showPart(kind, item) {
         (all.length > 12 ? ` <span class="muted">+${all.length - 12} more: search them under Nets</span>` : "");
     }
   } catch (e) {}
-  const offers = (p.offers || []).map(o => `<div class="offer"><span><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.supplier)}</a>` +
+  const offers = (vp && vp.notFitted ? [] : p.offers || []).map(o => `<div class="offer"><span><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.supplier)}</a>` +
       ` <span class="sub mono">${esc(o.sku)}</span></span><b>${money(o.price, p.currency, 4)}</b>` +
       `<span class="sub ${o.stock < 1 ? "short" : ""}">${o.stock.toLocaleString()} in stock</span><span class="sub">min ${o.moq}</span></div>`).join("");
   box.innerHTML = `<h3>Selected</h3><div class="sel-ref">${esc(ref)} <span class="mono muted" style="font-size:14px;font-weight:500">${esc(p.mpn || p.lcsc || "")}</span></div>` +
-    `<div class="sel-val">${esc(p.value || item.value || "")}${p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
-    kv("Footprint", esc(p.footprint)) + kv("Nets", nets) + kv("Manufacturer", esc(p.manufacturer)) + kv("MPN", esc(p.mpn)) +
-    kv("LCSC", esc(p.lcsc)) + kv("Voltage", esc(p.voltage)) + kv("Datasheet", ds) +
+    `<div class="sel-val">${esc(p.value || item.value || "")}${was("value")}${vp ? (p.dnp ? ` · <b>Not fitted in ${esc(vp.variant)}</b>` : "") : p.dnp ? " · <b>not fitted</b>" : ""}</div>` +
+    (vp ? kv("Variant", esc(vp.variant)) : "") +
+    kv("Footprint", esc(p.footprint), "footprint") + kv("Nets", nets) + kv("Manufacturer", esc(p.manufacturer), "manufacturer") + kv("MPN", esc(p.mpn), "mpn") +
+    kv("LCSC", esc(p.lcsc), "lcsc") + kv("Voltage", esc(p.voltage), "voltage") + kv("Datasheet", ds) +
+    (vp && vp.notFitted && base.offers ? `<div class="muted" style="margin-top:8px">Not ordered in ${esc(vp.variant)}.</div>` : "") +
     (offers ? `<h3 style="margin-top:12px">Suppliers · unit price</h3>${offers}<div class="kv"><span></span><a href="#sourcing">compare all</a></div>` : "") +
     (!D.parts[ref] ? `<div class="muted">Not in the BOM.</div>` : "");
 }

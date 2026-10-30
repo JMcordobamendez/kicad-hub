@@ -216,6 +216,10 @@ in the CI artifact and the PR comment, so it doesn't depend on the web portal.
          the board has them) and compares with the BOMs; variants are only compared when the PCB
          has per-variant data. The fab notes warn when the pick & place disagrees with the
          PCB. The example board has none (KiCad 9 format): default in sync, `lite` not checked
+   - [x] Variant selector in the portal viewer (DNP marked on PCB and schematic, variant
+         values in the Selected panel) — 2026-10-30: picker in both toolbars, kept in the URL
+         (`?variant=`), data embedded per build from `variants.json` and the per-variant BOMs
+         (`scripts/variants-view.js`)
 6. **Datasheets**
    - [x] `datasheets/index.html` in the artifact linking every part to its datasheet
          (URL and/or offline copy)
