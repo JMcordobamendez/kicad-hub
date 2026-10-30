@@ -320,6 +320,15 @@ Picked by the owner (2026-10-29):
       doesn't produce yet
 - [ ] **Template repository**: make the board template a GitHub template repository
       ("Use this template" button)
+- **Variant limits** (owner, 2026-10-30), see 2b.5:
+  - [ ] *In progress* (`feat/variant-viewer`): variant selector in the portal viewer —
+        parts not fitted marked on the PCB and the schematic, the variant's values in the
+        Selected panel, `?variant=` links
+  - [ ] *In progress* (`feat/variant-sync-check`): schematic vs PCB check per variant
+        (DNP, attributes, values), in the report and as a requirement
+  - [ ] Boards that differ physically (another outline, stackup or layout) are separate
+        projects, not variants: support several boards in one repo (one action run per
+        `project-dir`, a board switcher in the portal, compare between related boards)
 
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
