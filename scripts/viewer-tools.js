@@ -523,6 +523,8 @@
   }
 
   window.KHTools = {
+    // the Measure mode is on
+    measuring: function () { return !!T.measure; },
     init: function (c) {
       if (T.started) return;
       ctx = c; T.started = true;

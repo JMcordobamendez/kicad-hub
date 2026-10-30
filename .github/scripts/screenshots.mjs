@@ -223,6 +223,166 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
       await page.evaluate(() => { viewers.pcb.select("U5"); });
       await page.waitForTimeout(500);
     }
+    // 3b. net pick in the schematic (the KiCanvas fork, scripts/vendor/README.md): click a wire, a label and a pin
+    await page.locator('nav a[data-tab="schematic"]').click();
+    await page.waitForTimeout(2500);
+    const sbox = await page.locator("#kc-sch").boundingBox();
+    await page.mouse.click(sbox.x + 8, sbox.y + sbox.height - 8);  // the first click only wakes KiCanvas
+    await page.waitForTimeout(600);
+    const hasNative = await page.evaluate(() => typeof viewers.sch.highlight_net === "function" && !!viewers.sch.netlist);
+    console.log("native schematic nets:", hasNative);
+    if (hasNative) {
+      const where = p => page.evaluate(({x, y}) => {   // sheet coordinates -> page coordinates of the mouse
+        const v = viewers.sch, r = v.canvas.getBoundingClientRect(), s = v.viewport.camera.world_to_screen({x, y});
+        return {x: r.left + s.x, y: r.top + s.y, inside: s.x > 0 && s.y > 0 && s.x < r.width && s.y < r.height};
+      }, p);
+      const state = () => page.evaluate(() => {
+        const v = viewers.sch, c = v.selected && v.selected.context, n = v.highlighted_net;
+        return {selected: c ? c.constructor.name + (c.reference ? " " + c.reference : c.text ? " " + c.text : "") : null,
+                net: n ? n.name : null, sheets: n ? n.sheet_paths.length : 0, pins: n ? n.pins.length : 0,
+                dimmed: !!v.layers.by_name(":NetHighlight").highlighted,
+                card: (document.querySelector(".xp-card") || {}).hidden === false ? document.querySelector(".xp-card").innerText.replace(/\s+/g, " ").slice(0, 300) : null};
+      });
+      const clickAt = async (label, pt) => {
+        await page.mouse.click(sbox.x + 8, sbox.y + sbox.height - 8);  // KiCanvas asks for a click again after a tab change
+        await page.waitForTimeout(500);
+        const w = await where(pt);
+        if (!w.inside) { console.log(label, "point outside the view", JSON.stringify(pt)); return false; }
+        await page.mouse.move(w.x, w.y);
+        await page.mouse.click(w.x, w.y);
+        await page.waitForTimeout(900);
+        console.log(label, JSON.stringify(await state()));
+        return true;
+      };
+      // the sheet with the most wires, so that there is something to click
+      const sheetWithWires = await page.evaluate(() => {
+        const p = findProject(document.getElementById("kc-sch").shadowRoot || document.getElementById("kc-sch"));
+        let best = null;
+        for (const pg of p.pages()) if (pg.type === "schematic" && pg.document && (!best || pg.document.wires.length > best.document.wires.length)) best = pg;
+        return best && {path: best.project_path, n: best.document.wires.length};
+      });
+      console.log("sheet with the most wires:", JSON.stringify(sheetWithWires));
+      await page.evaluate(path => { const e = document.getElementById("kc-sch"); findProject(e.shadowRoot || e).set_active_page(path); }, sheetWithWires.path);
+      await page.waitForTimeout(2500);
+      await page.evaluate(() => { viewers.sch.zoom_to_page(); viewers.sch.draw(); });
+      await page.waitForTimeout(800);
+      // a wire: the middle of a long one that nothing else covers
+      const wire = await page.evaluate(() => {
+        const v = viewers.sch, d = v.document, path = v.current_sheet_path;
+        const long = [...d.wires].map(w => ({w, len: Math.hypot(w.pts[1].x - w.pts[0].x, w.pts[1].y - w.pts[0].y)})).sort((a, b) => b.len - a.len);
+        for (const {w} of long.slice(0, 40)) {
+          const mid = {x: (w.pts[0].x + w.pts[1].x) / 2, y: (w.pts[0].y + w.pts[1].y) / 2};
+          const hit = v.netlist.pick(path, mid, 0.3);
+          if (hit && hit.item === w) return mid;
+        }
+        return null;
+      });
+      console.log("wire probe:", JSON.stringify(wire));
+      if (wire) {
+        await clickAt("click on a wire:", wire);
+        await shot("12-net-wire");
+        // Show on PCB from the net card
+        if (await page.locator('.xp-card [data-xp="marks-pcb"]').isVisible()) {
+          await page.locator('.xp-card [data-xp="marks-pcb"]').click();
+          await page.waitForTimeout(3500);
+          console.log("net card -> pcb: hash", new URL(page.url()).hash, "| net card:", await cardText(".kt-card"));
+          await shot("13-net-wire-pcb");
+          await page.locator('nav a[data-tab="schematic"]').click();
+          await page.waitForTimeout(1500);
+        }
+        // Prev / Next sheet keeps the highlight
+        const nxt = page.getByRole("button", { name: "Next sheet with the net" });
+        if (await nxt.count() && await nxt.isEnabled()) {
+          await nxt.click();
+          await page.waitForTimeout(4500);
+          console.log("next sheet:", JSON.stringify(await state()));
+          await shot("14-net-next-sheet");
+          await page.evaluate(path => { const e = document.getElementById("kc-sch"); findProject(e.shadowRoot || e).set_active_page(path); }, sheetWithWires.path);
+          await page.waitForTimeout(2500);
+          await page.evaluate(() => { viewers.sch.zoom_to_page(); viewers.sch.draw(); });
+          await page.waitForTimeout(800);
+        }
+      }
+      // Comment and Measure placement modes: a click on a wire must not pick its net
+      if (wire) {
+        for (const mode of ["Comment", "Measure"]) {
+          await page.evaluate(() => { viewers.sch.highlight_net(null); });
+          await page.waitForTimeout(400);
+          const btn = page.locator(".vbar:visible").getByRole("button", { name: mode, exact: true });
+          if (!(await btn.count())) { console.log(`${mode} placement: no button`); errors.push(`[${mode} placement] no button in the toolbar`); continue; }
+          await btn.first().click();
+          await page.waitForTimeout(500);
+          await clickAt(`click on a wire in ${mode} mode:`, wire);
+          const st = await state();
+          await shot(`16-${mode.toLowerCase()}-mode-wire`);
+          const bad = st.net || st.dimmed || (st.card && /Net in the schematic/i.test(st.card));
+          console.log(`${mode} placement:`, bad ? "FAIL net highlighted" : "ok, no net highlight");
+          if (bad) errors.push(`[${mode} placement] a click on a wire highlighted a net: ${JSON.stringify(st)}`);
+          await page.keyboard.press("Escape");
+          await page.waitForTimeout(400);
+          if (mode === "Measure" && await btn.first().getAttribute("aria-pressed") === "true") await btn.first().click();
+        }
+        // back to a normal click: the net is picked again
+        await clickAt("click on a wire after the modes:", wire);
+        const after = await state();
+        console.log("after the modes:", after.net ? "ok, net picked" : "FAIL no net picked");
+        if (!after.net) errors.push("[placement] a normal click no longer picks a net");
+        await shot("17-wire-after-modes");
+      }
+      // a label: just beside its anchor, where its text is
+      const label = await page.evaluate(() => {
+        const d = viewers.sch.document, l = [...d.net_labels, ...d.global_labels][0];
+        if (!l) return null;
+        const r = l.at.rotation, dx = r == 0 ? 1.2 : r == 180 ? -1.2 : -0.7, dy = r == 90 ? -1.2 : r == 270 ? 1.2 : -0.7;
+        return {x: l.at.position.x + dx, y: l.at.position.y + dy, text: l.text};
+      });
+      console.log("label probe:", JSON.stringify(label));
+      if (label) { await clickAt("click on a label:", label); await shot("15-net-label"); }
+      // a pin of a part
+      const pin = await page.evaluate(() => {
+        const v = viewers.sch, path = v.current_sheet_path;
+        for (const s of v.document.symbols.values()) {
+          if (!/^[A-Z]+\d+$/.test(s.reference)) continue;
+          for (const pi of s.pins) { const g = v.netlist.pin_segment(path, pi); if (g) return {x: (g.a.x + g.b.x) / 2, y: (g.a.y + g.b.y) / 2, ref: s.reference}; }
+        }
+        return null;
+      });
+      console.log("pin probe:", JSON.stringify(pin));
+      if (pin) { await clickAt("click on a pin:", pin); await shot("16-net-pin"); }
+      // empty space clears the net, Esc too
+      await clickAt("click on empty space:", {x: -1000, y: -1000});
+      await page.evaluate(() => { const v = viewers.sch; return v.highlight_net(v.netlist.nets.find(n => n.pins.length > 1) || null); });
+      await page.waitForTimeout(500);
+      console.log("net set by the API:", JSON.stringify(await state()));
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
+      console.log("after Esc:", JSON.stringify(await state()));
+      // names against the board's: how many nets of the board have the name the schematic gives them
+      const names = await page.evaluate(() => {
+        const sv = viewers.sch, pv = viewers.pcb, out = {same: 0, other: 0, nopins: 0, diff: []};
+        const byNet = new Map();
+        for (const fp of pv.document.footprints) for (const pad of fp.pads) {
+          const n = pad.net && typeof pad.net.number === "number" ? pad.net.number : null;
+          if (!n || !pad.net.name || pad.net.name.startsWith("unconnected-")) continue;
+          if (!byNet.has(n)) byNet.set(n, {name: pad.net.name, pads: []});
+          byNet.get(n).pads.push([fp.reference, String(pad.number)]);
+        }
+        for (const [n, e] of byNet) {
+          const votes = new Map();
+          for (const [ref, num] of e.pads) { const s = sv.netlist.net_for_pin(ref, num); if (s) votes.set(s, (votes.get(s) || 0) + 1); }
+          let best = null, c = 0; for (const [s, k] of votes) if (k > c) { best = s; c = k; }
+          if (!best) out.nopins++;
+          else if (best.name === e.name) out.same++;
+          else {
+            out.other++;
+            if (out.diff.length < 40) out.diff.push([e.name, best.name, e.name.startsWith("Net-(") ? best.pins.map(p => `${p.reference}-${p.name || "Pad" + p.number}`).join(" ") : ""]);
+          }
+        }
+        out.nets = sv.netlist.nets.length;
+        return out;
+      });
+      console.log("net names, board vs schematic:", JSON.stringify(names));
+    }
     // multi-unit symbols, if the design has any: Show in schematic opens the first unit, the others are listed
     const multi = await page.evaluate(() => {
       const e = document.getElementById("kc-sch"), p = findProject(e.shadowRoot || e), out = {};

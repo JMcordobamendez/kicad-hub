@@ -574,6 +574,8 @@
   }
 
   window.KHPins = {
+    // the Comment (placement) mode is on
+    active: function () { return !!S.mode; },
     init: function (c) {
       if (S.started) return;
       ctx = c; D = c.D; S.started = true;

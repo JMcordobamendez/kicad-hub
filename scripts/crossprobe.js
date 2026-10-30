@@ -8,21 +8,27 @@
  *     footprint is on, selects it and zooms to it. A symbol without a footprint (power symbol, excluded
  *     from the board, not on the board) gets a message instead. Once the board has been opened, the
  *     nets of the part are listed as buttons that highlight them on the board;
- *   - PCB, "Nets" card (scripts/viewer-tools.js): Show in schematic goes to the sheets where the highlighted
- *     net is, and marks there each connected pin and each label / power symbol of the net with a ring
- *     (KiCanvas has no schematic net highlight). A "Net" card on the schematic side steps through the
- *     sheets (Prev / Next sheet) and has Show on PCB, which highlights the net on the board again;
+ *   - schematic: a click on a wire, bus, junction, label, power symbol or pin picks its net (the KiCanvas
+ *     fork in scripts/vendor builds the schematic's connectivity, see scripts/vendor/README.md). The net is
+ *     highlighted on the sheet, dimming the rest, and follows you through the hierarchy. The "Net in the
+ *     schematic" card names it, steps through the sheets where it is drawn (Prev / Next sheet) and has Show
+ *     on PCB, which highlights the net on the board;
+ *   - PCB, "Nets" card (scripts/viewer-tools.js): Show in schematic goes to the net in the schematic, found
+ *     by the pins of the net (a pad is pin <number> of symbol <reference>), or by its name when it has no
+ *     pins, and highlights it on the sheets where it is. With a viewer that has no schematic connectivity
+ *     (an older KiCanvas) it falls back to marking each connected pin and each label / power symbol of the
+ *     net with a ring (KiCanvas alone has no schematic net highlight);
  *   - a "Sync" toggle in both toolbars (off by default, kept in the URL as ?sync=1): selecting a part in
- *     one tab selects it in the other, so switching tabs lands on it.
+ *     one tab selects it in the other, and so does highlighting a net, so switching tabs lands on it.
  *
  * How things are found. Parts: the schematic index lists, per sheet instance (project.pages(), the pages
  * of the sheet picker), every symbol with the reference of that instance (the same lookup as KiCanvas's
- * update_hierarchical_data); on the board, the footprint with that reference. Nets: no netlist is
- * published, so the pins come from the board (a pad of the net is pin <number> of symbol <reference>, its
- * position is worked out like KiCanvas's pin painter does) and the labels from the sheets' names: a global
- * label or power symbol by its text, a local label as "<sheet path>/<text>", like KiCad names nets.
- * KiCanvas lets you pick symbols (and their sheets), never labels, wires or pins, so the schematic has no
- * "click a net": the way from the schematic to a net is the nets listed for the selected part.
+ * update_hierarchical_data); on the board, the footprint with that reference. Nets: the fork's
+ * viewer.netlist (SchematicNetlist) joins pins by wires, labels, power symbols and sheet pins; a net of the
+ * board is its schematic net by the pins on its pads. Without the fork (the fallback) no netlist is
+ * published, so the pins come from the board (position worked out like KiCanvas's pin painter does) and the
+ * labels from the sheets' names: a global label or power symbol by its text, a local label as
+ * "<sheet path>/<text>", like KiCad names nets.
  *
  * Everything drawn is an SVG over the canvas, repositioned on camera changes like scripts/viewer-tools.js
  * (camera.world_to_screen, canvas-relative CSS pixels, world units = mm of the file's coordinates).
@@ -39,11 +45,14 @@
 
   let ctx = null;
   const X = {started: false, both: false, sync: false, views: {}, busy: 0, working: false, idx: null,
-             last: null,      // the part last selected by the user: {kind, ref}
+             last: null,      // the part last selected by the user: {kind, ref, seq}
              cur: {},         // per kind: the selection being shown in its Selected card
              msg: {},         // per kind: a note for the part shown in the card
              pcbNet: null,    // net highlighted on the board (from viewer-tools.js): {net, name}
-             marks: null,     // net being shown in the schematic
+             marks: null,     // net being shown in the schematic: {net, pages, cur, native}; native is the
+                              // fork's SchematicNet (highlighted by the viewer), else the rings are ours
+             lastNet: null,   // the net last picked by the user: {kind, snet | net, seq}
+             seq: 0,          // order of the user's picks, to tell which one a tab opened in sync mode lands on
              netMsg: "", markId: 0};
 
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
@@ -357,11 +366,86 @@
   }
   const countOf = (items, k) => items.filter(x => x.k === k).length;
 
+  /* ---------- net: the viewer's own connectivity (the KiCanvas fork) ---------- */
+  const native = () => {
+    const v = ctx.viewers.sch;
+    try { return !!(v && typeof v.highlight_net === "function" && v.document && v.netlist) && v; } catch (e) { return false; }
+  };
+  // what a net has on one sheet, as points: pins (the end that wires attach to), labels and power symbols,
+  // and the wires, junctions and sheet pins, which only count for framing the net
+  function netItems(sv, snet, path) {
+    const out = [], nl = sv.netlist;
+    const at = (it, k, text) => { const p = it.at && it.at.position; if (p) out.push({x: p.x, y: p.y, k: k, text: text}); };
+    for (const it of snet.items_on(path)) {
+      if (it.pts) for (const p of it.pts) out.push({x: p.x, y: p.y, k: "wire"});
+      else if (typeof it.number === "string" && it.parent) {
+        const s = nl.pin_segment(path, it);
+        if (s) out.push({x: s.a.x, y: s.a.y, k: "pin", text: `${it.parent.reference} pin ${it.number}`});
+      }
+      else if (it.lib_symbol) at(it, "label", it.value);
+      else if (typeof it.shown_text === "string") at(it, "label", it.shown_text);
+      else at(it, "wire");
+    }
+    return out;
+  }
+  // the sheet instances a net is drawn on, in the order of the sheet picker
+  function nativePages(idx, sv, snet) {
+    const paths = new Set(snet.sheet_paths), nl = sv.netlist;
+    // the project's pages may not be the netlist's sheet instances (files loaded one by one): go by the document
+    const pathOf = i => [i.page.sheet_path, ...nl.paths_of(i.doc)].find(p => paths.has(p));
+    return idx.pages.map(i => ({info: i, path: pathOf(i)})).filter(p => p.path)
+      .map(p => ({info: p.info, items: netItems(sv, snet, p.path)})).filter(p => p.items.length);
+  }
+  // the schematic net of a net of the board: the one most of its pads' pins are on, else the one named alike
+  function snetOfPcb(sv, pv, net) {
+    const votes = new Map();
+    for (const pad of padsOfNet(pv, net.net)) {
+      let n = null;
+      try { n = sv.netlist.net_for_pin(pad.ref, pad.num); } catch (e) { /* a symbol without a library symbol */ }
+      if (n) votes.set(n, (votes.get(n) || 0) + 1);
+    }
+    let best = null, count = 0;
+    for (const [n, c] of votes) if (c > count) { best = n; count = c; }
+    return best || sv.netlist.net_by_name(net.name) || null;
+  }
+  // the net of the board of a schematic net: by the footprints and pads of its pins, else by its name
+  function pcbNetOf(snet) {
+    const pv = ctx.viewers.pcb;
+    if (!pv || !pv.document) return null;
+    const votes = new Map();
+    for (const p of snet.pins || []) {
+      const fp = findFootprint(pv, p.reference);
+      for (const pad of (fp && fp.pads) || []) {
+        const n = String(pad.number) === p.number ? num(pad.net) : null;
+        if (n > 0) votes.set(n, (votes.get(n) || 0) + 1);
+      }
+    }
+    let best = null, count = 0;
+    for (const [n, c] of votes) if (c > count) { best = n; count = c; }
+    if (best != null) return best;
+    for (const fp of pv.document.footprints || [])
+      for (const pad of fp.pads || []) if (pad.net && pad.net.name === snet.name && num(pad.net) > 0) return num(pad.net);
+    return null;
+  }
+  // a note in the Net card (the Selected card has none when a wire is picked)
+  function cardNote(text) {
+    const view = X.views.sch, m = view && view.card && view.card.querySelector(".xp-cmsg");
+    live(text);
+    if (m) { m.textContent = text || ""; m.hidden = !text; }
+  }
+  // highlight in the viewer without taking our own call for the user's pick
+  function highlightNative(sv, snet) {
+    X.busy++;
+    try { sv.highlight_net(snet); } finally { X.busy--; }
+  }
+
   async function showMarkSheet(i, zoom) {
     const m = X.marks; if (!m) return;
     m.cur = (i + m.pages.length) % m.pages.length;
     const p = m.pages[m.cur], view = X.views.sch, v = view.v;
+    cardNote("");
     await activate(p.info.page);
+    if (m.native && X.marks === m) highlightNative(view.v, m.native);   // the viewer keeps it across sheets: this is for the first one
     X.markId++; view.rev++;
     renderCard();
     if (zoom) {
@@ -382,8 +466,16 @@
     const from = shown();
     const v = await openTab("sch");
     if (!v) { netNote("The schematic is still loading: try again in a moment."); return; }
-    const idx = schIndex(), pv = ctx.viewers.pcb;
-    const pages = idx && pv ? computeMarks(idx, net.name, padsOfNet(pv, net.net)) : [];
+    const idx = schIndex(), pv = ctx.viewers.pcb, sv = native();
+    let snet = null, pages = [];
+    if (idx && pv && sv) {
+      try { snet = snetOfPcb(sv, pv, net); } catch (e) { snet = null; }
+      if (snet) pages = nativePages(idx, sv, snet);
+    }
+    if (!pages.length) {   // no connectivity in the viewer, or the net is not in the schematic: rings by name
+      snet = null;
+      pages = idx && pv ? computeMarks(idx, net.name, padsOfNet(pv, net.net)) : [];
+    }
     if (!pages.length) {
       netNote(`${net.name}: no label or connected pin found in the schematic.`);
       if (from && from !== "sch") location.hash = TAB[from];
@@ -391,23 +483,49 @@
     }
     netNote("");
     const act = projectOf(X.views.sch).active_page;
-    X.marks = {net: net, pages: pages, cur: 0};
+    X.marks = {net: net, pages: pages, cur: 0, native: snet};
     const here = pages.findIndex(p => p.info.page === act);
     await showMarkSheet(here >= 0 ? here : 0, true);
     focusCard("sch");
   }
   function clearMarks() {
     if (!X.marks) return;
+    const was = X.marks;
     X.marks = null; X.markId++;
     const view = X.views.sch; if (view) view.rev++;
+    if (was.native && view) highlightNative(view.v, null);
     renderCard();
+  }
+  const placing = () => !!((window.KHPins && KHPins.active && KHPins.active()) || (window.KHTools && KHTools.measuring && KHTools.measuring()));
+  // the viewer's net highlight changed (a click on a wire, label or pin; or a call of ours, which we skip)
+  function onSchNet(snet) {
+    if (X.busy) return;
+    const view = X.views.sch;
+    if (!view) return;
+    // Comment and Measure use the click for their own purpose: undo the viewer's pick of a net
+    if (snet && placing()) { X.busy++; try { view.v.highlight_net(null); } finally { X.busy--; } return; }
+    if (!snet) {
+      if (X.marks && X.marks.native) { X.marks = null; X.markId++; view.rev++; renderCard(); }
+      return;
+    }
+    const idx = schIndex(), sv = native();
+    if (!idx || !sv) return;
+    const pages = nativePages(idx, sv, snet), act = projectOf(view).active_page;
+    X.marks = {net: {net: null, name: snet.name}, pages: pages, cur: Math.max(0, pages.findIndex(p => p.info.page === act)), native: snet};
+    X.markId++; view.rev++;
+    cardNote("");
+    renderCard();
+    X.lastNet = {kind: "sch", snet: snet, seq: ++X.seq};
+    live(`Net ${snet.name} highlighted.`);
   }
   async function netToPcb(n) {
     const from = shown();
     const v = await openTab("pcb");
     if (!v) { note("sch", (X.cur.sch || {}).ref, "The board is still loading: try again in a moment."); return false; }
-    const ok = window.KHTools && KHTools.showNet ? KHTools.showNet(n) : (v.highlight_net(n), true);
-    if (!ok) { note("sch", (X.cur.sch || {}).ref, "That net has nothing on the board to highlight."); if (from && from !== "pcb") location.hash = TAB[from]; return false; }
+    X.busy++;   // the highlight is ours, not a pick of the user's
+    let ok;
+    try { ok = window.KHTools && KHTools.showNet ? KHTools.showNet(n) : (v.highlight_net(n), true); } finally { X.busy--; }
+    if (!ok) { if (X.marks) cardNote("That net has nothing on the board to highlight."); else note("sch", (X.cur.sch || {}).ref, "That net has nothing on the board to highlight."); if (from && from !== "pcb") location.hash = TAB[from]; return false; }
     return true;
   }
 
@@ -425,7 +543,8 @@
         <button class="btn" type="button" data-xp="marks-pcb">Show on PCB</button>
         <button class="btn" type="button" data-xp="marks-clear">Clear</button>
       </div>
-      <div class="muted xp-hint">Rings: connected pins (yellow) and labels or power symbols of the net (orange). Esc clears.</div>`;
+      <div class="muted xp-cmsg" role="status" hidden></div>
+      <div class="muted xp-hint"></div>`;
     sel.insertAdjacentElement("beforebegin", card);   // above the long Selected card, in view
     view.card = card;
   }
@@ -436,13 +555,17 @@
     if (!m) return;
     const p = m.pages[m.cur];
     view.card.querySelector(".xp-name").textContent = m.net.name;
-    view.card.querySelector(".xp-stat").textContent = `Sheet ${m.cur + 1} of ${m.pages.length} · ${p.info.label} · ` +
+    view.card.querySelector(".xp-hint").textContent = m.native ?
+      "Highlighted on the sheet and on the others it is drawn on. Click another wire, label or pin to pick another net. Esc clears." :
+      "Rings: connected pins (yellow) and labels or power symbols of the net (orange). Esc clears.";
+    view.card.querySelector(".xp-stat").textContent = !p ? "Not drawn on any sheet." : `Sheet ${m.cur + 1} of ${m.pages.length} · ${p.info.label} · ` +
       [countOf(p.items, "pin") ? plural(countOf(p.items, "pin"), "pin") : "", countOf(p.items, "label") ? plural(countOf(p.items, "label"), "label") : ""].filter(Boolean).join(", ");
     for (const b of view.card.querySelectorAll('[data-xp="prev-sheet"],[data-xp="next-sheet"]')) b.disabled = m.pages.length < 2;
   }
   // the PCB's Nets card (viewer-tools.js) gets its button when a net is highlighted
   function netButton(detail) {
     X.pcbNet = detail && detail.net != null ? detail : null;
+    if (X.pcbNet && !X.busy) X.lastNet = {kind: "pcb", net: X.pcbNet, seq: ++X.seq};
     const card = document.querySelector(".kt-card"), row = card && card.querySelector(".kt-row");
     if (!row) return;
     let b = row.querySelector('[data-xp="net-sch"]');
@@ -475,18 +598,39 @@
     }
     live(X.sync ? "Sync on: selecting a part in one tab selects it in the other." : "Sync off.");
     const here = shown();
-    if (X.sync && X.last && here && X.last.kind === here) syncTo(other(here), X.last.ref);
+    if (X.sync && X.last && here && X.last.kind === here && !(X.lastNet && X.lastNet.seq > X.last.seq)) syncTo(other(here), X.last.ref);
   }
   async function syncTo(kind, ref) {
     if (/^#/.test(ref) || !X.views[kind]) return;
     try { kind === "pcb" ? await partToPcb(ref, {background: true}) : await partToSch(ref, {background: true}); }
     catch (e) { /* the other tab is not ready: it lands on the part when opened */ }
   }
-  // a tab opened while sync is on: land on the part last selected in the other one
+  // a tab opened while sync is on: land on the net last picked in the other one, if it is the newer pick
+  async function arriveNet(kind) {
+    const L = X.lastNet;
+    if (!L || L.kind === kind) return false;
+    if (kind === "pcb") {
+      const n = L.snet ? pcbNetOf(L.snet) : null;
+      if (n == null) return false;
+      return netToPcb(n);
+    }
+    const net = L.net;
+    if (!net) return false;
+    await netToSch(net);
+    return true;
+  }
+  // a tab opened while sync is on: land on the part (or net) last picked in the other one
   async function arrive() {
-    if (!X.sync || !X.last) return;
+    if (!X.sync) return;
     const kind = shown();
-    if (!kind || X.last.kind === kind) return;
+    if (!kind) return;
+    if (X.lastNet && X.lastNet.kind !== kind && (!X.last || X.lastNet.seq > X.last.seq)) {
+      await sleep(50);
+      if (!ctx.viewers[kind]) { if (!(await openTab(kind))) return; }
+      await arriveNet(kind);
+      return;
+    }
+    if (!X.last || X.last.kind === kind) return;
     const ref = X.last.ref;
     await sleep(50);
     if (!ctx.viewers[kind]) { if (!(await openTab(kind))) return; }
@@ -498,7 +642,7 @@
     if (X.busy) return;
     const o = ownerOf(item);
     if (!o) return;
-    X.last = {kind: kind, ref: o.part.reference};
+    X.last = {kind: kind, ref: o.part.reference, seq: ++X.seq};
     if (X.sync) syncTo(other(kind), o.part.reference);
   }
 
@@ -520,6 +664,7 @@
     bar.insertBefore(view.sbtn, bar.querySelector(".hint"));
 
     v.addEventListener("kicanvas:select", e => onSelect(kind, e.detail && e.detail.item));
+    if (kind === "sch") v.addEventListener("kicanvas:nethighlight", e => onSchNet(e.detail && e.detail.net));
 
     if (kind === "sch") {
       view.layer = document.createElement("div");
@@ -538,7 +683,7 @@
     const v = view.v, cam = camOf(v);
     if (!cam || !view.embed.offsetParent) return;
     const m = X.marks, project = projectOf(view);
-    const cur = m && m.pages[m.cur];
+    const cur = m && !m.native && m.pages[m.cur];
     const on = !!(cur && project && project.active_page === cur.info.page && v.document === cur.info.doc);
     const cr = v.canvas.getBoundingClientRect(), hr = view.host.getBoundingClientRect();
     const key = [cam.center.x, cam.center.y, cam.zoom, cam.viewport_size.x, cam.viewport_size.y,
@@ -579,7 +724,12 @@
     else if (k === "net-sch") { if (X.pcbNet) run(() => netToSch(X.pcbNet)); }
     else if (k === "prev-sheet") run(() => showMarkSheet(X.marks.cur - 1, true));
     else if (k === "next-sheet") run(() => showMarkSheet(X.marks.cur + 1, true));
-    else if (k === "marks-pcb") { if (X.marks) run(() => netToPcb(X.marks.net.net)); }
+    else if (k === "marks-pcb") {
+      if (!X.marks) return;
+      const n = X.marks.native ? pcbNetOf(X.marks.native) : X.marks.net.net;
+      if (n == null) cardNote("That net is not on the board (no pad of its pins carries it).");
+      else run(() => netToPcb(n));
+    }
     else if (k === "marks-clear") clearMarks();
     else if (k === "unit") {
       const list = (schIndex() || {refs: new Map()}).refs.get(b.dataset.ref), en = list && list[+b.dataset.k];
@@ -597,7 +747,7 @@
 .xp-label { fill: none; stroke: var(--brand, #e8622c); stroke-width: 3; stroke-dasharray: 5 3; }
 .xp-box { margin: 6px 0 10px; }
 .xp-box .xp-btn { margin: 0 4px 4px 0; font-size: 12px; padding: 3px 9px; }
-.xp-msg, .xp-units, .xp-nets, .xp-netmsg, .xp-hint { font-size: 12px; margin-top: 6px; overflow-wrap: anywhere; }
+.xp-msg, .xp-units, .xp-nets, .xp-netmsg, .xp-hint, .xp-cmsg { font-size: 12px; margin-top: 6px; overflow-wrap: anywhere; }
 .xp-units b { font-weight: 700; color: var(--fg); }
 .xp-name { font-weight: 700; overflow-wrap: anywhere; }
 .xp-stat { font-size: 12px; margin-bottom: 8px; }
