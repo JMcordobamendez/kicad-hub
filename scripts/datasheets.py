@@ -151,10 +151,10 @@ urls = sorted({e["target"] for e in result.values() if e["status"] == "pending"}
 if args.check_urls.lower() == "true" and urls:
     with concurrent.futures.ThreadPoolExecutor(8) as pool:
         checked = dict(zip(urls, pool.map(check, urls)))
-    # slow sites and failed TLS handshakes are often a passing hiccup: one more try, longer wait
-    again = [u for u, (st, _) in checked.items() if st == "unverified"]
-    if again:
-        checked.update(zip(again, pool.map(lambda u: check(u, timeout=45), again)))
+        # slow sites and failed TLS handshakes are often a passing hiccup: one more try, longer wait
+        again = [u for u, (st, _) in checked.items() if st == "unverified"]
+        if again:
+            checked.update(zip(again, pool.map(lambda u: check(u, timeout=45), again)))
 else:
     checked = {u: ("unverified", "not checked") for u in urls}
 for e in result.values():
