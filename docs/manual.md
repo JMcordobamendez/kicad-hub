@@ -216,10 +216,11 @@ then do section 2.2 onwards.
    | Fab DRC | Second DRC with the fab's published limits (when `fab-profile` is set) |
    | Cost and stock | Cost per board per batch; parts out of stock, obsolete or not found |
    | Fab package | Files in the artifact and "check before ordering" warnings |
-   | Missing fields / Datasheets | Parts lacking footprint, datasheet, MPN/LCSC, capacitor voltage; broken datasheet links |
+   | Missing fields / Datasheets | Parts lacking footprint, datasheet, MPN/LCSC, capacitor voltage; broken datasheet links (links that did not answer are listed apart as "not checked") |
 
 5. **Open the PR's portal page** (the first link of the comment, "Open this design in
-   the browser") and review in the **Changes vs main** tab: pick a changed sheet or
+   the browser"; if Pages is not serving the repository, e.g. a private repo without a paid
+   plan, the comment says so instead and there is no link) and review in the **Changes vs main** tab: pick a changed sheet or
    layer and use *swipe*, *fade*, *side by side* or *changes* (red only before, green
    only after); zoom and pan.
 6. **Pin comments on the board**: **Comment** button on the PCB/Schematic tab, click a
@@ -340,7 +341,7 @@ compare (swipe, fade, side by side, changes).
 ### 5.6 Report and Datasheets
 
 **Report**: the same content as the PR comment. **Datasheets**: link status (OK, broken,
-unverifiable), local PDFs found by MPN or value and bundled for offline use.
+not checked), local PDFs found by MPN or value and bundled for offline use.
 
 ### 5.7 Downloads
 

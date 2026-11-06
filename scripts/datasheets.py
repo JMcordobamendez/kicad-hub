@@ -123,13 +123,13 @@ for r in sorted(parts, key=lambda r: ref_key(r["Reference"])):
     result[ref] = e
 
 
-def check(url):
+def check(url, timeout=15):
     """ok / broken (404, 410, DNS) / unverified (site blocks bots, timeouts, auth)."""
     headers = {"User-Agent": "Mozilla/5.0 (kicad-hub datasheet check)"}
     for method in ("HEAD", "GET"):
         try:
             req = urllib.request.Request(url, method=method, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return "ok", str(resp.status)
         except urllib.error.HTTPError as err:
             if err.code in (404, 410):
@@ -151,6 +151,10 @@ urls = sorted({e["target"] for e in result.values() if e["status"] == "pending"}
 if args.check_urls.lower() == "true" and urls:
     with concurrent.futures.ThreadPoolExecutor(8) as pool:
         checked = dict(zip(urls, pool.map(check, urls)))
+        # slow sites and failed TLS handshakes are often a passing hiccup: one more try, longer wait
+        again = [u for u, (st, _) in checked.items() if st == "unverified"]
+        if again:
+            checked.update(zip(again, pool.map(lambda u: check(u, timeout=45), again)))
 else:
     checked = {u: ("unverified", "not checked") for u in urls}
 for e in result.values():
