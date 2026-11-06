@@ -94,6 +94,7 @@
   .row .dt, .row .sh { color: var(--muted); font-size: 12.5px; }
   .row .sh { display: flex; align-items: center; gap: 5px; }
   .row .sn { font-size: 12px; color: var(--good); }
+  .row .sn:empty::before { display: none; }
   .row .sn::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 5px; }
   .row.ev .sub { font-size: 13px; }
   .row.ev.t-pr .sub { color: var(--merged); } .row.ev.t-comments .sub { color: var(--warn); }
@@ -707,7 +708,7 @@ function build() {
   const authors = [...new Set(A.commits.map(who).concat(A.events.map(e => e.who).filter(Boolean)))].sort((a, b) => a.localeCompare(b));
   const note = [];
   note.push(`Graph of the last ${A.commits.length} commits${A.truncated ? ` (older ones are not shown; input <code>activity</code> sets the number)` : ""} of ${A.branches.length} branches, with what happened between them.`);
-  note.push(A.github ? `Pull requests, reviews, comments, issues and releases come from GitHub (the last ${A.prs.length} pull requests, the ${A.issues.length} issues they and the commits mention), refreshed on every publish: ${esc(utc(A.generated))} UTC.`
+  note.push(A.github ? `Pull requests, reviews, comments, issues and releases come from GitHub (the last ${A.prs.length} pull requests, the ${A.issues.length} issue${A.issues.length === 1 ? "" : "s"} they and the commits mention), refreshed on every publish: ${esc(utc(A.generated))} UTC.`
     : `GitHub data (pull requests, reviews, comments, issues) is not available${A.github_note ? ": " + esc(A.github_note) : ""}: this is the git history alone.`);
   if (A.github && A.github_note) note.push(`Incomplete: ${esc(A.github_note)}`);
   note.push(A.pushes_since ? `Who pushed is recorded since <b>${esc(utc(A.pushes_since).slice(0, 10))}</b>, when this page was set up: earlier pushes are not known.`
