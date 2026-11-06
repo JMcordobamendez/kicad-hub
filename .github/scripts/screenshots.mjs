@@ -87,16 +87,56 @@ for (const item of (process.env.EXTRA || "").split(/\s+/).filter(Boolean)) {
   await step(`extra ${name}`, async () => {
   await open(rest.join("="), 10000);
   await page.screenshot({ path: `${OUT}/extra-${name}.png`, fullPage: true });
-  if (name === "activity") {  // interactions: select a commit, hover a feed item, then a phone
-    await page.locator(".row[data-s]").nth(3).click();
-    await page.locator(".feed li[data-e]").nth(2).hover();
-    await page.waitForTimeout(500);
-    await page.screenshot({ path: `${OUT}/extra-${name}-selected.png` });
-    await page.check("#f-main");  // a filter, to exercise the redraw
+  if (name === "activity") {  // interactions: pick A and B on the graph, the side panel, a greyed commit, compare, a filter, a phone
+    const log = (...x) => console.log("activity:", ...x);
+    log("rows", await page.locator(".row[data-s]").count(), "events", await page.locator(".row[data-e]").count(),
+      "with snapshot", await page.locator(".row[data-s]:not(.nosnap)").count());
+    const dots = page.locator(".dot:not(.nosnap)");
+    log("dots with snapshot", await dots.count());
+    if (await dots.count() > 1) {
+      await dots.nth(0).click({ force: true });            // a node: A
+      await dots.nth(1).click({ force: true });            // another: B
+      await page.waitForTimeout(1500);                      // the panel loads activity-details.json and marked
+      await page.screenshot({ path: `${OUT}/extra-${name}-selected.png` });
+      log("selection bar:", JSON.stringify((await page.locator("#selbar").innerText()).replace(/\s+/g, " ")));
+      log("panel:", JSON.stringify((await page.locator("#panel").innerText()).replace(/\s+/g, " ").slice(0, 500)));
+    }
+    const grey = page.locator(".row.nosnap[data-s]");
+    if (await grey.count()) {                               // the tooltip of a commit without snapshot
+      await grey.first().hover();
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: `${OUT}/extra-${name}-nosnap.png` });
+      log("tooltip:", JSON.stringify(await page.locator("#tip").innerText()));
+    }
+    const row = page.locator(".row[data-s]:not(.nosnap)").nth(2);   // keyboard: focus a row, press b
+    if (await row.count()) { await row.focus(); await page.keyboard.press("b"); await page.waitForTimeout(300); }
+    const go = page.locator("#selbar a.btn.go");
+    if (await go.count()) {                                 // Compare A <-> B opens the compare page with both
+      log("compare link:", await go.getAttribute("href"));
+      await go.click();
+      await page.waitForTimeout(8000);
+      await page.screenshot({ path: `${OUT}/extra-${name}-compare.png`, fullPage: true });
+      await page.goBack();
+      await page.waitForTimeout(3000);
+    }
+    await page.uncheck("[data-g=prc]");                     // a filter, to exercise the redraw
     await page.setViewportSize({ width: 390, height: 800 });
     await page.waitForTimeout(800);
     await page.screenshot({ path: `${OUT}/extra-${name}-phone.png`, fullPage: true });
     await page.setViewportSize({ width: 1440, height: 900 });
+  }
+  if (name === "prcommits") {  // the Commits tab of a PR page: the strip, A and B, the embedded compare
+    await page.waitForSelector(".cm-item", { timeout: 15000 });
+    await page.waitForTimeout(12000);                       // the embedded compare decodes the page renders
+    await page.screenshot({ path: `${OUT}/extra-${name}-strip.png` });
+    console.log("strip:", await page.locator(".cm-item").count(), "commits |", JSON.stringify((await page.locator(".cm-pick").innerText()).replace(/\s+/g, " ")));
+    if (await page.locator(".cm-item").count() > 2) {       // another pair: first and last
+      await page.locator(".cm-item").first().click();
+      await page.locator(".cm-item").last().click();
+      await page.waitForTimeout(12000);
+      await page.screenshot({ path: `${OUT}/extra-${name}-pair.png`, fullPage: true });
+      console.log("pair:", JSON.stringify((await page.locator(".cm-pick").innerText()).replace(/\s+/g, " ")));
+    }
   }
   if (name === "variants") try {  // variant selector (scripts/variants-view.js): open on ?variant=lite#pcb
     const shot = async step => { await page.waitForTimeout(1500); await page.screenshot({ path: `${OUT}/extra-variants-${step}.png` }); };

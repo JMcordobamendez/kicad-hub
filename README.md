@@ -134,6 +134,7 @@ on:
 permissions:
   contents: write        # releases and PR images (read = neither)
   pull-requests: write   # PR comment with the report
+  issues: read           # issues on the activity page (needed in private repositories)
 
 jobs:
   board:
@@ -181,6 +182,7 @@ version.
 | `pages` | `true` | Publish the design portal (see [design portal](#design-portal)) |
 | `pages-branch` | `kicad-hub-site` | Branch the portal is published to |
 | `history` | `10` | Light snapshots of the last N commits of the default branch for the portal's timeline and compare page; `0` = off |
+| `pr-commits` | `20` | Light snapshot of the head commit of every push to a pull request (`/pr-<N>/commits/<sha7>/`), the newest N per PR, to compare a PR's commits with each other; `0` = off |
 | `activity` | `500` | Activity page of the portal: graph of the last N commits of all branches, pull requests, reviews, comments, releases and pushes (see [activity](#activity)); `0` = off |
 | `visual-diff` | `true` | On PRs, before/after images of the changed sheets and layers in the comment (stored in the `kicad-hub-images` branch) |
 | `fab-profile` | `generic` | Optional fab layer: `jlcpcb`, `pcbway` or `eurocircuits` (see [fab profiles](#fab-profiles)) |
@@ -262,8 +264,16 @@ Every push to a branch, tag and pull request publishes a page to the
   build stores in `renders/` (same export options and resolution, no crop, so any two
   builds line up). Pages identical in both are collapsed as "no changes". Builds
   published before this feature have no renders until their next publish.
+- **Commits of a pull request**: every push to a PR also publishes a light snapshot of its
+  head commit at `/pr-<N>/commits/<sha7>/` (same content as a `history/` snapshot; input
+  `pr-commits`, default the newest 20 per PR, `0` = off; they go away with the PR's page). A PR
+  page gets a **Commits** tab: its pushes as a strip (comments counted above each), click one
+  for **A** and another for **B** and the two are compared right there (BOM changes and every
+  sheet and layer), with a link to the full compare page. The snapshot is the PR merged into its base
+  at that push, like the `/pr-<N>/` page, and only the head commit of each push gets one (a push
+  of three commits makes one snapshot); a PR pushed before the feature has none until its next push;
 - **Activity** (`/activity.html`, linked from the front page and the top bar): how the
-  work evolved, see [below](#activity);
+  work evolved, with commits, pull requests, comments and issues in one graph, see [below](#activity);
 - **Nets and measuring** in the viewer: on the PCB tab, the **Nets** card searches every
   net of the board as you type; the nets of the selected part are buttons too, and a click on
   a track does the same. The net's tracks, vias, pads and zones are highlighted and the
@@ -296,29 +306,50 @@ closed. Pull requests from forks aren't published (they can't write to the repo)
 
 `activity.html` draws the history of the repository: a lane graph of the last commits of
 every branch and tag (newest on top, one colour per lane, merge curves, a star on
-releases) next to a table of subject, author, date and commit, and a feed of what
-happened, newest first: pull requests opened, reviewed (approved, changes requested,
-commented), commented, merged or closed, pushes, releases. A chip at each branch tip
-shows who created the branch: the author of its pull request, else of its first commit,
-else whoever pushed it first. Hover (or focus, or tap) a feed item to highlight its
-commits in the graph, and a commit to highlight its feed items. Click a commit for its
-actions: open the portal page of that commit if one was published (`history/<sha>/`,
-`main/`, a release, a PR), *Compare with parent* when both have one, or the commit on
-GitHub. Filters: branch, author, dates, and *only main + open PRs*. Everything is drawn
-in the browser from `activity.json` (no libraries), rebuilt on every publish.
+releases) with what happened between them on the same timeline: pull requests opened,
+merged or closed, reviews and review comments, pinned board comments and conversation
+comments, issues opened, commented and closed, releases. Next to each commit: subject,
+author, date, sha and a green *snapshot* mark when the portal has a page of that exact
+commit. A chip at each branch tip shows who created the branch: the author of its pull
+request, else of its first commit, else whoever pushed it first. Hover (or focus) an event
+to highlight its commits and the reverse. **Show** checkboxes (main, pull requests, PR
+commits, comments, issues, releases) and filters (branch, author, dates) narrow it down.
 
+- **Pick two commits to compare**: click a commit (its row or its node) and it becomes **A**,
+  click another and it becomes **B**; a third click starts again, and clicking A or B lets it
+  go. The bar above the graph shows both, with **Compare A ↔ B** (opens `compare.html` with
+  them) and **Clear**. From the keyboard: arrows move between rows, Enter picks, `a` / `b` set
+  that slot. Commits without a snapshot are greyed, with a tooltip saying why (only the last
+  commits of `main`, the head of each PR push and releases are published): they can still be
+  selected to read, not compared. Works for `main`, PR commits and releases alike. A and B are
+  kept in the URL (`?a=<sha7>&b=<sha7>`).
+- **Side panel** for the selected commit: message, author, date and branch; its pull request
+  (title, description, number of commits and snapshots, ERC/DRC of the PR build); the PR's
+  review comments (marked *on this commit* when GitHub knows the commit), pinned board comments
+  (linking back to the part) and conversation; and the related issues (referenced as `#12`,
+  `closes #12` or a link in a commit message or a PR title or description) with their
+  description and every comment. Descriptions and comments are GitHub Markdown, sanitised with
+  the portal's DOMPurify; pictures are shown as links. **Open this version**, **Set as A / B**,
+  **Compare with parent** and **View on GitHub** are at the bottom.
 - **Data**: git (all branches and tags in topological order; a shallow checkout is
   deepened and all branches are fetched, so the graph is complete without
   `fetch-depth: 0`) and the GitHub GraphQL API with the action's `github-token` (the last
-  100 pull requests with their reviews and comments, and releases). Without the token or
-  when GitHub doesn't answer, the page shows the git graph alone.
+  100 pull requests with reviews, review comments and comments, the releases, and up to 40
+  issues the commits and PRs mention, one query per ten: well inside the rate limit, and skipped
+  when little is left). The page itself (`activity.json`) stays light: texts of the selected commit
+  are in `activity-details.json`, fetched on the first click (capped at about 2.5 MB: long
+  texts are cut). In a **private** repository the token needs `issues: read` (add it to the
+  workflow's `permissions`); without it the page says the issues are missing and shows the rest.
+  Without the token or when GitHub doesn't answer, the page shows the git graph alone.
 - **Pushes**: GitHub doesn't keep who pushed a branch, so every run of a push (and every
   update of a pull request's branch) appends `{actor, ref, before, after, date}` to
   `activity-pushes.json` in the site branch (the last 1000). Pushes made before the first
   run with this feature are not known; the page says since when it records.
 - **Privacy**: no e-mail address is ever published. Authors are shown by GitHub login (and
   avatar from `avatars.githubusercontent.com`) when known, else by the name in the commit,
-  and anything that looks like an address is removed from commit subjects and comments.
+  and anything that looks like an address is removed from commit messages and comments
+  (`Co-authored-by` and `Signed-off-by` lines are dropped). Issue and PR texts are published
+  to the repository's own Pages site, so they are as public as that site.
 - Input `activity` sets how many commits to read (default 500, `0` = no page). Pull requests
   from forks aren't published, so they never reach it.
 
@@ -579,6 +610,10 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
 - **GitHub Pages is free only for public repositories** (private ones need a paid
   plan); without Pages the portal branch is still published but not served.
 - The viewer is KiCanvas, still in alpha: some KiCad features may not display.
+- PR commit snapshots are of the head commit of each push (not every commit of a push), are
+  the PR merged into its base at that moment (so they include whatever the base had then), and
+  cost the size of a light snapshot each: 20 per open PR is the default, lower `pr-commits` for
+  big boards.
 - Pinned comments are a prototype (phase 5): conversation comments only (no replies or
   resolving from the page, no review comments on the diff), a pin keeps the position
   where it was made even if the part moves in a later commit, and the viewer's clicks

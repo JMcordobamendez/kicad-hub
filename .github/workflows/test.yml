@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write        # release asset on tags, before/after images on PRs
   pull-requests: write   # the action comments its report on PRs
+  issues: read           # the activity page reads the issues commits and PRs mention
 
 jobs:
   royalblue54l-feather:

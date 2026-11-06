@@ -325,6 +325,27 @@ Picked by the owner (2026-10-29):
       releases, pins that follow a part when it moves between commits
 - [ ] **Activity**: rebuild the snapshots of older commits (a manual workflow over a
       commit range), so they also get "Open design" and "Compare with parent"
+- [x] **Compare the commits of a pull request** (owner, 2026-11-06). Real-use trigger: in the
+      owner's board repository a user had to open a throwaway PR just to get a snapshot of an
+      older commit of another PR and compare the two. Done 2026-11-06 (awaiting a check on a
+      real board): every push to a PR publishes a light snapshot of its head commit at
+      `pr-<N>/commits/<sha7>/` (input `pr-commits`, default the newest 20 per PR, `0` = off;
+      `portal.py build --kind commit --pr N`, pruned by `index --keep-pr-commits`, removed with
+      the PR's page by the cleanup workflow, which also rebuilds `builds.json`; the PR page
+      replaced on each push keeps its `commits/` folder). The PR page gets a **Commits** tab
+      (strip of pushes with comment counts, click A and B, `compare.html?embed=1` inline with a
+      summary), `compare.html` groups them per PR, and the **Activity** page was reworked: events
+      (PRs, reviews, comments, issues, releases) interleaved in the graph, *Show* checkboxes, A/B
+      selection bar with Compare, greyed commits without snapshot, and a side panel with the commit
+      message, its PR (description, comments, review comments, pinned board comments) and the
+      issues it mentions with their comments (GraphQL, the workflow token; `issues: read` needed in
+      private repos). `activity-details.json` carries the texts so `activity.json` stays light.
+      Chosen: snapshot of the head of each push (not every commit of a push), built from the PR
+      merged into its base like `pr-N/`, so it includes what the base had at that time.
+      Mockups approved by the owner; the mockup's "parts moved" count needs placement data the
+      CI doesn't export yet, so the summary shows BOM changes and pages that differ instead
+  - [ ] Rebuild snapshots for PRs pushed before the feature (a manual workflow over a PR's
+        commits), and an "N parts moved" count from the PCB placement
 - [ ] **Electrical requirements** (max current, voltage derating…): need data the CI
       doesn't produce yet
 - [ ] **Template repository**: make the board template a GitHub template repository
@@ -465,6 +486,12 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
   its README (file an issue first). The request for it exists (issue #129 "Highlight net",
   open). The owner decides whether to open an issue there or to write a smaller version
   by hand; the code lives in `src/kicad/schematic-nets.ts` and `src/viewers/schematic/`.
+- **PR commit snapshots: head of each push, light, 20 per PR** (2026-11-06): the same
+  content as `history/` snapshots under `pr-<N>/commits/<sha7>/`, ordered by the time they were
+  published (a rebase can't scramble it), cut to the newest `pr-commits` at each publish and
+  gone with the PR. Compare, the PR page's Commits tab and the Activity graph all read them
+  through `builds.json` (kind `commit`, field `pr`). The Activity side panel's texts live in
+  `activity-details.json`, so `activity.json` stays small.
 - **Public under MIT, name kept** (2026-10-29): kicad-hub with a non-affiliation
   note. Versions: `vX.Y.Z` tags plus a moving major tag (`v1`) that users pin;
   `main` is development. Tags `v*` run the tests but don't attach the example's fab

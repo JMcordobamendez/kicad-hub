@@ -127,6 +127,36 @@
   .chip { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); white-space: nowrap; }
   .chip.ok { color: var(--good); border-color: var(--good); } .chip.warn { color: var(--warn); border-color: var(--warn); }
   .chip.bad { color: var(--bad); border-color: var(--bad); }
+
+  /* Commits tab of a pull request: its pushes as a strip, two picked as A and B, compared below */
+  .cmts { flex: 1; min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+  .cmts .card { padding: 14px 18px; flex: none; }
+  .cm-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .cm-head span + span { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 12px; }
+  .cm-strip { display: flex; overflow-x: auto; padding: 8px 0 6px; margin: 4px 0; }
+  .cm-item { flex: 1 0 120px; max-width: 220px; background: none; border: 0; padding: 2px 4px; font: inherit; color: var(--fg); cursor: pointer;
+             display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; border-radius: 6px; }
+  .cm-item:hover { background: var(--soft); }
+  .cm-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cm-note { height: 15px; font-size: 11px; color: var(--warn); white-space: nowrap; }
+  .cm-dotrow { position: relative; width: 100%; height: 20px; display: flex; justify-content: center; align-items: center; }
+  .cm-dotrow::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--brand); }
+  .cm-item:first-child .cm-dotrow::before { left: 50%; } .cm-item:last-child .cm-dotrow::before { right: 50%; }
+  .cm-dot { position: relative; z-index: 1; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--brand); background: var(--card);
+            display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; line-height: 1; }
+  .cm-item.cur .cm-dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent); }
+  .cm-item.a .cm-dot { background: #0969da; border-color: #0969da; } .cm-item.b .cm-dot { background: #8250df; border-color: #8250df; }
+  .cm-item .cm-sha { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+  .cm-item.a .cm-sha, .cm-item.b .cm-sha { font-weight: 700; }
+  .cm-item .cm-msg { font-size: 12px; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .cm-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 8px; }
+  .cm-pick .sum { color: var(--muted); font-size: 13px; flex: 1; min-width: 200px; }
+  .ab { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700; margin-right: 5px; }
+  .ab.a { background: #0969da; } .ab.b { background: #8250df; }
+  .btn.go { background: var(--good); border-color: var(--good); color: #fff; font-weight: 600; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .cm-res iframe { width: 100%; border: 0; display: block; min-height: 200px; background: transparent; }
+  .cm-foot { margin-top: 8px; font-size: 13px; color: var(--warn); text-align: right; }
   footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
 </style>
 </head>
@@ -142,8 +172,11 @@ const repoUrl = `${D.server}/${D.repo}`;
 const repoName = D.repo.split("/")[1];
 const money = (v, cur, max = 2) => new Intl.NumberFormat(undefined, {style: "currency", currency: cur, maximumFractionDigits: max}).format(v);
 const size = n => n == null ? "" : n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
-// pages live at <root>/<branch>/, <root>/pr-N/, <root>/releases/<tag>/ or <root>/history/<sha>/
-const HOME = D.mode === "index" ? "./" : D.kind === "release" || D.kind === "history" ? "../../" : "../";
+// pages live at <root>/<branch>/, <root>/pr-N/, <root>/pr-N/commits/<sha>/, <root>/releases/<tag>/ or <root>/history/<sha>/
+const HOME = D.mode === "index" ? "./" : D.kind === "commit" ? "../../../" : D.kind === "release" || D.kind === "history" ? "../../" : "../";
+// builds.json, fetched once (the version picker and the Commits tab both read it)
+let buildsP;
+const getBuilds = () => buildsP ??= fetch(HOME + "builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []);
 // when a build was made: its commit's date if known, else the publish time
 const when = b => Date.parse((b.commit && b.commit.date) || "") || Date.parse(String(b.date || "").replace(" UTC", "Z").replace(" ", "T")) || 0;
 const ownPath = () => decodeURIComponent(new URL(".", location.href).pathname.slice(new URL(HOME, location.href).pathname.length));
@@ -183,8 +216,9 @@ function buildPage() {
   const where = pr ? `pull request <a href="${repoUrl}/pull/${esc(pr)}"><b>#${esc(pr)}</b></a>`
     : D.kind === "release" ? `release <a href="${repoUrl}/releases/tag/${encodeURIComponent(D.label)}"><b>${esc(D.label)}</b></a>`
     : D.kind === "history" ? `snapshot of <b class="mono">${esc(D.branch || "main")}</b>`
+    : D.kind === "commit" ? `snapshot of a commit of pull request <a href="${HOME}pr-${esc(D.pr)}/"><b>#${esc(D.pr)}</b></a>`
     : `branch <b class="mono">${esc(D.label)}</b>`;
-  const history = pr ? `${repoUrl}/pull/${esc(pr)}/commits` : `${repoUrl}/commits/${esc(D.sha)}`;
+  const history = pr || D.kind === "commit" ? `${repoUrl}/pull/${esc(pr || D.pr)}/commits` : `${repoUrl}/commits/${esc(D.sha)}`;
   document.getElementById("head").innerHTML = topbar(
     `<a href="${HOME}">${esc(repoName)}</a><span class="sep">/</span><span>${esc(D.name)}</span>` +
       (D.rev ? `<span class="pill">rev ${esc(D.rev)}</span>` : ""),
@@ -208,6 +242,7 @@ function buildPage() {
   if (D.sheets.length) tabs.push(["schematic", "Schematic"]);
   if (D.pcb) tabs.push(["pcb", "PCB"]);
   if (ch) tabs.push(["changes", `Changes vs ${esc(ch.base || "base")}${nChanges ? ` (${nChanges})` : ""}`]);
+  if (D.pr && (D.kind === "pr" || D.kind === "commit")) tabs.push(["commits", "Commits"]);
   if (D.views.ibom) tabs.push(["ibom", "Interactive BOM"]);
   if (D.views.bom) tabs.push(["bom", "BOM"]);
   if (D.views.sourcing) tabs.push(["sourcing", "Suppliers"]);
@@ -243,6 +278,7 @@ function buildPage() {
       `<span class="seg"><button class="btn on" data-side="top">Top</button><button class="btn" data-side="bottom">Bottom</button></span>` +
       `<button class="btn" data-fit="pcb-board">Board</button><button class="btn" data-fit="pcb-page">Whole page</button><button class="btn" data-fit="pcb-sel">Zoom to selection</button>`),
     changes: () => changesView(ch),
+    commits: () => `<div class="cmts" id="cmts"><p class="muted">Loading…</p></div>`,
     ibom: () => frame(D.views.ibom),
     bom: () => frame(D.views.bom),
     sourcing: () => frame(D.views.sourcing),
@@ -263,6 +299,7 @@ function buildPage() {
       document.getElementById("s-" + id).innerHTML = S[id]();
       if (id === "schematic" || id === "pcb") hook(id === "pcb" ? "pcb" : "sch");
       if (id === "report") renderReport();
+      if (id === "commits") commitsTab();
       if (id === "changes") load("compare.js").then(() => document.querySelectorAll(".cmp").forEach(KHCompare.mount));
       done.add(id);
     }
@@ -277,14 +314,16 @@ function buildPage() {
 /* Other published versions of the same repo (the front page's list), the history of main
    and the way into the compare page */
 function versions() {
-  fetch(HOME + "builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(builds => {
+  getBuilds().then(all => {
+    // snapshots of a pull request's commits: only this PR's (the Commits tab lists them), not everybody's
+    const builds = all.filter(b => b.kind !== "commit" || (D.pr && b.pr === D.pr));
     const sel = document.getElementById("version");
     if (!sel || builds.length < 2) return;
     const here = ownPath();
-    const order = {branch: 0, history: 1, release: 2, pr: 3};
-    const group = {branch: "Branches", history: "History of main", release: "Releases", pr: "Pull requests"};
+    const order = {branch: 0, history: 1, release: 2, pr: 3, commit: 4};
+    const group = {branch: "Branches", history: "History of main", release: "Releases", pr: "Pull requests", commit: "Commits of this pull request"};
     builds.sort((a, b) => ((order[a.kind] ?? 9) - (order[b.kind] ?? 9)) || (when(b) - when(a)));
-    const text = b => b.kind === "history"
+    const text = b => b.kind === "history" || b.kind === "commit"
       ? `${b.label} · ${new Date(when(b)).toISOString().slice(0, 10)}${b.commit && b.commit.message ? " · " + b.commit.message.slice(0, 40) : ""}`
       : `${b.label}${b.title ? " · " + b.title.slice(0, 40) : ""}`;
     let html = "", last = "";
@@ -305,6 +344,97 @@ function versions() {
         location.href = HOME + v + (var_ ? "?variant=" + encodeURIComponent(var_) : "") + location.hash;
       }
     };
+  });
+}
+
+/* Commits tab: the snapshots of a pull request's pushes (pr-N/commits/<sha7>/) as a strip. A click picks A,
+   a second one B (a third starts again); the two are compared right below, in compare.html's embedded mode.
+   Comment counts and "issue opened" come from the activity page's data when the site has it. */
+function commitsTab() {
+  const box = document.getElementById("cmts");
+  const json = u => D.activity ? fetch(HOME + u, {cache: "no-store"}).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null);
+  Promise.all([getBuilds(), json("activity-details.json"), json("activity.json")]).then(([all, det, act]) => {
+    const rows = all.filter(b => b.kind === "commit" && b.pr === D.pr).sort((x, y) => (x.published || "").localeCompare(y.published || ""));
+    if (!rows.length) {
+      box.innerHTML = `<div class="card"><div class="cm-head"><span>Commits in this pull request</span></div><p class="muted">No commit snapshots yet. ` +
+        `One is published for the head commit of every push to a pull request (input <code>pr-commits</code> of the action, newest 20 kept); ` +
+        `they appear from the next push.</p></div>`;
+      return;
+    }
+    const key = b => b.sha.slice(0, 7);
+    const at = b => Date.parse(b.published) || 0;
+    // everything people wrote on this PR, with its time: comments, reviews with text, inline comments, pins
+    const pc = det && det.prs && det.prs[String(D.pr)];
+    const talk = pc ? [...pc.comments, ...pc.reviews.filter(r => r.text || r.state !== "commented"), ...pc.threads, ...pc.pins].map(c => Date.parse(c.at)).filter(Boolean) : [];
+    const issues = act && act.issues ? act.issues.filter(i => (i.prs || []).includes(D.pr)) : [];
+    // a comment belongs to the push it follows (the first push takes the earlier ones)
+    const within = (from, to) => talk.filter(x => x >= from && x < to).length;
+    const own = rows.map((b, i) => within(i ? at(b) : 0, i + 1 < rows.length ? at(rows[i + 1]) : Infinity));
+    const q = new URLSearchParams(location.hash.split("&").slice(1).join("&"));
+    const find = k => rows.find(b => key(b) === q.get(k));
+    const S = {a: find("a"), b: find("b")};
+    if (!S.a && !S.b && rows.length > 1) { S.a = rows[rows.length - 2]; S.b = rows[rows.length - 1]; }   // the last two pushes
+    let frame = null;
+    const href = () => HOME + "compare.html?a=" + encodeURIComponent(S.a.path) + "&b=" + encodeURIComponent(S.b.path);
+    const draw = () => {
+      const tag = (b, l) => `<span class="ab ${l}">${l.toUpperCase()}</span><span class="mono">${esc(key(b))}</span>`;
+      const ready = S.a && S.b && S.a !== S.b;
+      box.innerHTML = `<div class="card"><div class="cm-head"><span>Commits in this pull request (${rows.length})</span><span>click one for A, another for B</span></div>` +
+        `<div class="cm-strip" role="group" aria-label="Commits of this pull request, oldest first">` + rows.map((b, i) => {
+          const l = b === S.a ? "a" : b === S.b ? "b" : "", c = b.commit || {};
+          return `<button type="button" class="cm-item ${l} ${b.path === ownPath() || (D.kind === "pr" && i === rows.length - 1) ? "cur" : ""}" data-i="${i}" aria-pressed="${l ? "true" : "false"}"` +
+            ` title="${esc((c.message || b.label) + " · " + (c.author || "") + " · pushed " + (b.published || "").replace("T", " ").replace("Z", " UTC"))}">` +
+            `<span class="cm-note">${own[i] ? "&bull; " + own[i] + " comment" + (own[i] > 1 ? "s" : "") : ""}</span>` +
+            `<span class="cm-dotrow"><span class="cm-dot">${l.toUpperCase()}</span></span><span class="cm-sha">${esc(key(b))}</span>` +
+            `<span class="cm-msg">${esc(c.message || "")}</span></button>`;
+        }).join("") + `</div>` +
+        `<div class="cm-pick"><span>${S.a ? tag(S.a, "a") : `<span class="muted">A: pick a commit</span>`}</span><span class="muted">&rarr;</span>` +
+        `<span>${S.b ? tag(S.b, "b") : `<span class="muted">B: pick a commit</span>`}</span><span class="sum" id="cm-sum" aria-live="polite"></span>` +
+        `<button type="button" class="btn go" id="cm-go" ${ready ? "" : "disabled"}>Compare A &#8596; B</button>` +
+        `<button type="button" class="btn" id="cm-swap" ${S.a && S.b ? "" : "disabled"}>Swap A / B</button>` +
+        (ready ? `<a href="${esc(href())}" target="_blank" rel="noopener">full page &#8599;</a>` : "") + `</div></div>` +
+        `<div class="card cm-res" id="cm-res" ${ready ? "" : "hidden"}></div>`;
+      history.replaceState(null, "", "#commits" + (S.a ? "&a=" + key(S.a) : "") + (S.b ? "&b=" + key(S.b) : ""));
+      frame = null;
+      if (ready) compare();
+    };
+    const sum = (bom, pages) => {
+      const el = document.getElementById("cm-sum"); if (!el) return;
+      const apart = Math.abs(rows.indexOf(S.a) - rows.indexOf(S.b));
+      const out = [`${apart} push${apart === 1 ? "" : "es"} apart`];
+      if (bom) out.push(`BOM +${bom.added} &minus;${bom.removed} ~${bom.changed}`);
+      if (pages) out.push(`${pages.differ} of ${pages.total} pages differ${pages.pending ? ` (${pages.pending} still comparing)` : ""}`);
+      el.innerHTML = out.join(" &middot; ");
+    };
+    const compare = () => {
+      const res = document.getElementById("cm-res"), lo = Math.min(at(S.a), at(S.b)), hi = Math.max(at(S.a), at(S.b));
+      const n = within(lo, hi), opened = issues.filter(i => Date.parse(i.created) >= lo && Date.parse(i.created) < hi);
+      sum(null, null);
+      res.innerHTML = `<iframe id="cm-frame" title="Comparison of A and B" src="${esc(href() + "&embed=1")}"></iframe>` +
+        (talk.length || issues.length ? `<div class="cm-foot">Comments between A and B: ${n}${opened.map(i => ` &middot; <a href="${esc(i.url)}">issue #${i.number}</a> opened`).join("")}</div>` : "");
+      frame = document.getElementById("cm-frame");
+    };
+    // the embedded compare page reports its height and what differs
+    window.addEventListener("message", e => {
+      if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
+      if (e.data && e.data.khCompareHeight) frame.style.height = e.data.khCompareHeight + "px";
+      if (e.data && e.data.khCompareSummary) sum(e.data.khCompareSummary.bom, e.data.khCompareSummary.pages);
+    });
+    box.addEventListener("click", e => {
+      const item = e.target.closest(".cm-item");
+      if (item) {
+        const b = rows[+item.dataset.i];
+        if (b === S.a) S.a = null;
+        else if (b === S.b) S.b = null;
+        else if (!S.a) S.a = b;
+        else if (!S.b) S.b = b;
+        else { S.a = b; S.b = null; }
+        draw();
+        box.querySelector(`.cm-item[data-i="${item.dataset.i}"]`)?.focus();
+      } else if (e.target.closest("#cm-swap")) { [S.a, S.b] = [S.b, S.a]; draw(); }
+      else if (e.target.closest("#cm-go")) { compare(); document.getElementById("cm-res").scrollIntoView({block: "start", behavior: "smooth"}); }
+    });
+    draw();
   });
 }
 
@@ -542,12 +672,13 @@ function indexPage() {
 }
 
 function buildsView(builds) {
-  builds = builds.filter(b => b.kind !== "history").sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const snaps = b => b.kind === "pr" ? builds.filter(x => x.kind === "commit" && x.pr === +b.label.replace("PR #", "")).length : 0;
+  builds = builds.filter(b => b.kind !== "history" && b.kind !== "commit").sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const group = (kind, title) => {
     const rows = builds.filter(b => b.kind === kind);
     if (!rows.length) return "";
     return `<div class="group"><h2>${title}</h2><div class="card"><table class="list"><tr><th>Build</th><th>Checks</th><th>Board</th><th>Commit</th><th>Updated</th></tr>` +
-      rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="muted">${esc(b.title)}</div>` : ""}</td>` +
+      rows.map(b => `<tr><td><a href="${esc(b.path)}"><b>${esc(b.label)}</b></a>${b.title ? `<div class="muted">${esc(b.title)}</div>` : ""}${snaps(b) > 1 ? `<div class="muted"><a href="${esc(b.path)}#commits">${snaps(b)} commits to compare</a></div>` : ""}</td>` +
         `<td><div class="chips">${chips(b.counts || {}, b.cost)}</div></td>` +
         `<td>${esc(b.name)}${b.rev ? ` <span class="muted">rev ${esc(b.rev)}</span>` : ""}</td>` +
         `<td><a class="mono" href="${repoUrl}/commit/${esc(b.sha)}">${esc(b.sha.slice(0, 7))}</a></td><td class="muted">${esc(b.date)}</td></tr>`).join("") +
