@@ -373,6 +373,8 @@ see what each push changed without opening a throwaway PR. Three ways in:
 2. **On the Activity page** (next section): click two commits in the graph, **Compare A ↔ B**.
 3. **On `compare.html`**: the pickers have a group *Commits of PR #N* for every open PR.
 
+To see a push in the viewer rather than compared, open its snapshot from the strip or the activity panel (**Open this version**).
+
 Notes: a snapshot is made for the head commit of each push (a push of three commits is one
 snapshot), it is the PR merged into its base at that moment (like the `pr-N/` page), the newest
 20 per PR are kept (input `pr-commits`, `0` = off) and they disappear with the PR's page when
