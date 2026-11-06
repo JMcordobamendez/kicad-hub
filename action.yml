@@ -386,9 +386,11 @@ runs:
           rm -rf "$wt/pr-$PR" && mkdir -p "$wt/pr-$PR" &&
             find "$vis" -maxdepth 1 -name '*.png' ! -name '*-before.png' ! -name '*-after.png' -exec cp {} "$wt/pr-$PR/" \;
           git -C "$wt" add -A
-          git -C "$wt" -c user.name="github-actions[bot]" \
-            -c user.email="41898699+github-actions[bot]@users.noreply.github.com" \
-            commit -qm "PR #$PR: visual diff of ${HEAD_SHA:0:7}"
+          # a re-run of the same commit has the same images: nothing to commit
+          git -C "$wt" diff --cached --quiet ||
+            git -C "$wt" -c user.name="github-actions[bot]" \
+              -c user.email="41898699+github-actions[bot]@users.noreply.github.com" \
+              commit -qm "PR #$PR: visual diff of ${HEAD_SHA:0:7}"
           if git -C "$wt" push -q origin "HEAD:refs/heads/$branch"; then
             sha=$(git -C "$wt" rev-parse HEAD)
             break
