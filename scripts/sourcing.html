@@ -73,6 +73,7 @@
   </div>
   <div class="cards" id="cards"></div>
   <ul class="warns" id="warns"></ul>
+  <details id="notes-box" style="margin:0 0 14px;color:var(--muted,inherit)"><summary id="notes-sum"></summary><ul id="notes"></ul></details>
 
   <div class="bar">
     <button class="btn" id="lock">Use the cheapest for every part</button>
@@ -161,6 +162,10 @@ function render() {
       `${r.missing ? ` · ${r.missing} unpriced` : ""}</span></div>`;
   }).join("");
   document.getElementById("warns").innerHTML = DATA.warnings.map(w => `<li>${esc(w.part)} · ${esc(w.message)}</li>`).join("");
+  const notes = DATA.notes || [];
+  document.getElementById("notes-box").hidden = !notes.length;
+  document.getElementById("notes-sum").textContent = `${notes.length} note${notes.length > 1 ? "s" : ""} (lifecycle of offers that are not used)`;
+  document.getElementById("notes").innerHTML = notes.map(w => `<li>${esc(w.part)} · ${esc(w.message)}</li>`).join("");
 
   const rows = [];
   for (const l of DATA.lines) {

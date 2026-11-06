@@ -40,7 +40,8 @@ On every push and pull request of a KiCad project, the action:
   shown as a pass/fail table; `strict: true` fails the job on a failed requirement.
 - **Diffs the BOM** of a pull request against its target branch: parts added,
   removed and changed (`Value: 10uF → 22uF`).
-- **Resolves the datasheets**: links checked (broken vs. unverifiable), local PDFs
+- **Resolves the datasheets**: links checked (broken vs. not checked: a slow or bot-blocking site gets one retry
+  and is then listed apart, never as broken), local PDFs
   found by MPN or value in the datasheet folders and bundled for offline use.
 - **Prices the BOM from several suppliers**: price and stock of every part at LCSC
   and JLCPCB (no API key needed) and at Mouser, Farnell and DigiKey (with your own
@@ -291,6 +292,12 @@ Source: Deploy from a branch → `kicad-hub-site` / `(root)` → Save*. The PR c
 links to the PR's page. The branch keeps a single commit, replaced on every
 publish, so it doesn't grow; the cleanup workflow removes a PR's page when it is
 closed. Pull requests from forks aren't published (they can't write to the repo).
+
+**No Pages, no link.** The action asks the GitHub API whether Pages serves the portal
+branch. If not (typically a private repository without a paid plan, or Pages not enabled
+yet) the PR comment and job summary say so instead of linking to a 404; the portal branch
+is still published, so it works as soon as Pages is turned on. If the token can't read the
+setting the link is kept as before.
 
 #### Activity
 
@@ -571,6 +578,17 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` needs
   KiCad's own Python (`pcbnew`); on Windows it may open a "font not found" dialog
   that blocks until closed — that doesn't happen in CI.
+
+## Report notes
+
+- **BOM changes** list the fields of a changed part by importance (Value, Footprint,
+  MPN/Manufacturer, supplier codes, the rest). Datasheet URL changes are not in the row,
+  only "datasheet link changed", with the before/after in a collapsed list.
+- **Lifecycle** (obsolete, NRND, EOL…) is a status of one supplier's orderable part. It is a
+  warning only when it hits an offer the totals use or several suppliers report it;
+  otherwise it is a note in `sourcing.html`.
+- If the workflow calls the action at a branch (`@main`) the report says it is a
+  development branch; pin `@v1` for the stable version. No note for tags or commit SHAs.
 
 ## Known limits
 

@@ -386,6 +386,29 @@ Picked by the owner (2026-10-29):
         the list, to decide what to carry over (by hand or cherry-pick: KiCad files merge
         badly). Only-assembly differences belong in KiCad variants on `main`, not a branch
 
+From the first real use (owner's private board, 2026-11-06):
+
+- [x] **Noise cut** (done 2026-11-06, branch `fix/real-use-noise`): the portal link is
+      replaced by an explanation when GitHub Pages is not serving the repository
+      (`scripts/pages_status.py`: API 404 or another source = disabled; no permission =
+      unknown, link kept); datasheet links that time out get one retry with a longer wait and
+      are reported as "not checked" in one compact line, apart from broken ones (404…; no
+      cross-run cache: a cache entry can't be overwritten, so it would need a key per URL
+      list and gain little over the retry); lifecycle warnings only when the status hits an
+      offer the totals use or several suppliers agree, otherwise a note in `sourcing.html`;
+      BOM diff rows ordered by importance with Datasheet URL changes folded into a collapsed
+      list; a note when the workflow uses `@main` (a branch ref) instead of a tag
+- [ ] **Layout progress in PR comments**: unrouted-items trend between pushes, kept apart
+      from real DRC errors (a board being routed shows hundreds of unconnected items that
+      are not errors)
+- [ ] **Real JLCPCB order cost**: PCB + assembly + extended-part fees (basic/extended flag
+      per part) on top of the components price
+- [ ] **Board card in the report**: size, layers, part count, single/double sided, minimum
+      track and drill against the chosen fab profile
+- [ ] *Under study*, **automatic placement hints** (warnings only): decoupling or input
+      capacitor too far from its IC, missing copper keepout under module antennas,
+      estimated length of power-class nets before routing, no test points on power nets
+
 ## Later
 - [ ] GitLab port (GitLab CI + Pages + merge requests) for self-hosted teams
 - [ ] Microcontroller pin map from the schematic (GPIO → net) as a table and a

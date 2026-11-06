@@ -576,6 +576,19 @@ runs:
         fi
         { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; echo "history_dest=$hist_dest"; } >> "$GITHUB_OUTPUT"
 
+    - name: Pages check
+      id: pages_state
+      if: steps.portal.outputs.dest != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        BRANCH: ${{ inputs.pages-branch }}
+      run: |
+        # Is Pages serving the portal branch? If not (private repo without a paid plan, or not
+        # enabled yet) the report explains it instead of linking to a 404. Never fails.
+        echo "state=$(python3 "$GITHUB_ACTION_PATH/scripts/pages_status.py" 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
+
     - name: Page renders (compare)
       if: steps.portal.outputs.dest != ''
       shell: bash
@@ -620,6 +633,8 @@ runs:
         PACKAGE: ${{ steps.package.outputs.name }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         PORTAL_URL: ${{ steps.portal.outputs.url }}
+        PORTAL_STATE: ${{ steps.pages_state.outputs.state }}
+        ACTION_REF: ${{ github.action_ref }}
         FAB_PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
@@ -631,7 +646,7 @@ runs:
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
           --variants "$r/variants.json" --variant-sync "$r/variant-sync.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
-          --portal-url "$PORTAL_URL" \
+          --portal-url "$PORTAL_URL" --portal-state "${PORTAL_STATE:-unknown}" --action-ref "$ACTION_REF" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
@@ -702,6 +717,7 @@ runs:
         LABEL: ${{ steps.portal.outputs.label }}
         KIND: ${{ steps.portal.outputs.kind }}
         URL: ${{ steps.portal.outputs.url }}
+        PORTAL_STATE: ${{ steps.pages_state.outputs.state }}
         REV: ${{ steps.package.outputs.board_rev }}
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -795,7 +811,11 @@ runs:
         done
         git worktree remove --force "$wt" 2>/dev/null || true
         if [ -n "$ok" ]; then
-          echo "Design portal: $URL" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "${PORTAL_STATE:-unknown}" = disabled ]; then
+            echo "Design portal published to branch $BRANCH, but GitHub Pages is not serving it (private repository without a paid plan, or Pages not enabled for that branch): see the README, section Design portal." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Design portal: $URL" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
         else
           echo "::warning::Could not publish the design portal to $BRANCH (needs 'contents: write')"
         fi

@@ -350,9 +350,6 @@ for key in sorted(lines, key=lambda k: (min((r for refs in lines[k]["refs"].valu
         m = next((o["mpn"] for o in l["offers"] if o["supplier"] == "LCSC"), "")
         if m and norm(m) not in norm(l["mpn"]) and norm(l["mpn"]) not in norm(m):
             warn(l["part"], f"LCSC code {l['lcsc']} is {m}, not the MPN {l['mpn']}")
-    for o in l["offers"]:
-        if o["lifecycle"] and BAD_LIFECYCLE.search(o["lifecycle"]):
-            warn(l["part"], f"{o['supplier']}: lifecycle '{o['lifecycle']}'")
     if not l["offers"]:
         refs = ", ".join(l["refs"].get("default") or next(iter(l["refs"].values())))
         warn(l["part"], f"{refs}: not found at any supplier")
@@ -392,6 +389,25 @@ for b in builds:
     res["totals"] = {k: round(v, 2) for k, v in res["totals"].items()}
     res["priced"] = res["fitted"] - len(res["unpriceable"]) - len(res["unpriced"])
     out["builds"].append(res)
+
+# Lifecycle. A status belongs to one supplier's orderable part, not to the part itself: warn when
+# it hits an offer the totals use, or when several suppliers agree; otherwise it is only a note
+# (shown in the sourcing details), e.g. one distributor's obsolete variant of a part others sell.
+out["notes"] = []
+for l in out["lines"]:
+    bad = [(i, o) for i, o in enumerate(l["offers"]) if o["lifecycle"] and BAD_LIFECYCLE.search(o["lifecycle"])]
+    if not bad:
+        continue
+    used = {pick(l, len(refs) * n) for refs in l["refs"].values() for n in batches}
+    bad_sup = {o["supplier"] for _, o in bad}
+    for i, o in bad:
+        if i in used:
+            warn(l["part"], f"{o['supplier']}: lifecycle '{o['lifecycle']}' (the offer used)")
+        elif len(bad_sup) > 1:
+            warn(l["part"], f"{o['supplier']}: lifecycle '{o['lifecycle']}' (also reported by other suppliers)")
+        else:
+            out["notes"].append({"part": l["part"], "message":
+                                 f"{o['supplier']}: lifecycle '{o['lifecycle']}' (not the offer used; other suppliers do not report it)"})
 
 # Target price: unit price of the offer used at each batch size against the target
 out["above_target"] = 0

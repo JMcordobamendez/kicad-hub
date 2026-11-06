@@ -33,6 +33,9 @@ ap.add_argument("--datasheet-optional", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
 ap.add_argument("--variants", help='JSON list of {"name", "description", "bom"} (per-part BOM of each variant)')
 ap.add_argument("--variant-sync", help="JSON from variant_sync.py (schematic vs PCB, per build)")
 ap.add_argument("--portal-url", default="", help="this build's page in the design portal")
+ap.add_argument("--portal-state", default="serving", choices=["serving", "disabled", "unknown"],
+                help="is GitHub Pages serving the portal? (pages_status.py); 'disabled' replaces the link by an explanation")
+ap.add_argument("--action-ref", default="", help="ref the workflow uses for this action (github.action_ref)")
 ap.add_argument("--requirements", help="JSON from requirements.py")
 ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
 ap.add_argument("--visual", help="JSON from visual_diff.py (with image URLs once pushed)")
@@ -73,7 +76,12 @@ def table(header, rows):
 
 
 md = [f"<!-- kicad-hub:{args.name} -->", f"## KiCad checks: {args.name}", ""]
-if args.portal_url:
+if args.portal_url and args.portal_state == "disabled":
+    md += ["ℹ️ **Design portal not available**: it is published to its branch but GitHub Pages is not serving it. "
+           "A private repository needs a paid plan (GitHub Pro) for Pages; otherwise enable it in *Settings → Pages → "
+           "Deploy from a branch* with the portal branch (`kicad-hub-site` by default). "
+           "[Details](https://github.com/JMcordobamendez/kicad-hub#design-portal)", ""]
+elif args.portal_url:
     md += [f"🔎 **[Open this design in the browser]({args.portal_url})**: schematic and PCB viewer, "
            "interactive BOM, suppliers, downloads.", ""]
 counts = {}
@@ -141,24 +149,45 @@ compare = [c for c in (next(iter(head.values())).keys() if head else []) if c !=
 
 
 
+SUPPLIER_FIELDS = ("lcsc", "jlcpcb", "mouser", "digikey", "farnell", "element14", "rs", "tme", "supplier")
+
+
+def field_rank(c):
+    """Most important fields first: Value, Footprint, MPN/Manufacturer, supplier codes, the rest, Datasheet last."""
+    low = c.lower()
+    if low in ("value", "footprint"):
+        return (0 if low == "value" else 1, c)
+    if low in ("mpn", "manufacturer", "mfr", "manufacturer part number"):
+        return (2, c)
+    if any(low.startswith(x) for x in SUPPLIER_FIELDS):
+        return (3, c)
+    return (5 if low == "datasheet" else 4, c)
+
+
 def bom_diff(old, new):
-    """Parts added and removed, and [ref, value, field changes] for the ones in both."""
+    """Parts added and removed, and [ref, value, field changes] for the ones in both.
+
+    Datasheet URL changes are noise next to a changed part number: they are not listed in the
+    row but counted in a short note, and returned apart as [ref, old, new] for a collapsed list."""
     added = sorted(set(new) - set(old), key=ref_key)
     removed = sorted(set(old) - set(new), key=ref_key)
-    changed = []
+    changed, links = [], []
     for ref in sorted(set(new) & set(old), key=ref_key):
-        diffs = [f"{c}: {cell(old[ref].get(c))} → {cell(new[ref].get(c))}"
-                 for c in compare if (old[ref].get(c) or "").strip() != (new[ref].get(c) or "").strip()]
-        if diffs:
+        ch = [c for c in sorted(compare, key=field_rank) if (old[ref].get(c) or "").strip() != (new[ref].get(c) or "").strip()]
+        diffs = [f"{c}: {cell(old[ref].get(c))} → {cell(new[ref].get(c))}" for c in ch if c != "Datasheet"]
+        if "Datasheet" in ch:
+            links.append([ref, cell(old[ref].get("Datasheet")), cell(new[ref].get("Datasheet"))])
+            diffs.append("_datasheet link changed_")
+        if ch:
             changed.append([ref, cell(new[ref].get("Value")), "<br>".join(diffs)])
-    return added, removed, changed
+    return added, removed, changed, links
 
 
 md.append(f"### BOM changes vs `{args.base_ref}`" if base is not None else "### BOM changes")
 if base is None:
     md += ["_Not a pull request (or no base schematic): nothing to compare._", ""]
 else:
-    added, removed, changed = bom_diff(base, head)
+    added, removed, changed, links = bom_diff(base, head)
     counts.update(bom_added=len(added), bom_removed=len(removed), bom_changed=len(changed))
     if not (added or removed or changed):
         md += ["No BOM changes.", ""]
@@ -170,6 +199,9 @@ else:
             md += [table(["Part", "Value", "Footprint"], rows), ""]
         if changed:
             md += [table(["Part", "Value", "Change"], changed), ""]
+        if links:
+            md += [f"<details><summary>Datasheet link changes ({len(links)})</summary>", "",
+                   table(["Part", "Before", "After"], links), "", "</details>", ""]
 
 # --- Visual changes ---------------------------------------------------------------
 if args.visual and os.path.exists(args.visual):
@@ -326,7 +358,10 @@ if ds is not None:
     found = {k: v for k, v in ds.items() if v["source"] != "none"}
     by_src = {s: sum(1 for v in found.values() if v["source"] == s) for s in ("url", "file", "folder")}
     broken = [[k, cell(v["value"]), cell(v["target"]), cell(v.get("why"))] for k, v in ds.items() if v["status"] == "broken"]
-    unver = [[k, cell(v["value"]), cell(v["target"]), cell(v.get("why"))] for k, v in ds.items() if v["status"] == "unverified"]
+    unver = {}  # URL -> (parts, reason): the same link is often on several parts
+    for k, v in ds.items():
+        if v["status"] == "unverified":
+            unver.setdefault(v["target"], ([], v.get("why") or ""))[0].append(k)
     counts.update(datasheets_found=len(found), datasheets_broken=len(broken))
     md += ["### Datasheets",
            f"**{len(found)} of {len(ds)} fitted parts** have a datasheet: {by_src['url']} links, "
@@ -336,9 +371,13 @@ if ds is not None:
     if broken:
         md += [f"**{len(broken)} broken:**", "", table(["Part", "Value", "Datasheet", "Problem"], broken), ""]
     if unver:
-        md += [f"<details><summary>{len(unver)} link{'s' if len(unver) != 1 else ''} could not be verified (the site blocks automated "
-               f"checks or timed out)</summary>", "", table(["Part", "Value", "Datasheet", "Reason"], unver),
-               "", "</details>", ""]
+        n = sum(len(p) for p, _ in unver.values())
+        md += [f"**{n} datasheet link{'s' if n != 1 else ''} not checked** (the site blocks automated checks or did not "
+               f"answer after a retry; not counted as broken).", "",
+               f"<details><summary>Show the {len(unver)} URL{'s' if len(unver) != 1 else ''}</summary>", ""]
+        md += [f"- {', '.join(sorted(p, key=ref_key))}: {u} ({cell(w)})" for u, (p, w) in sorted(unver.items())[:MAX_ROWS]]
+        md += ["", "</details>", ""]
+    counts["datasheets_not_checked"] = sum(len(p) for p, _ in unver.values())
 
 # --- Cost and stock -------------------------------------------------------------
 src = None
@@ -394,6 +433,9 @@ if src:
     if over:
         md += [f"**Above target price** (unit price in {src['currency']}, offer used at {last} board{'s' if last != 1 else ''}):", "",
                table(["Part", "Refs", "Target", "Used", "Supplier", "Over"], over[:MAX_ROWS]), ""]
+    if src.get("notes"):
+        md += [f"ℹ️ {len(src['notes'])} lifecycle note{'s' if len(src['notes']) != 1 else ''} about offers that are not the "
+               "ones used (details in `sourcing.html`).", ""]
     md += ["Compare suppliers per part and choose: `sourcing.html` in the artifact. "
            "Every offer: `reports/sourcing.csv`.", ""]
     counts["sourcing_warnings"] = len(src["warnings"])
@@ -409,6 +451,11 @@ if args.package:
            "netlist, BOM and pick & place (CSV), fab notes and checksums.", ""]
     if warns:
         md += ["**Check before ordering:**", ""] + [f"- ⚠️ {w}" for w in warns] + [""]
+
+# a workflow on a branch ref (@main) follows development: say so. Tags (v1, v1.3.0) and SHAs are fine.
+if args.action_ref and not re.fullmatch(r"v\d+(\.\d+){0,2}([-+].*)?|[0-9a-f]{40}", args.action_ref):
+    md += [f"ℹ️ This workflow uses `kicad-hub@{args.action_ref}`, a development branch that can change at any "
+           "time: pin `@v1` for the stable version.", ""]
 
 if args.run_url:
     md += [f"[Run details and fab outputs]({args.run_url})"]
