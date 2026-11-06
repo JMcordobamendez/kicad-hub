@@ -262,7 +262,8 @@ Every push to a branch, tag and pull request publishes a page to the
   in the interactive compare (swipe, fade, side by side, or **Changes**: red only in A,
   green only in B), computed in the browser from full-page renders that every published
   build stores in `renders/` (same export options and resolution, no crop, so any two
-  builds line up). Pages identical in both are collapsed as "no changes". Builds
+  builds line up). Without parameters it opens on the newest version against the one before
+  it (a PR's previous push, else the default branch; for `main` the previous snapshot). Pages identical in both are collapsed as "no changes". Builds
   published before this feature have no renders until their next publish.
 - **Commits of a pull request**: every push to a PR also publishes a light snapshot of its
   head commit at `/pr-<N>/commits/<sha7>/` (same content as a `history/` snapshot; input

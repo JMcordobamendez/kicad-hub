@@ -355,7 +355,9 @@ Fab package zip, schematic PDF, BOM CSV and the commit history of that build.
 - **Compare** (`compare.html`): pick any two versions (`main/`, `history/<sha>/`,
   `releases/<tag>/`, `pr-N/`, `pr-N/commits/<sha7>/`). It shows BOM changes and every
   schematic sheet and PCB layer in the interactive compare. Identical pages are collapsed.
-  Builds published before the compare feature have no renders until their next publish.
+  Opened without parameters it compares the newest version (B) with the one before it (A):
+  for a pull request its previous push, else the default branch; for `main` the previous
+  snapshot. `?a=` and `?b=` in the URL win. Builds published before the compare feature have no renders until their next publish.
 
 #### Compare the commits of one pull request
 

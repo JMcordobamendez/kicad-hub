@@ -365,6 +365,27 @@ async function run() {
   out.innerHTML = bomView(la, lb) + pagesView(la, lb);
 }
 
+/* ---------- default pair ---------- */
+/* B is the newest version (the latest push to a pull request, or main). A is the one before it: for a
+   pull request the previous push, else the default branch; for main the previous snapshot, else a release.
+   URL parameters, when there are any, win over this. */
+function defaults() {
+  const usable = builds.filter(b => b.bom || b.renders);
+  const stamp = b => when(b), pushed = b => b.published || "";
+  const B = usable.slice().sort((x, y) => stamp(y) - stamp(x))[0];
+  if (!B) return {a: "", b: ""};
+  const other = b => b.sha !== B.sha && b.path !== B.path;
+  let A = null;
+  const n = B.kind === "commit" ? B.pr : B.kind === "pr" ? +String(B.label).replace("PR #", "") : 0;
+  if (n) {
+    A = usable.filter(b => b.kind === "commit" && b.pr === n && other(b)).sort((x, y) => pushed(y).localeCompare(pushed(x)))[0]
+      || usable.filter(b => b.kind === "branch" && other(b)).sort((x, y) => (y.label === "main" || y.label === "master") - (x.label === "main" || x.label === "master") || stamp(y) - stamp(x))[0];
+  } else {
+    A = usable.filter(b => (b.kind === "history" || b.kind === "branch") && other(b) && stamp(b) <= stamp(B)).sort((x, y) => stamp(y) - stamp(x))[0]
+      || usable.filter(b => b.kind === "release" && other(b)).sort((x, y) => stamp(y) - stamp(x))[0];
+  }
+  return {a: A ? A.path : "", b: B.path};
+}
 /* ---------- start ---------- */
 if (EMBED) {
   document.body.classList.add("embed");
@@ -377,6 +398,7 @@ const q = new URLSearchParams(location.search);
 state.a = norm(q.get("a")); state.b = norm(q.get("b"));
 fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
   builds = list;
+  if (!state.a && !state.b) Object.assign(state, defaults());   // no parameters: the newest version against the one before it
   document.title = `Compare versions · ${repoName}`;
   picker();
   run();
