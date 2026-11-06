@@ -254,7 +254,7 @@ if variants:
                                       + " and ".join(f"{c} {vb[ref][c].strip()}" for c in same)
                                       + " unchanged (it is still the part for " + cell(old_v) + ")")
         if v.get("base_bom") and os.path.exists(v["base_bom"]):
-            a, r, ch = bom_diff(load_bom(v["base_bom"]) or {}, vb)
+            a, r, ch, _ = bom_diff(load_bom(v["base_bom"]) or {}, vb)
             if a or r or ch:
                 pr_rows.append([f"**{v['name']}**", ", ".join(a) or "—", ", ".join(r) or "—",
                                 "<br>".join(f"{c[0]}: {c[2]}" for c in ch) or "—"])
