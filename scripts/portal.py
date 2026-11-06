@@ -10,6 +10,8 @@
 
 `build --kind history` is a light snapshot of a commit on main for the timeline: design
 files (if small), the per-page renders and the parts BOM, no fab package, offers or PDFs.
+`build --kind commit --pr N` is the same light snapshot for a commit pushed to pull request N
+(pr-N/commits/<sha7>/), so the commits of one PR can be compared with each other.
 
 portal.html (one template, two modes) and compare.html are filled with a JSON blob.
 """
@@ -32,7 +34,7 @@ b.add_argument("--project-dir", required=True)
 b.add_argument("--name", required=True)
 b.add_argument("--rev", default="")
 b.add_argument("--label", required=True, help="what this build is: main, PR #3, v1.2…")
-b.add_argument("--kind", required=True, choices=("branch", "pr", "release", "history"))
+b.add_argument("--kind", required=True, choices=("branch", "pr", "release", "history", "commit"))
 b.add_argument("--sha", required=True)
 b.add_argument("--repo", required=True, help="owner/name")
 b.add_argument("--server", default="https://github.com")
@@ -45,12 +47,14 @@ b.add_argument("--commit-author", default="")
 b.add_argument("--commit-message", default="", help="first line of the commit message")
 b.add_argument("--renders", default="", help="folder with the PNG renders and renders.json (renders.py)")
 b.add_argument("--light", action="store_true", help="snapshot for the timeline: no fab package, offers, PDFs")
+b.add_argument("--pr", type=int, default=0, help="pull request number of a --kind commit snapshot")
 b.add_argument("--activity", action="store_true", help="the site has an activity page: link to it")
 i = sub.add_parser("index")
 i.add_argument("--root", required=True, help="checkout of the site branch")
 i.add_argument("--repo", required=True)
 i.add_argument("--server", default="https://github.com")
 i.add_argument("--keep-history", type=int, default=-1, help="keep the newest N snapshots in history/ (-1 = all)")
+i.add_argument("--keep-pr-commits", type=int, default=-1, help="keep the newest N snapshots per pull request in pr-N/commits/ (-1 = all)")
 args = ap.parse_args()
 
 
@@ -235,9 +239,9 @@ def changes(out, site):
     return {"base": args.base_ref, "visual": visual, "bom": bom}
 
 
-def light_report(counts, commit, viewer):
-    """Report tab of a history snapshot: commit and check counts only."""
-    lines = [f"**{commit['message']}**" if commit.get("message") else "**Snapshot of main**", ""]
+def light_report(counts, commit, viewer, pr=0):
+    """Report tab of a history or PR-commit snapshot: commit and check counts only."""
+    lines = [f"**{commit['message']}**" if commit.get("message") else f"**Snapshot of PR #{pr}**" if pr else "**Snapshot of main**", ""]
     who = " · ".join(x for x in (commit.get("author"), commit.get("date", "")[:16].replace("T", " ")) if x)
     if who:
         lines += [who, ""]
@@ -245,9 +249,11 @@ def light_report(counts, commit, viewer):
                                                        ("Parts missing fields", "missing_fields")) if counts.get(k) is not None]
     if rows:
         lines += ["| Check | |", "|---|---|"] + [f"| {a} | {b} |" for a, b in rows] + [""]
-    lines.append("_Light snapshot kept for the timeline: no fab package, supplier offers or PDFs" +
+    where = (f"The full build of the latest push is under `pr-{pr}/`; this snapshot is the pull request merged into its base at that push, like that page"
+             if pr else "The full build of the latest commit is under `main/`; releases keep their full pages")
+    lines.append("_Light snapshot kept for the " + ("pull request's commits" if pr else "timeline") + ": no fab package, supplier offers or PDFs" +
                  ("" if viewer else "; the design is too big to embed, use the compare page for the sheet and layer renders") +
-                 ". The full build of the latest commit is under `main/`; releases keep their full pages._")
+                 f". {where}._")
     return "\n".join(lines)
 
 
@@ -340,9 +346,10 @@ def build():
     commit = {k: v for k, v in (("date", args.commit_date), ("author", args.commit_author),
                                 ("message", args.commit_message)) if v}
     if args.light:
-        md = light_report(counts, commit, bool(sheets or pcb))
+        md = light_report(counts, commit, bool(sheets or pcb), args.pr if args.kind == "commit" else 0)
     parts = part_info(out, site, args.light)
     pr = re.match(r"PR #(\d+)$", args.label) if args.kind == "pr" else None
+    pr_number = int(pr.group(1)) if pr else args.pr if args.kind == "commit" else None
     info = {"mode": "build", "name": args.name, "rev": args.rev, "label": args.label, "kind": args.kind,
             "sha": args.sha, "repo": args.repo, "server": args.server, "run_url": args.run_url,
             "title": args.title, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -350,7 +357,7 @@ def build():
             "report": md, "counts": counts, "cost": cost, "parts": parts, "variants": variant_info(out, parts, args.light),
             "branch": args.branch, "commit": commit, "light": args.light, "activity": args.activity,
             "changes": changes(out, site) if args.kind == "pr" else None,
-            "pr": int(pr.group(1)) if pr else None}
+            "pr": pr_number}
     page(info, os.path.join(site, "index.html"))
     summary = {k: info[k] for k in ("name", "rev", "label", "kind", "sha", "date", "title", "counts", "cost")}
     # builds.json is these summaries plus their folder, so the cleanup workflow can rebuild
@@ -362,6 +369,11 @@ def build():
         summary["renders"] = "renders/renders.json"
     if args.light:
         summary["light"] = True
+    if args.kind == "commit":
+        # which PR it belongs to, and when it was pushed (the order of the pushes, which a rebase
+        # or an amended commit date can't scramble: used to prune and to line them up)
+        summary["pr"] = pr_number
+        summary["published"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with open(os.path.join(site, "build.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=1)
 
@@ -394,9 +406,29 @@ def prune_history(keep):
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def prune_pr_commits(keep):
+    """Per pull request, drop the oldest pr-N/commits/<sha7>/ snapshots beyond the newest `keep` pushes."""
+    by_pr = {}
+    for path in glob.glob(os.path.join(args.root, "pr-*", "commits", "*", "build.json")):
+        folder = os.path.dirname(path)
+        try:
+            d = json.load(open(path, encoding="utf-8"))
+            key = d.get("published") or ""
+            if not key:  # published before this field existed: after the commit date
+                key = datetime.datetime.fromtimestamp(stamp(d), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            key = ""
+        by_pr.setdefault(os.path.dirname(os.path.dirname(folder)), []).append((key, folder))
+    for found in by_pr.values():
+        for _, folder in sorted(found, reverse=True)[keep:]:
+            shutil.rmtree(folder, ignore_errors=True)
+
+
 def index():
     if args.keep_history >= 0:
         prune_history(args.keep_history)
+    if args.keep_pr_commits >= 0:
+        prune_pr_commits(args.keep_pr_commits)
     builds = []
     for path in sorted(glob.glob(os.path.join(args.root, "**", "build.json"), recursive=True)):
         rel = os.path.relpath(os.path.dirname(path), args.root).replace(os.sep, "/")

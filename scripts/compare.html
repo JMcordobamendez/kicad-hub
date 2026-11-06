@@ -73,6 +73,11 @@
   .legend { font-size: 12px; color: var(--muted); }
   .legend b.r { color: #dc1e1e; } .legend b.g { color: #009640; }
   footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
+  .cmp-tag.ta { background: #0969da !important; } .cmp-tag.tb { background: #8250df !important; }
+  /* ?embed=1: inside the "Commits" tab of a PR page (an iframe that reports its height to the page) */
+  body.embed { min-height: 0; background: transparent; }
+  body.embed main { padding: 0; }
+  body.embed .cmp-view { height: 560px; }
 </style>
 </head>
 <body>
@@ -115,6 +120,7 @@ function vname(b) {
   if (b.kind === "history") return `${b.label} · ${day(b).slice(0, 10)}${b.commit && b.commit.message ? " · " + b.commit.message.slice(0, 50) : ""}`;
   if (b.kind === "release") return `${b.label} (release)`;
   if (b.kind === "pr") return `${b.label}${b.title ? " · " + b.title.slice(0, 50) : ""}`;
+  if (b.kind === "commit") return `${b.label}${b.commit && b.commit.message ? " · " + b.commit.message.slice(0, 50) : ""}`;
   return `${b.label} (branch, latest)`;
 }
 const group = {branch: "Branches", history: "History of main", release: "Releases", pr: "Pull requests"};
@@ -124,6 +130,13 @@ function options(selected) {
   for (const kind of order) {
     const rows = builds.filter(b => b.kind === kind).sort((a, b) => when(b) - when(a));
     if (rows.length) html += `<optgroup label="${group[kind]}">` + rows.map(b =>
+      `<option value="${esc(b.path)}" ${b.path === selected ? "selected" : ""}>${esc(vname(b))}</option>`).join("") + `</optgroup>`;
+  }
+  // the commits pushed to each pull request, oldest push first, one group per PR (to compare them with each other)
+  const prs = [...new Set(builds.filter(b => b.kind === "commit").map(b => b.pr))].sort((x, y) => y - x);
+  for (const n of prs) {
+    const rows = builds.filter(b => b.kind === "commit" && b.pr === n).sort((a, b) => (a.published || "").localeCompare(b.published || ""));
+    html += `<optgroup label="Commits of PR #${n}">` + rows.map(b =>
       `<option value="${esc(b.path)}" ${b.path === selected ? "selected" : ""}>${esc(vname(b))}</option>`).join("") + `</optgroup>`;
   }
   return html;
@@ -136,13 +149,22 @@ function info(b) {
     `${c.author ? " · " + esc(c.author) : ""} · ${esc(day(b))}</div><div class="chips" style="margin-top:4px">${chipsOf(b.counts)}</div></div>`;
 }
 
+const EMBED = new URLSearchParams(location.search).get("embed") === "1";
+// embedded: what differs, for the page that holds this frame ("3 pushes apart, BOM +0 -0 ~8, 2 of 9 pages differ")
+const sumState = {};
+function reportSummary(part) {
+  Object.assign(sumState, part);
+  if (EMBED) parent.postMessage({khCompareSummary: sumState}, location.origin);
+}
 function head() {
+  if (EMBED) return;
   $("head").innerHTML = `<div class="bar"><a class="logo" href="./" title="All builds">kh</a>` +
     `<div class="crumb"><a href="./">${esc(repoName)}</a><span class="sep">/</span><span>Compare versions</span></div>` +
     `<div class="right"><a href="./#history">History</a>${D.activity ? `<a href="activity.html">Activity</a>` : ""}<a href="${repoUrl}">${esc(D.repo)} on GitHub</a></div></div>`;
 }
 
 function picker() {
+  if (EMBED) { $("wrap").innerHTML = `<div id="result"></div>`; return; }
   $("wrap").innerHTML = `<div class="card pick">
       <div><div class="who">Version A · before</div><select id="sel-a" aria-label="Version A"></select><div id="info-a"></div></div>
       <button class="btn swap" id="swap" title="Swap A and B">⇄</button>
@@ -203,6 +225,7 @@ function bomView(A, B) {
     if (diffs.length) changed.push({ref: r, value: b[r].Value, diffs});
   }
   const n = added.length + removed.length + changed.length;
+  reportSummary({bom: {added: added.length, removed: removed.length, changed: changed.length}});
   let html = `<div class="card"><h2>BOM</h2>`;
   if (!n) return html + `<p class="muted">No BOM changes (${Object.keys(b).length} parts).</p></div>`;
   html += `<p><b>＋${added.length} added · −${removed.length} removed · ~${changed.length} changed</b> <span class="muted">(by reference)</span></p>`;
@@ -220,6 +243,7 @@ function bomView(A, B) {
 const pageStatus = {};   // page key -> "same" | "diff" | "added" | "removed" | "pending"
 function summary() {
   const v = Object.values(pageStatus), n = s => v.filter(x => x === s).length;
+  reportSummary({pages: {differ: n("diff") + n("added") + n("removed"), total: v.length, pending: n("pending")}});
   const el = $("pages-sum"); if (!el) return;
   const parts = [`<b>${n("diff") + n("added") + n("removed")}</b> of ${v.length} pages differ`];
   if (n("pending")) parts.push(`${n("pending")} still being compared`);
@@ -238,7 +262,7 @@ function widget(r, A, B) {
     `<input type="range" min="0" max="100" value="50" aria-label="A / B"><button class="btn" data-fit>Fit</button>` +
     `<span class="legend">Changes: <b class="r">red</b> only in A · <b class="g">green</b> only in B · scroll to zoom · drag to pan</span></div>` +
     `<div class="cmp-view"><div class="cmp-stage"><img class="a" src="${r.a}" alt="A"><img class="b" src="${r.b}" alt="B"><img class="d" src="${r.d}" alt="changes" hidden></div><div class="cmp-line"></div>` +
-    `<span class="cmp-tag" style="left:8px">A · ${esc(A.entry.label)}</span><span class="cmp-tag" style="right:8px">B · ${esc(B.entry.label)}</span></div></div>`;
+    `<span class="cmp-tag ta" style="left:8px">A · ${esc(A.entry.label)}</span><span class="cmp-tag tb" style="right:8px">B · ${esc(B.entry.label)}</span></div></div>`;
 }
 // at most two pages are decoded and diffed at a time (a board has a dozen layers)
 let active = 0;
@@ -323,10 +347,11 @@ function pagesView(A, B) {
 let runId = 0;
 async function run() {
   const me = ++runId, out = $("result");
+  for (const k of Object.keys(sumState)) delete sumState[k];
   const A = byPath(state.a), B = byPath(state.b);
   const bad = [state.a && !A && state.a, state.b && !B && state.b].filter(Boolean);
   if (bad.length) { out.innerHTML = `<div class="card"><p>Not found in this portal: <code>${esc(bad.join(", "))}</code> (a closed pull request, or a snapshot that was pruned).</p></div>`; return; }
-  if (!A || !B) { out.innerHTML = `<div class="card muted">Pick two versions above to compare their BOM, schematic sheets and PCB layers.</div>`; return; }
+  if (!A || !B) { out.innerHTML = `<div class="card muted">Pick two versions above to compare their BOM, schematic sheets and PCB layers${D.activity ? `, or select two commits in the <a href="activity.html">activity graph</a>` : ""}.</div>`; return; }
   if (A === B) { out.innerHTML = `<div class="card muted">Pick two different versions.</div>`; return; }
   out.innerHTML = `<div class="card muted">Loading…</div>`;
   const load = async e => ({
@@ -340,12 +365,40 @@ async function run() {
   out.innerHTML = bomView(la, lb) + pagesView(la, lb);
 }
 
+/* ---------- default pair ---------- */
+/* B is the newest version (the latest push to a pull request, or main). A is the one before it: for a
+   pull request the previous push, else the default branch; for main the previous snapshot, else a release.
+   URL parameters, when there are any, win over this. */
+function defaults() {
+  const usable = builds.filter(b => b.bom || b.renders);
+  const stamp = b => when(b), pushed = b => b.published || "";
+  const B = usable.slice().sort((x, y) => stamp(y) - stamp(x))[0];
+  if (!B) return {a: "", b: ""};
+  const other = b => b.sha !== B.sha && b.path !== B.path;
+  let A = null;
+  const n = B.kind === "commit" ? B.pr : B.kind === "pr" ? +String(B.label).replace("PR #", "") : 0;
+  if (n) {
+    A = usable.filter(b => b.kind === "commit" && b.pr === n && other(b)).sort((x, y) => pushed(y).localeCompare(pushed(x)))[0]
+      || usable.filter(b => b.kind === "branch" && other(b)).sort((x, y) => (y.label === "main" || y.label === "master") - (x.label === "main" || x.label === "master") || stamp(y) - stamp(x))[0];
+  } else {
+    A = usable.filter(b => (b.kind === "history" || b.kind === "branch") && other(b) && stamp(b) <= stamp(B)).sort((x, y) => stamp(y) - stamp(x))[0]
+      || usable.filter(b => b.kind === "release" && other(b)).sort((x, y) => stamp(y) - stamp(x))[0];
+  }
+  return {a: A ? A.path : "", b: B.path};
+}
 /* ---------- start ---------- */
+if (EMBED) {
+  document.body.classList.add("embed");
+  // tell the page that holds this frame how tall the comparison is (same origin)
+  const tell = () => parent.postMessage({khCompareHeight: document.body.offsetHeight}, location.origin);
+  new ResizeObserver(tell).observe(document.body);
+}
 head();
 const q = new URLSearchParams(location.search);
 state.a = norm(q.get("a")); state.b = norm(q.get("b"));
 fetch("builds.json", {cache: "no-store"}).then(r => r.ok ? r.json() : []).catch(() => []).then(list => {
   builds = list;
+  if (!state.a && !state.b) Object.assign(state, defaults());   // no parameters: the newest version against the one before it
   document.title = `Compare versions · ${repoName}`;
   picker();
   run();

@@ -354,25 +354,59 @@ Fab package zip, schematic PDF, BOM CSV and the commit history of that build.
   **Compare with previous**, **Compare with…**. Snapshots are light: design files (if
   under 6 MB), page renders, BOM; no fab package, offers or PDFs. Releases keep full pages.
 - **Compare** (`compare.html`): pick any two versions (`main/`, `history/<sha>/`,
-  `releases/<tag>/`, `pr-N/`). It shows BOM changes and every schematic sheet and PCB
-  layer in the interactive compare. Identical pages are collapsed. Builds published
-  before the compare feature have no renders until their next publish.
+  `releases/<tag>/`, `pr-N/`, `pr-N/commits/<sha7>/`). It shows BOM changes and every
+  schematic sheet and PCB layer in the interactive compare. Identical pages are collapsed.
+  Opened without parameters it compares the newest version (B) with the one before it (A):
+  for a pull request its previous push, else the default branch; for `main` the previous
+  snapshot. `?a=` and `?b=` in the URL win. Builds published before the compare feature have no renders until their next publish.
+
+#### Compare the commits of one pull request
+
+Every push to a pull request publishes a light snapshot of its head commit, so you can
+see what each push changed without opening a throwaway PR. Three ways in:
+
+1. **On the PR page, tab *Commits***: the pushes as a strip, oldest on the left, with the
+   number of comments written after each. Click one commit for **A** and another for **B**
+   (a third click starts again). Right below, the two are compared: BOM changes and each
+   sheet and layer (swipe, fade, side by side, red/green changes), a summary line (pushes
+   apart, BOM `+added −removed ~changed`, pages that differ) and *Comments between A and B*
+   with the issues opened in that time. **Swap A / B** reverses them; *full page* opens the
+   same in `compare.html`. The tab opens on the last two pushes, and the choice is in the URL
+   (`#commits&a=<sha7>&b=<sha7>`), so you can send the link.
+2. **On the Activity page** (next section): click two commits in the graph, **Compare A ↔ B**.
+3. **On `compare.html`**: the pickers have a group *Commits of PR #N* for every open PR.
+
+To see a push in the viewer rather than compared, open its snapshot from the strip or the activity panel (**Open this version**).
+
+Notes: a snapshot is made for the head commit of each push (a push of three commits is one
+snapshot), it is the PR merged into its base at that moment (like the `pr-N/` page), the newest
+20 per PR are kept (input `pr-commits`, `0` = off) and they disappear with the PR's page when
+it is closed. A PR pushed before this was installed has no snapshots until its next push.
 
 ### 5.9 Activity
 
-`activity.html`: a lane graph of the last commits (input `activity`, default 500) of
-all branches and tags, next to a feed of pull requests (opened, reviewed, commented,
-merged, closed), pushes and releases.
+`activity.html`: a lane graph of the last commits (input `activity`, default 500) of all
+branches and tags, with the pull requests (opened, merged, closed), reviews, comments,
+issues and releases between them, and a side panel for the selected commit.
 
-- Hover an item to highlight its commits (and the reverse). Click a commit for **Open
-  design** (if a page was published for it) and **Compare with parent**, or open it on GitHub.
-- Filters: branch, author, dates, "only main + open PRs".
+- **Show** checkboxes (main, pull requests, PR commits, comments, issues, releases) and
+  filters (branch, author, dates). Hover an event to highlight its commits (and the reverse).
+- **Compare two commits**: click a commit (row or node) for **A**, another for **B**; the bar
+  above the graph shows both with **Compare A ↔ B** and **Clear**. Keyboard: arrows, Enter,
+  `a` / `b`. Greyed commits have no snapshot (tooltip says why) and can be read but not
+  compared; the green *snapshot* mark shows the ones that can.
+- **Side panel** of the selected commit: its message, author, date, branch; its pull request
+  (title, description, commits and snapshots, ERC/DRC); the PR's review comments, pinned board
+  comments and conversation; and the issues it mentions (`#12`, `closes #12`) with their
+  description and comments. Buttons: **Open this version**, **Set as A / B**, **Compare with
+  parent**, **View on GitHub**.
 - **Pushes are recorded since the install** (GitHub does not keep who pushed): the page
   says since when. Earlier pushes are not known.
 - **No e-mail addresses are published**: authors are shown by GitHub login or commit name,
-  and anything that looks like an address is stripped from messages.
-- PR data needs the action's `github-token` (the default works); without it the page shows
-  the git graph alone. PRs from forks never appear.
+  and anything that looks like an address is stripped from messages and comments.
+- PR and issue data need the action's `github-token` (the default works; in a **private**
+  repository add `issues: read` to the workflow's `permissions` for the issues); without it
+  the page shows the git graph alone. PRs from forks never appear.
 
 ### 5.10 Pinned comments (PR pages)
 

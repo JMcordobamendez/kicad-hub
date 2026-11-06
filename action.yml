@@ -88,6 +88,13 @@ inputs:
       parts BOM, commit info) of the last N commits under history/<sha>/ in the portal, to
       browse and compare them (compare.html). 0 = off. Needs pages.
     default: "10"
+  pr-commits:
+    description: >-
+      Commits of a pull request: on every push to a PR, keep a light snapshot of its head commit
+      (same content as the history snapshots) under pr-<N>/commits/<sha7>/ in the portal, the
+      newest N per PR, so any two pushes of the same PR can be compared (compare.html, the PR
+      page, the activity page). Removed with the PR's page when it closes. 0 = off. Needs pages.
+    default: "20"
   activity:
     description: >-
       Activity page of the portal (activity.html): graph of the last N commits of all
@@ -558,6 +565,8 @@ runs:
         REF_NAME: ${{ github.ref_name }}
         PR: ${{ github.event.pull_request.number }}
         HISTORY: ${{ inputs.history }}
+        PR_COMMITS: ${{ inputs.pr-commits }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         set -euo pipefail
@@ -576,7 +585,12 @@ runs:
         if [ "$kind" = branch ] && [ "$REF_NAME" = "$DEFAULT_BRANCH" ] && [ "${HISTORY:-0}" -gt 0 ] 2>/dev/null; then
           hist_dest="history/${GITHUB_SHA:0:7}"
         fi
-        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; echo "history_dest=$hist_dest"; } >> "$GITHUB_OUTPUT"
+        # a light snapshot of every push to a pull request, to compare its commits with each other
+        pr_dest=""
+        if [ "$kind" = pr ] && [ "${PR_COMMITS:-0}" -gt 0 ] 2>/dev/null; then
+          pr_dest="pr-$PR/commits/${PR_HEAD_SHA:0:7}"
+        fi
+        { echo "dest=$dest"; echo "label=$label"; echo "kind=$kind"; echo "url=$base/$dest/"; echo "base=$base/"; echo "history_dest=$hist_dest"; echo "pr_commit_dest=$pr_dest"; } >> "$GITHUB_OUTPUT"
 
     - name: Pages check
       id: pages_state
@@ -727,6 +741,9 @@ runs:
         REF_NAME: ${{ github.ref_name }}
         HISTORY: ${{ inputs.history }}
         HIST_DEST: ${{ steps.portal.outputs.history_dest }}
+        PR_COMMIT_DEST: ${{ steps.portal.outputs.pr_commit_dest }}
+        PR_COMMITS: ${{ inputs.pr-commits }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
         ACTIVITY: ${{ inputs.activity }}
         GH_TOKEN: ${{ inputs.github-token }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -778,7 +795,21 @@ runs:
           rm -rf "$hist"
           portal --site "$hist" --label "${SHA:0:7}" --kind history --light || hist=""
         fi
+        # light snapshot of the head commit of this push (pull requests): its own commit info, which
+        # the checkout (the PR merged into its base) doesn't have; the head may need fetching
+        prc=""
+        if [ -n "$PR_COMMIT_DEST" ]; then
+          prc="$RUNNER_TEMP/kicad-hub-portal-prcommit"
+          rm -rf "$prc"
+          git cat-file -e "$SHA^{commit}" 2>/dev/null || git fetch -q --no-tags --depth=1 origin "$SHA" 2>/dev/null || true
+          pc=()
+          if git cat-file -e "$SHA^{commit}" 2>/dev/null; then
+            pc=(--commit-date="$(git log -1 --format=%cI "$SHA")" --commit-author="$(git log -1 --format=%an "$SHA")" --commit-message="$(git log -1 --format=%s "$SHA")")
+          fi
+          portal --site "$prc" --label "PR #$PR_NUMBER · ${SHA:0:7}" --kind commit --pr "$PR_NUMBER" --light "${pc[@]}" || prc=""
+        fi
         case "$HISTORY" in ''|*[!0-9]*) keep=-1 ;; *) keep=$HISTORY ;; esac
+        case "$PR_COMMITS" in ''|*[!0-9]*) keep_pr=-1 ;; *) keep_pr=$PR_COMMITS ;; esac
         # The site branch is one commit, replaced on every publish (no history of zips and
         # PDFs piling up). --force-with-lease keeps concurrent runs from losing each other's
         # pages: the loser retries on top of the winner.
@@ -792,7 +823,19 @@ runs:
           else
             git worktree add -q --detach "$wt" && git -C "$wt" rm -rqf . > /dev/null
           fi
+          # a PR's page is replaced on every push, but not the snapshots of its earlier commits
+          stash=""
+          if [ "$KIND" = pr ] && [ -d "$wt/$DEST/commits" ]; then
+            stash="$RUNNER_TEMP/kicad-hub-prcommits"
+            rm -rf "$stash" && mv "$wt/$DEST/commits" "$stash"
+          fi
           rm -rf "${wt:?}/$DEST" && mkdir -p "$(dirname "$wt/$DEST")" && cp -r "$site" "$wt/$DEST"
+          if [ -n "$stash" ]; then
+            mv "$stash" "$wt/$DEST/commits"
+          fi
+          if [ -n "$prc" ]; then
+            rm -rf "${wt:?}/$PR_COMMIT_DEST" && mkdir -p "$(dirname "$wt/$PR_COMMIT_DEST")" && cp -r "$prc" "$wt/$PR_COMMIT_DEST"
+          fi
           if [ -n "$hist" ]; then
             rm -rf "${wt:?}/$HIST_DEST" && mkdir -p "$(dirname "$wt/$HIST_DEST")" && cp -r "$hist" "$wt/$HIST_DEST"
           fi
@@ -800,8 +843,9 @@ runs:
           if [ -s "$act_raw" ]; then
             python3 "$GITHUB_ACTION_PATH/scripts/activity.py" publish --root "$wt" --data "$act_raw" --repo "$GITHUB_REPOSITORY"               --server "$GITHUB_SERVER_URL" "${push[@]}" || true
           fi
-          # index also prunes history/ to the newest $keep snapshots (-1 = leave it alone)
-          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --keep-history "$keep"
+          # index also prunes history/ to the newest $keep snapshots and each PR's commits/ to the
+          # newest $keep_pr (-1 = leave it alone)
+          python3 "$GITHUB_ACTION_PATH/scripts/portal.py" index --root "$wt" --repo "$GITHUB_REPOSITORY" --server "$GITHUB_SERVER_URL" --keep-history "$keep" --keep-pr-commits "$keep_pr"
           git -C "$wt" checkout -q --orphan "site-$try"
           git -C "$wt" add -A
           git -C "$wt" -c user.name="github-actions[bot]" \

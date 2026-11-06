@@ -12,6 +12,7 @@ on:
 permissions:
   contents: write        # releases and the PR before/after images
   pull-requests: write   # PR comment with the report
+  issues: read           # issues and their comments on the activity page (private repos)
 
 jobs:
   board:

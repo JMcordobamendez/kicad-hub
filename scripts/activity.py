@@ -7,7 +7,11 @@
                             GitHub GraphQL API. Writes one raw JSON file.
   activity.py publish  ...  into the checkout of the site branch: appends this run's push to
                             the persistent push log (activity-pushes.json, GitHub doesn't
-                            keep who pushed), then writes activity.json from the raw file.
+                            keep who pushed), then writes activity.json from the raw file and,
+                            next to it, activity-details.json: what the page's side panel shows
+                            for a selected commit (message, its pull request with the body,
+                            comments, reviews and pinned board comments, the issues it mentions
+                            with their comments). Loaded only when a commit is selected.
 
 Python standard library only. Privacy: no e-mail address is ever written. The GitHub login
 is read from the git author's noreply address or from GitHub; otherwise the author's name is
@@ -34,6 +38,14 @@ EVENTS_MAX = 400
 FEED_PUSHES = 100       # newest pushes that go to the feed (with their commits)
 BRANCHES_MAX = 60       # branches whose creator is worked out
 SNIPPET = 200           # characters of a comment kept
+BODY_MAX = 3000         # characters of a commit message, PR or issue body, or comment kept in the details
+ISSUES_MAX = 40         # issues looked up (the ones the newest commits and pull requests mention)
+DETAILS_BUDGET = 2_500_000   # bytes of activity-details.json: texts are cut shorter when it would be bigger
+RATE_FLOOR = 150        # GraphQL points left below which the optional queries (issues) are skipped
+PIN_MARK = re.compile(r"<!--\s*kicad-hub-pin\s+(\{[\s\S]*?\})\s*-->")
+TRAILER = re.compile(r"^(co-authored-by|signed-off-by|reviewed-by|acked-by):.*$", re.I | re.M)
+ISSUE_REF = re.compile(r"(?<![\w&/#])#(\d{1,6})\b")
+RATE = {"remaining": None, "errors": []}   # last X-RateLimit-Remaining seen, messages of the last answer's errors
 
 
 def warn(msg):
@@ -75,6 +87,19 @@ def login_of_email(email):
     return (m.group(2), m.group(1)) if m else (None, None)
 
 
+def cap(text, n=BODY_MAX):
+    text = (text or "").replace("\r\n", "\n").strip()
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def issue_refs(text, repo=""):
+    """Numbers an issue or PR text points at: #12 and links to this repository's /issues/12."""
+    found = [int(n) for n in ISSUE_REF.findall(text or "")]
+    if repo:
+        found += [int(n) for n in re.findall(re.escape(repo) + r"/issues/(\d+)", text or "", re.I)]
+    return found
+
+
 def short_ref(ref):
     return re.sub(r"^refs/(heads|tags|remotes/origin)/", "", ref)
 
@@ -111,7 +136,7 @@ def list_refs(exclude):
 
 def read_log(shas, limit):
     """Commits newest first, children always before their parents (--topo-order)."""
-    fmt = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%s%x1e"
+    fmt = "%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%s%x1f%b%x1e"
     out = git("log", "--topo-order", f"--max-count={limit}", f"--format={fmt}", "--stdin",
               stdin="\n".join(sorted(shas)) + "\n") or ""
     commits = []
@@ -121,6 +146,9 @@ def read_log(shas, limit):
             continue
         sha, parents, an, ae, ad, cn, subject = f[:7]
         c = {"sha": sha, "parents": parents.split(), "author": an, "date": ad, "subject": subject[:200]}
+        body = cap(TRAILER.sub("", f[7]) if len(f) > 7 else "")
+        if body:
+            c["_body"] = body
         if cn and cn != an:
             c["committer"] = cn
         login, uid = login_of_email(ae)
@@ -177,7 +205,7 @@ class GhError(Exception):
     pass
 
 
-def graphql(query, variables, token, server):
+def graphql(query, variables, token, server, quiet=False):
     url = ("https://api.github.com/graphql" if server.rstrip("/") == "https://github.com"
            else server.rstrip("/") + "/api/graphql")
     body = json.dumps({"query": query, "variables": variables}).encode()
@@ -187,14 +215,17 @@ def graphql(query, variables, token, server):
         try:
             req = urllib.request.Request(url, data=body, headers=headers)
             with urllib.request.urlopen(req, timeout=60) as r:
+                left = r.headers.get("X-RateLimit-Remaining")
+                RATE["remaining"] = int(left) if left and left.isdigit() else RATE["remaining"]
                 answer = json.load(r)
         except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
             last = e
             time.sleep(2)
             continue
+        RATE["errors"] = [str(e.get("message")) for e in answer.get("errors") or []]
         if answer.get("errors") and not answer.get("data"):
             raise GhError("; ".join(str(e.get("message")) for e in answer["errors"])[:200])
-        if answer.get("errors"):
+        if answer.get("errors") and not quiet:
             warn("GitHub answered with errors: " + "; ".join(str(e.get("message")) for e in answer["errors"])[:200])
         return answer["data"]
     raise GhError(f"no answer from GitHub ({last})")
@@ -202,16 +233,20 @@ def graphql(query, variables, token, server):
 
 PR_QUERY = """
 query($o:String!,$n:String!,$after:String){repository(owner:$o,name:$n){
-  defaultBranchRef{name}
+  defaultBranchRef{name} hasIssuesEnabled
   pullRequests(first:25,after:$after,orderBy:{field:UPDATED_AT,direction:DESC}){
     pageInfo{hasNextPage endCursor}
-    nodes{number title state isDraft createdAt mergedAt closedAt headRefName baseRefName headRefOid
+    nodes{number title body state isDraft createdAt mergedAt closedAt headRefName baseRefName headRefOid
       headRepository{nameWithOwner}
       author{login avatarUrl} mergedBy{login avatarUrl} mergeCommit{oid}
-      reviews(first:30){nodes{state submittedAt bodyText author{login avatarUrl}}}
-      comments(first:30){nodes{createdAt bodyText author{login avatarUrl}}}
+      reviews(last:30){nodes{state submittedAt body url commit{oid} author{login avatarUrl}}}
+      comments(last:30){nodes{createdAt body url author{login avatarUrl}}}
+      reviewThreads(last:20){nodes{path comments(first:10){nodes{createdAt body url originalCommit{oid} author{login avatarUrl}}}}}
+      closingIssuesReferences(first:10){nodes{number}}
       commits(first:30){nodes{commit{oid author{user{login avatarUrl}}}}}}}}}
 """
+ISSUE_FIELDS = """number title state createdAt closedAt url body author{login avatarUrl}
+  labels(first:6){nodes{name}} comments(last:30){nodes{createdAt url body author{login avatarUrl}}}"""
 DEFAULT_HISTORY_QUERY = """
 query($o:String!,$n:String!,$after:String){repository(owner:$o,name:$n){defaultBranchRef{target{... on Commit{
   history(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{oid author{user{login avatarUrl}}}}}}}}}
@@ -226,14 +261,42 @@ query($o:String!,$n:String!){repository(owner:$o,name:$n){
   releases(first:50,orderBy:{field:CREATED_AT,direction:DESC}){
     nodes{tagName createdAt publishedAt isPrerelease author{login avatarUrl} tagCommit{oid}}}}}
 """
+HTML_COMMENT = re.compile(r"<!--[\s\S]*?-->")
+PIN_HEAD = re.compile(r"^\U0001F4CD[^\n]*?\)\s+—\s*")        # "pin **C8** (x 1.00, y 2.00 mm, F.Cu) - "
+PIN_LINK = re.compile(r"^\[Open on the board[^\n]*$", re.M)
+
+
+def clean(text, n=BODY_MAX):
+    """A body or comment as kept: hidden HTML comments (templates, pin markers) removed, capped."""
+    return cap(HTML_COMMENT.sub("", text or ""), n)
+
+
+def pin_of(body):
+    """(pin, text) for a comment pinned on the board by scripts/pins.js, else (None, body)."""
+    m = PIN_MARK.search(body or "")
+    if not m:
+        return None, body
+    try:
+        p = json.loads(m.group(1))
+        x, y = float(p["x"]), float(p["y"])
+    except (ValueError, KeyError, TypeError):
+        return None, PIN_MARK.sub("", body)
+    text = PIN_LINK.sub("", PIN_MARK.sub("", body)).strip()
+    text = PIN_HEAD.sub("", text).strip()
+    s = lambda v, k: v[:k] if isinstance(v, str) else ""
+    return {"ref": re.sub(r"[^\w#.+\-/~]", "", s(p.get("ref"), 40)), "x": x, "y": y, "layer": s(p.get("layer"), 40),
+            "page": "pcb" if p.get("page") == "pcb" else "schematic", "sheet": s(p.get("sheet"), 200),
+            "sha": s(p.get("sha"), 40)[:10]}, text
 
 
 def github_data(repo, server, token, limit, in_graph, errors):
-    """Pull requests (with reviews, comments), releases and which login made which commit."""
+    """Pull requests (with reviews, comments, pins), the issues they and the commits mention, releases
+    and which login made which commit. `in_graph` is sha -> commit of the graph."""
     owner, name = repo.split("/", 1)
     var = {"o": owner, "n": name}
     users, login_of, prs, events = {}, {}, [], []
-    default = None
+    details = {"prs": {}, "issues": {}}
+    default, issues_on = None, True
 
     def who(actor):
         if actor and actor.get("login"):
@@ -242,7 +305,7 @@ def github_data(repo, server, token, limit, in_graph, errors):
         return None
 
     def snippet(text):
-        return scrub(" ".join((text or "").split())[:SNIPPET])
+        return scrub(" ".join(HTML_COMMENT.sub("", text or "").split())[:SNIPPET])
 
     def commit_users(nodes):
         for n in nodes or []:
@@ -251,39 +314,70 @@ def github_data(repo, server, token, limit, in_graph, errors):
             if login and c.get("oid"):
                 login_of[c["oid"]] = login
 
+    def sha_of(node):
+        return ((node or {}).get("oid") or "")[:10]
+
     # pull requests, 25 per page, the 100 most recently updated
     after = None
+    pr_text, closing = {}, {}
     try:
         for _ in range(4):
             repo_node = graphql(PR_QUERY, {**var, "after": after}, token, server)["repository"]
             default = (repo_node.get("defaultBranchRef") or {}).get("name") or default
+            issues_on = issues_on and repo_node.get("hasIssuesEnabled") is not False
             page = repo_node["pullRequests"]
             for p in page["nodes"]:
                 author = who(p.get("author"))
                 head_repo = (p.get("headRepository") or {}).get("nameWithOwner")
                 commit_users((p.get("commits") or {}).get("nodes"))
                 oids = [n["commit"]["oid"] for n in (p.get("commits") or {}).get("nodes") or []]
-                pr = {"number": p["number"], "title": scrub(p["title"]), "state": p["state"], "draft": p["isDraft"],
+                n = p["number"]
+                pr = {"number": n, "title": scrub(p["title"]), "state": p["state"], "draft": p["isDraft"],
                       "author": author, "head": p["headRefName"], "base": p["baseRefName"], "head_sha": p["headRefOid"],
                       "created": p["createdAt"], "merged": p.get("mergedAt"), "closed": p.get("closedAt"),
                       "merged_by": who(p.get("mergedBy")), "merge_sha": (p.get("mergeCommit") or {}).get("oid"),
                       "fork": bool(head_repo and head_repo.lower() != repo.lower()),
                       "commits": [o[:10] for o in oids if o in in_graph][:30]}
-                prs.append(pr)
-                n = p["number"]
+                body = clean(p.get("body"))
+                pr_text[n] = pr["title"] + "\n" + body
+                closing[n] = [x["number"] for x in (p.get("closingIssuesReferences") or {}).get("nodes") or []]
                 events.append({"type": "pr_opened", "at": p["createdAt"], "who": author, "pr": n})
+                det = {"body": body, "comments": [], "reviews": [], "threads": [], "pins": []}
                 for r in (p.get("reviews") or {}).get("nodes") or []:
                     if r.get("state") == "PENDING" or not r.get("submittedAt"):
                         continue
-                    events.append({"type": "review", "at": r["submittedAt"], "who": who(r.get("author")), "pr": n,
-                                   "state": r["state"].lower(), "text": snippet(r.get("bodyText"))})
+                    text = clean(r.get("body"))
+                    login = who(r.get("author"))
+                    det["reviews"].append({"who": login, "at": r["submittedAt"], "state": r["state"].lower(), "text": text,
+                                           "url": r.get("url"), "sha": sha_of(r.get("commit"))})
+                    if r["state"] != "COMMENTED" or text:   # an empty "commented" is its inline comments, listed below
+                        events.append({"type": "review", "at": r["submittedAt"], "who": login, "pr": n,
+                                       "state": r["state"].lower(), "text": snippet(text)})
+                for t in (p.get("reviewThreads") or {}).get("nodes") or []:
+                    for c in (t.get("comments") or {}).get("nodes") or []:
+                        text, login = clean(c.get("body")), who(c.get("author"))
+                        det["threads"].append({"who": login, "at": c["createdAt"], "text": text, "url": c.get("url"),
+                                               "path": t.get("path") or "", "sha": sha_of(c.get("originalCommit"))})
+                        events.append({"type": "review_comment", "at": c["createdAt"], "who": login, "pr": n,
+                                       "path": t.get("path") or "", "text": snippet(text)})
                 for c in (p.get("comments") or {}).get("nodes") or []:
-                    events.append({"type": "comment", "at": c["createdAt"], "who": who(c.get("author")), "pr": n,
-                                   "text": snippet(c.get("bodyText"))})
+                    pin, text = pin_of(c.get("body"))
+                    login = who(c.get("author"))
+                    item = {"who": login, "at": c["createdAt"], "text": clean(text), "url": c.get("url")}
+                    ev = {"type": "comment", "at": c["createdAt"], "who": login, "pr": n, "text": snippet(text)}
+                    if pin:
+                        det["pins"].append({**pin, **item})
+                        ev["pin"] = pin["ref"] or "point"
+                    else:
+                        det["comments"].append(item)
+                    events.append(ev)
                 if p.get("mergedAt"):
                     events.append({"type": "merged", "at": p["mergedAt"], "who": who(p.get("mergedBy")), "pr": n})
                 elif p["state"] == "CLOSED" and p.get("closedAt"):
                     events.append({"type": "closed", "at": p["closedAt"], "who": None, "pr": n})
+                pr["counts"] = {k: len(det[k]) for k in ("comments", "reviews", "threads", "pins")}
+                details["prs"][str(n)] = det
+                prs.append(pr)
             if not page["pageInfo"]["hasNextPage"]:
                 break
             after = page["pageInfo"]["endCursor"]
@@ -313,7 +407,79 @@ def github_data(repo, server, token, limit, in_graph, errors):
             commit_users(((ref.get("target") or {}).get("history") or {}).get("nodes"))
     except (GhError, KeyError, TypeError) as e:
         errors.append(f"commit authors: {e}")
-    return {"users": users, "login_of": login_of, "prs": prs, "events": events, "default": default}
+
+    # issues that commits and pull requests mention (#12, closes #12, a link to /issues/12), with their
+    # comments: the newest ISSUES_MAX of them, one aliased query per ten, skipped when the repository
+    # has no issues or the rate limit is nearly spent
+    issues = []
+    pr_numbers = {p["number"] for p in prs}
+    mentions = {}     # issue number -> {"commits": [sha10], "prs": [n]}
+
+    def mention(num, kind, ref):
+        if num not in pr_numbers:
+            m = mentions.setdefault(num, {"commits": [], "prs": []})
+            if ref not in m[kind]:
+                m[kind].append(ref)
+    for c in in_graph.values():
+        for num in issue_refs(c["subject"] + "\n" + c.get("_body", ""), repo):
+            mention(num, "commits", c["sha"][:10])
+    for p in prs:
+        for num in set(issue_refs(pr_text[p["number"]], repo)) | set(closing[p["number"]]):
+            mention(num, "prs", p["number"])
+    numbers = sorted(mentions, reverse=True)[:ISSUES_MAX]
+    if numbers and not issues_on:
+        numbers = []
+    if numbers and RATE["remaining"] is not None and RATE["remaining"] < RATE_FLOOR:
+        errors.append("issues: skipped, GitHub rate limit nearly spent")
+        numbers = []
+    problems = set()
+    for i in range(0, len(numbers), 10):
+        chunk = numbers[i:i + 10]
+        query = ("query($o:String!,$n:String!){repository(owner:$o,name:$n){"
+                 + " ".join("i%d: issue(number:%d){%s}" % (num, num, ISSUE_FIELDS) for num in chunk) + "}}")
+        try:
+            node = graphql(query, var, token, server, quiet=True)["repository"]
+        except (GhError, KeyError, TypeError) as e:
+            problems.add(str(e))
+            continue
+        problems.update(m for m in RATE["errors"] if "Could not resolve to an Issue" not in m)
+        for num in chunk:
+            it = node.get("i%d" % num)
+            if not it:
+                continue
+            m = mentions[num]
+            comments = [{"who": who(c.get("author")), "at": c["createdAt"], "text": clean(c.get("body")), "url": c.get("url")}
+                        for c in (it.get("comments") or {}).get("nodes") or []]
+            author = who(it.get("author"))
+            issues.append({"number": num, "title": scrub(it["title"]), "state": it["state"], "url": it["url"],
+                           "author": author, "created": it["createdAt"], "closed": it.get("closedAt"),
+                           "labels": [l["name"] for l in (it.get("labels") or {}).get("nodes") or []],
+                           "comments": len(comments), "commits": m["commits"], "prs": m["prs"]})
+            details["issues"][str(num)] = {"body": clean(it.get("body")), "comments": comments}
+    if problems:
+        errors.append("issues: " + "; ".join(sorted(problems))[:160]
+                      + " (a private repository needs `issues: read` in the workflow's permissions)")
+    by_pr = {p["number"]: p for p in prs}
+    for it in issues:
+        n = it["number"]
+        rel = list(it["commits"])
+        for pn in it["prs"]:
+            p = by_pr[pn]
+            rel += [p["head_sha"][:10], (p.get("merge_sha") or "")[:10]] + p["commits"]
+            p.setdefault("issues", []).append(n)
+        rel = [r for r in dict.fromkeys(rel) if r][:30]
+        for sha in it["commits"]:
+            for c in in_graph.values():
+                if c["sha"].startswith(sha):
+                    c.setdefault("issues", []).append(n)
+        events.append({"type": "issue_opened", "at": it["created"], "who": it["author"], "issue": n, "rel": rel})
+        for c in details["issues"][str(n)]["comments"]:
+            events.append({"type": "issue_comment", "at": c["at"], "who": c["who"], "issue": n, "rel": rel,
+                           "text": snippet(c["text"])})
+        if it["state"] == "CLOSED" and it["closed"]:
+            events.append({"type": "issue_closed", "at": it["closed"], "who": None, "issue": n, "rel": rel})
+    return {"users": users, "login_of": login_of, "prs": prs, "events": events, "default": default,
+            "issues": issues, "details": details}
 
 
 # ---------------------------------------------------------------- the two commands
@@ -371,6 +537,8 @@ def collect(a):
         if c["sha"] in tag_on:
             c["tags"] = sorted(tag_on[c["sha"]])
 
+    # commit messages go to the details file (the side panel), not into the graph's data
+    bodies = {c["sha"][:10]: c.pop("_body") for c in commits if "_body" in c}
     prs = gh["prs"] if gh else []
     creators = branch_creators({n: s for n, s in branches.items() if s in by_sha}, default, prs, by_sha) if commits else {}
     branch_list = []
@@ -395,7 +563,9 @@ def collect(a):
     data = {"default_branch": default, "limit": a.limit, "truncated": len(commits) >= a.limit,
             "github": bool(gh) and not any(e.startswith(("pull requests", "commit authors")) for e in errors),
             "github_note": "; ".join(errors) or None,
-            "users": users, "commits": commits, "branches": branch_list, "prs": prs, "events": events}
+            "users": users, "commits": commits, "branches": branch_list, "prs": prs, "events": events,
+            "issues": gh["issues"] if gh else [],
+            "details": {"commits": bodies, **(gh["details"] if gh else {"prs": {}, "issues": {}})}}
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(data, f)
     print(f"activity: {len(commits)} commits, {len(branch_list)} branches, {len(prs)} PRs, {len(events)} events"
@@ -408,6 +578,24 @@ def load_json(path, default):
             return json.load(f)
     except (OSError, ValueError):
         return default
+
+
+def shorten(obj, n):
+    """The same structure with every "text" and "body" cut to n characters."""
+    if isinstance(obj, list):
+        return [shorten(x, n) for x in obj]
+    if isinstance(obj, dict):
+        return {k: cap(v, n) if k in ("text", "body") and isinstance(v, str) else shorten(v, n) for k, v in obj.items()}
+    return obj
+
+
+def fit_details(details):
+    """activity-details.json as text; the texts are cut shorter until it fits DETAILS_BUDGET."""
+    for n in (BODY_MAX, 1500, 600, 250):
+        text = json.dumps(shorten(details, n), separators=(",", ":"))
+        if len(text.encode("utf-8")) <= DETAILS_BUDGET:
+            break
+    return text
 
 
 def publish(a):
@@ -435,6 +623,7 @@ def publish(a):
         with open(log_path, "w", encoding="utf-8") as f:
             json.dump({"since": since, "pushes": pushes}, f, separators=(",", ":"))
 
+    details = data.pop("details", None) or {}
     in_graph = {c["sha"] for c in data["commits"]}
     users = data["users"]
     events = list(data["events"])
@@ -466,7 +655,10 @@ def publish(a):
     text = json.dumps(scrub_tree(data), separators=(",", ":"))
     with open(os.path.join(a.root, "activity.json"), "w", encoding="utf-8") as f:
         f.write(text)
-    print(f"activity.json: {len(text) // 1024} KB, {len(pushes)} pushes in the log")
+    dtext = fit_details(scrub_tree(details))
+    with open(os.path.join(a.root, "activity-details.json"), "w", encoding="utf-8") as f:
+        f.write(dtext)
+    print(f"activity.json: {len(text) // 1024} KB, activity-details.json: {len(dtext) // 1024} KB, {len(pushes)} pushes in the log")
 
 
 def main():
