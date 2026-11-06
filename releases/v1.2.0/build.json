@@ -1,0 +1,43 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "v1.2.0",
+ "label": "v1.2.0",
+ "kind": "release",
+ "sha": "0264aac47e4cfab1549e7b577f0d818d09c8b0e9",
+ "date": "2026-10-29 17:53 UTC",
+ "title": "",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "fab_profile": "jlcpcb",
+  "drc_fab_violations": 408,
+  "drc_fab_new": 138,
+  "requirements_total": 7,
+  "requirements_passed": 6,
+  "requirements_failed": 1,
+  "requirements_unknown": 0,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "above_target": 1,
+  "sourcing_warnings": 2,
+  "fab_warnings": 1
+ },
+ "cost": {
+  "boards": 1,
+  "total": 24.3,
+  "currency": "EUR"
+ },
+ "commit": {
+  "date": "2026-10-29T18:50:15+01:00",
+  "author": "Jos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez",
+  "message": "docs(roadmap): v1.2.0 (#33)"
+ },
+ "bom": "bom-parts.csv",
+ "renders": "renders/renders.json"
+}

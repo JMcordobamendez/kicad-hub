@@ -1,0 +1,43 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "",
+ "label": "7eb3066",
+ "kind": "history",
+ "sha": "7eb306680ede4e06496aecbb60f6a21b367f6fb4",
+ "date": "2026-11-06 16:30 UTC",
+ "title": "",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "fab_profile": "jlcpcb",
+  "drc_fab_violations": 408,
+  "drc_fab_new": 138,
+  "requirements_total": 7,
+  "requirements_passed": 6,
+  "requirements_failed": 1,
+  "requirements_unknown": 0,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "variant_sync_issues": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "datasheets_not_checked": 1,
+  "above_target": 1,
+  "sourcing_warnings": 0,
+  "fab_warnings": 1
+ },
+ "cost": null,
+ "branch": "main",
+ "commit": {
+  "date": "2026-11-06T17:27:25+01:00",
+  "author": "Jos\u00e9 Miguel C\u00f3rdoba M\u00e9ndez",
+  "message": "fix(report): detect missing Pages when the token cannot read the setting (#46)"
+ },
+ "bom": "bom-parts.csv",
+ "renders": "renders/renders.json",
+ "light": true
+}
