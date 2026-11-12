@@ -319,6 +319,12 @@ right: start with a prototype on the PR portal page.
 ## Improvements to what's done
 Picked by the owner (2026-10-29):
 
+- [x] **UTF-8 locale in every container** (2026-11-13). Real-use bug: on the owner's board
+      the CI DRC reported 270 clearance errors that a local DRC did not show. Every net of the
+      netclasses with non-ASCII names (`Señal`, `Alimentación`) was checked with the clearance
+      of another class, as if the names had collapsed into one; classes with ASCII names were
+      fine. The image runs with a POSIX locale, so kicad-cli now gets
+      `-e LANG=C.UTF-8 -e LC_ALL=C.UTF-8` in every `docker run`.
 - [ ] **DigiKey**: run it with real keys (Product Information V4) and fix what the
       real answers show (Mouser and Farnell confirmed with real keys on 2026-10-29)
 - [ ] **Pinned comments**: reply and resolve from the portal, read-only pins on
