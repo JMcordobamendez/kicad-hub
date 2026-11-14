@@ -186,7 +186,7 @@ runs:
         # footprint from the standard libraries is reported as "library not found".
         # Give it the stock global lib tables in a HOME shared by all later steps.
         mkdir -p "$RUNNER_TEMP/kicad-home"
-        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" "$IMAGE" sh -c '
+        docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" "$IMAGE" sh -c '
           for t in sym-lib-table fp-lib-table; do
             src=$(ls /usr/share/kicad/template/$t /usr/share/kicad/$t 2>/dev/null | head -n 1)
             [ -n "$src" ] || { echo "missing $t"; continue; }
@@ -209,7 +209,7 @@ runs:
       run: |
         set -uo pipefail
         mkdir -p "$OUT/reports"
-        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
 
         kicad sch erc --severity-all --format json -o "$OUT/reports/erc.json" "$PROJECT_DIR/$NAME.kicad_sch"
         kicad sch erc --severity-all --format report -o "$OUT/reports/erc.rpt" "$PROJECT_DIR/$NAME.kicad_sch"
@@ -243,7 +243,7 @@ runs:
         dru="$tmp/$NAME.kicad_dru"
         if [ -f "$dru" ]; then echo >> "$dru"; else echo "(version 1)" > "$dru"; fi
         grep -v '^(version' "$rules" >> "$dru"
-        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$tmp:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$tmp:/w" -w /w "$IMAGE" kicad-cli "$@"; }
         kicad pcb drc --severity-all --schematic-parity --format json -o drc-fab.json "$NAME.kicad_pcb"
         kicad pcb drc --severity-all --schematic-parity --format report -o drc-fab.rpt "$NAME.kicad_pcb"
         cp "$tmp/drc-fab.json" "$tmp/drc-fab.rpt" "$OUT/reports/"
@@ -262,7 +262,7 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
-        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
+        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
 
         # Fields to export: fixed ones + every alternative named in required-fields
         labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage"
@@ -340,7 +340,7 @@ runs:
         PR: ${{ github.event.pull_request.number }}
       run: |
         set -uo pipefail
-        run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
+        run() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
         vis="$OUT/visual"; svg="$OUT/.visual-svg"; base_dir=.kicad-hub-base
         mkdir -p "$vis" "$svg"
         echo "[]" > "$OUT/reports/visual.json"
@@ -461,7 +461,7 @@ runs:
         PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
-        run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
+        run() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
         pcb="$PROJECT_DIR/$NAME.kicad_pcb"
         sch="$PROJECT_DIR/$NAME.kicad_sch"
 
@@ -550,7 +550,7 @@ runs:
         fi
         # In the KiBot image, which has PyYAML (the runner's Python may not)
         cp "$GITHUB_ACTION_PATH/scripts/requirements.py" "$OUT/.requirements.py"
-        docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/w" -w /w "$IMAGE"           python3 "$OUT/.requirements.py" "$file" "$OUT/reports" "$OUT/reports/requirements.json"           || echo "::warning::Requirements check failed to run: skipped"
+        docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -v "$PWD:/w" -w /w "$IMAGE"           python3 "$OUT/.requirements.py" "$file" "$OUT/reports" "$OUT/reports/requirements.json"           || echo "::warning::Requirements check failed to run: skipped"
         rm -f "$OUT/.requirements.py"
 
     - name: Portal address
@@ -620,7 +620,7 @@ runs:
         # depends on the content), so the portal's compare page can diff any two builds.
         r="$RUNNER_TEMP/kicad-hub-renders"
         rm -rf "$r" && mkdir -p "$r/png" "$r/svg/sch" "$r/svg/pcb" || exit 0
-        run() { docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -v "$r:/r" -w /w "$IMAGE" "$@"; }
+        run() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -v "$r:/r" -w /w "$IMAGE" "$@"; }
         cp "$GITHUB_ACTION_PATH/scripts/renders.py" "$r/renders.py"
         # same export options as the visual diff (see that step)
         run kicad-cli sch export svg -o /r/svg/sch/ "$PROJECT_DIR/$NAME.kicad_sch" > /dev/null \
@@ -713,7 +713,7 @@ runs:
         # -s all: ERC/DRC already ran in a previous step. These outputs are extras: if
         # KiBot can't load the design, say why and carry on, so the report, artifact and
         # portal are still published.
-        if ! docker run --rm -u "$(id -u):$(id -g)" -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" \
+        if ! docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" \
           kibot -c "$OUT/.kibot.yaml" -e "$PROJECT_DIR/$NAME.kicad_sch" "${pcb_args[@]}" \
                 -d "$OUT" -s all $targets 2>&1 | tee "$OUT/reports/kibot.log"; then
           why=$(grep -E '^ERROR:' "$OUT/reports/kibot.log" | sed 's/^ERROR://; s/ (kibot[^)]*)$//' | tail -n 1)
