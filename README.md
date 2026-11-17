@@ -640,7 +640,9 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
 - **Local mode (in progress, roadmap phase 7B):** `scripts/kicad_hub.py` is the engine
   the action is moving to. Today it runs the checks with the KiCad installed on a PC, from
   the repository's folder: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
-  `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC). It finds `kicad-cli` by
+  `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC) and
+  `python scripts/kicad_hub.py bom --base main` (one row per part, per variant too, and
+  the same from `main` to compare with). It finds `kicad-cli` by
   itself when run with KiCad's own Python or when it is on the PATH; otherwise
   `--kicad-cli <path>`.
 - `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have

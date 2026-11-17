@@ -12,7 +12,9 @@ import sys
 
 VIRTUAL_VALUES = {"PWR_FLAG"}
 
-for path in sys.argv[1:]:
+
+def drop_virtual(path):
+    """Rewrite the CSV without its virtual symbols. Returns the number of parts left."""
     with open(path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         fields = reader.fieldnames
@@ -24,3 +26,9 @@ for path in sys.argv[1:]:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()
             w.writerows(kept)
+    return len(kept)
+
+
+if __name__ == "__main__":
+    for arg in sys.argv[1:]:
+        drop_virtual(arg)

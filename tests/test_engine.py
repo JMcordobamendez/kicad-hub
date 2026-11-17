@@ -23,7 +23,22 @@ import json, os, sys
 a = sys.argv[1:]
 if os.environ.get("FAKE_FAIL"):
     sys.exit(3)
-out, target, fmt = a[a.index("-o") + 1], a[-1], a[a.index("--format") + 1]
+out, target = a[a.index("-o") + 1], a[-1]
+if a[:3] == ["sch", "export", "bom"]:
+    # the "schematic" lists its parts, one per line: REF VALUE [only in these variants, split by ;]
+    variant = a[a.index("--variant") + 1] if "--variant" in a else None
+    if variant == os.environ.get("FAKE_FAIL_VARIANT", "-"):
+        sys.exit(3)
+    labels = a[a.index("--labels") + 1].split(",")
+    rows = [",".join(labels)]
+    for line in open(target).read().split("\n"):
+        p = line.split()
+        if len(p) >= 2 and (len(p) == 2 or variant is None or variant in " ".join(p[2:]).split(";")):
+            rows.append(",".join([p[0], p[1]] + [""] * (len(labels) - 2)))
+    open(out, "w").write("\n".join(rows) + "\n")
+    json.dump(a, open(out + ".args", "w"))
+    sys.exit(0)
+fmt = a[a.index("--format") + 1]
 if fmt == "report":
     open(out, "w").write("report of " + target + "\n")
 elif a[:2] == ["sch", "erc"]:
@@ -117,7 +132,9 @@ class RunnerTest(unittest.TestCase):
         self.assertNotIn("LC_ALL", kicad.local_env({"LANG": "es_ES.UTF-8"}))
 
 
-class ChecksTest(unittest.TestCase):
+class EngineCase(unittest.TestCase):
+    """A board repository in a temporary folder (the current one) and the fake kicad-cli."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -136,7 +153,8 @@ class ChecksTest(unittest.TestCase):
         self.old = os.getcwd()
         os.chdir(self.repo)
         self.addCleanup(os.chdir, self.old)
-        self.addCleanup(os.environ.pop, "FAKE_FAIL", None)
+        for name in ("FAKE_FAIL", "FAKE_FAIL_VARIANT"):
+            self.addCleanup(os.environ.pop, name, None)
 
     def put(self, path, text=""):
         full = os.path.join(self.repo, path)
@@ -152,11 +170,16 @@ class ChecksTest(unittest.TestCase):
     def load(self, path):
         return json.loads(self.read(path))
 
-    def run_checks(self, *extra):
+    def engine(self, command, *extra):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = kicad_hub.main(["checks", "--kicad-cli", self.cli, *extra])
+            code = kicad_hub.main([command, "--kicad-cli", self.cli, *extra])
         return code, out.getvalue(), err.getvalue()
+
+
+class ChecksTest(EngineCase):
+    def run_checks(self, *extra):
+        return self.engine("checks", *extra)
 
     def test_erc_and_drc_reports_and_summary(self):
         code, out, _ = self.run_checks()
@@ -242,6 +265,135 @@ class ChecksTest(unittest.TestCase):
             code = kicad_hub.main(["checks", "--kicad-cli", "/nope/kicad-cli"])
         self.assertEqual(code, 1)
         self.assertIn("--kicad-cli points to /nope/kicad-cli", err.getvalue())
+
+
+
+VARIANTS = json.dumps({"schematic": {"variants": [{"name": "lite", "description": "No debugger"},
+                                                  {"name": "pro x", "description": ""}]}})
+# REF VALUE [variants that fit it; none = all]
+SCH = "R1 10k\nC1 100nF\nU5 nRF pro x\nFLG1 PWR_FLAG\n#PWR01 GND\n"
+
+
+class BomTest(EngineCase):
+    def setUp(self):
+        super().setUp()
+        self.put("hw/board.kicad_pro", VARIANTS)
+        self.put("hw/board.kicad_sch", SCH)
+
+    def bom(self, *extra):
+        return self.engine("bom", *extra)
+
+    def refs(self, path):
+        return [line.split(",")[0] for line in self.read(path).splitlines()[1:]]
+
+    def git(self, *args):
+        import subprocess
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "init.defaultBranch=main",
+                        "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
+
+    def test_labels_from_required_fields(self):
+        self.assertEqual(kicad_hub.bom_labels("Footprint, Datasheet,MPN|LCSC | Mouser,Tolerance"),
+                         kicad_hub.BOM_LABELS + ["Mouser", "Tolerance"])
+        self.assertEqual(kicad_hub.bom_labels(""), kicad_hub.BOM_LABELS)
+
+    def test_bom_and_every_variant(self):
+        code, out, _ = self.bom("--required-fields", "Footprint,MPN|Mouser")
+        self.assertEqual(code, 0)
+        r = ".kicad-hub/reports"
+        self.assertEqual(self.refs(f"{r}/bom-parts.csv"), ["R1", "C1", "U5"])          # no PWR_FLAG, no #PWR
+        self.assertEqual(self.refs(f"{r}/bom-parts-variant-lite.csv"), ["R1", "C1"])
+        self.assertEqual(self.refs(f"{r}/bom-parts-variant-pro_x.csv"), ["R1", "C1", "U5"])
+        self.assertEqual(self.load(f"{r}/variants.json"), [
+            {"name": "lite", "description": "No debugger", "bom": f"{r}/bom-parts-variant-lite.csv", "dir": "lite"},
+            {"name": "pro x", "description": "", "bom": f"{r}/bom-parts-variant-pro_x.csv", "dir": "pro_x"}])
+        self.assertTrue(self.read(f"{r}/bom-parts.csv").startswith(
+            "Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage,Mouser\n"))
+        args = self.load(f"{r}/bom-parts-variant-pro_x.csv.args")
+        self.assertEqual(args[:5], ["sch", "export", "bom", "--variant", "pro x"])
+        self.assertEqual(args[args.index("--fields") + 1],
+                         "Reference,Value,Footprint,Datasheet,${DNP},MPN,Manufacturer,LCSC,Voltage,Mouser")
+        self.assertEqual(args[args.index("--group-by") + 1], "")
+        self.assertEqual(args[args.index("--ref-range-delimiter") + 1], "")
+        self.assertIn("BOM: 3 parts", out)
+        self.assertIn("Variant lite: 2 parts", out)
+
+    def test_variants_none_or_a_list(self):
+        self.assertEqual(self.bom("--variants", "none")[0], 0)
+        self.assertEqual(self.load(".kicad-hub/reports/variants.json"), [])
+        self.assertFalse(os.path.exists(".kicad-hub/reports/bom-parts-variant-lite.csv"))
+        self.assertEqual(self.bom("--variants", " lite , other")[0], 0)
+        self.assertEqual([(v["name"], v["description"]) for v in self.load(".kicad-hub/reports/variants.json")],
+                         [("lite", "No debugger"), ("other", "")])
+
+    def test_project_without_variants(self):
+        self.put("hw/board.kicad_pro", "{}")
+        self.assertEqual(self.bom()[0], 0)
+        self.assertEqual(self.load(".kicad-hub/reports/variants.json"), [])
+        self.put("hw/board.kicad_pro", "")                       # not even JSON
+        self.assertEqual(self.bom()[0], 0)
+
+    def test_failing_export_is_an_error(self):
+        os.environ["FAKE_FAIL_VARIANT"] = "lite"
+        code, _, err = self.bom()
+        self.assertEqual(code, 1)
+        self.assertIn("did not write the BOM of variant lite", err)
+        os.environ["FAKE_FAIL"] = "1"
+        code, _, err = self.bom()
+        self.assertEqual(code, 1)
+        self.assertIn("did not write the BOM of hw/board.kicad_sch", err)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/bom-parts.csv"))    # nothing old left behind
+
+    def test_base_commit(self):
+        self.git("init", "-q")
+        self.put(".gitignore", ".kicad-hub/\n")
+        self.put("hw/board.kicad_pro", json.dumps({"schematic": {"variants": [{"name": "lite"}]}}))
+        self.put("hw/board.kicad_sch", "R1 10k\nC9 1uF lite\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "base")
+        self.put("hw/board.kicad_pro", VARIANTS)                 # working tree: one more variant, other parts
+        self.put("hw/board.kicad_sch", SCH)
+        code, out, _ = self.bom("--base", "HEAD")
+        self.assertEqual(code, 0)
+        r = ".kicad-hub/reports"
+        self.assertEqual(self.refs(f"{r}/bom-parts.csv"), ["R1", "C1", "U5"])           # not committed yet
+        self.assertEqual(self.refs(f"{r}/bom-parts-base.csv"), ["R1", "C9"])
+        self.assertEqual(self.refs(f"{r}/bom-parts-variant-lite-base.csv"), ["R1", "C9"])
+        variants = {v["name"]: v for v in self.load(f"{r}/variants.json")}
+        self.assertEqual(variants["lite"]["base_bom"], f"{r}/bom-parts-variant-lite-base.csv")
+        self.assertNotIn("base_bom", variants["pro x"])           # that variant did not exist then
+        self.assertFalse(os.path.exists(kicad_hub.BASE_DIR))      # the worktree is gone
+        self.assertIn("HEAD: 2 parts", out)
+
+    def test_base_where_the_board_did_not_exist(self):
+        self.git("init", "-q")
+        self.put("README.md", "x")
+        self.git("add", "README.md")
+        self.git("commit", "-q", "-m", "empty")
+        self.assertEqual(self.bom("--base", "HEAD")[0], 0)
+        base = self.read(".kicad-hub/reports/bom-parts-base.csv")
+        self.assertEqual(base, "Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage\n")
+
+    def test_base_that_cannot_be_checked_out_is_a_warning(self):
+        self.git("init", "-q")
+        code, _, err = self.bom("--base", "no-such-branch")
+        self.assertEqual(code, 0)
+        self.assertIn("::warning::Could not check out the base", err)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/bom-parts-base.csv"))
+        self.assertTrue(os.path.isfile(".kicad-hub/reports/bom-parts.csv"))
+
+    def test_base_fetched_from_origin(self):
+        origin = os.path.join(self.tmp.name, "origin")
+        os.makedirs(os.path.join(origin, "hw"))
+        self.git("-C", origin, "init", "-q")
+        with open(os.path.join(origin, "hw", "board.kicad_sch"), "w") as f:
+            f.write("R7 1k\n")
+        self.git("-C", origin, "add", "-A")
+        self.git("-C", origin, "commit", "-q", "-m", "base")
+        self.git("init", "-q")
+        self.git("remote", "add", "origin", origin)
+        code, _, _ = self.bom("--base", "main", "--fetch")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.refs(".kicad-hub/reports/bom-parts-base.csv"), ["R7"])
 
 
 if __name__ == "__main__":
