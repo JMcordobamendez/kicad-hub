@@ -434,7 +434,9 @@ LCSC and JLCPCB work out of the box: parts are looked up by their `LCSC` field
 which each user gets for free with their own account — kicad-hub has no shared
 keys. Parts are looked up there by their `MPN` field, or by the manufacturer part
 number LCSC reports when the MPN is empty. Add only the suppliers you want; the
-others are skipped and listed as "no API key" in the report.
+others are skipped and listed as "no API key" in the report. A supplier whose
+requests all fail is listed as "failed"; when only some fail (a timeout, a rate
+limit) its other offers are still used and the report says how many lookups failed.
 
 **1. Get the keys**
 

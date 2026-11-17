@@ -38,6 +38,7 @@
   .chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
   .chip.ok { color: var(--good); border-color: var(--good); }
   .chip.bad { color: var(--bad); border-color: var(--bad); }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
   .wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
   table { border-collapse: collapse; width: 100%; min-width: 860px; }
   th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -148,9 +149,12 @@ function render() {
   document.getElementById("sub").textContent =
     `${bInfo.fitted} fitted parts, components only, prices in ${DATA.currency}` +
     (bInfo.unpriceable.length ? ` · no MPN or LCSC code: ${bInfo.unpriceable.join(", ")}` : "");
-  document.getElementById("suppliers").innerHTML = DATA.suppliers.map(s =>
-    `<span class="chip ${s.status === "ok" ? "ok" : s.status.startsWith("failed") ? "bad" : ""}" title="${esc(s.status)}">` +
-    `${esc(s.name)}${s.status === "ok" ? "" : " · " + esc(s.status.split(" (")[0])}</span>`).join("");
+  // partial: some lookups failed, the offers of the others are in the table
+  document.getElementById("suppliers").innerHTML = DATA.suppliers.map(s => {
+    const kind = s.status === "ok" ? "ok" : s.status.startsWith("partial") ? "warn" : s.status.startsWith("failed") ? "bad" : "";
+    const note = kind === "ok" ? "" : kind === "warn" ? `${s.failed} of ${s.lookups} lookups failed` : s.status.split(" (")[0];
+    return `<span class="chip ${kind}" title="${esc(s.status)}">${esc(s.name)}${note ? " · " + esc(note) : ""}</span>`;
+  }).join("");
   document.getElementById("builds").innerHTML = DATA.builds.map(b =>
     `<button class="${b.name === build ? "on" : ""}" data-b="${esc(b.name)}">${esc(b.name)}</button>`).join("");
   document.getElementById("batches").innerHTML = DATA.batches.map(n =>

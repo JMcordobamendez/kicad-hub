@@ -11,6 +11,8 @@ Suppliers:
                   (free app at developer.digikey.com, Product Information v4)
 Keys come from the environment, so each user brings their own (repository secrets).
 When a part has no MPN, the manufacturer part number LCSC reports is used.
+A request that fails is noted and never fatal; each supplier's status says whether none,
+some or all of its lookups failed (supplier_status.py).
 
 Which offer is used for each part: the one named in the selection file (CSV with
 columns Part, Supplier[, SKU][, Target]; Part = MPN or LCSC code), else the cheapest offer with
@@ -32,9 +34,12 @@ import os
 import re
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+
+from supplier_status import Lookups, RateLimited
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--bom", required=True, help="per-part BOM of the default build")
@@ -136,10 +141,23 @@ mouser_pace = Pace(2.1)  # 30 requests per minute
 
 def mouser(mpn):
     mouser_pace.wait()
-    d = http(f"https://api.mouser.com/api/v1/search/partnumber?apiKey={MOUSER_KEY}",
-             {"SearchByPartRequest": {"mouserPartNumber": mpn, "partSearchOptions": "Exact"}})
+    try:
+        d = http(f"https://api.mouser.com/api/v1/search/partnumber?apiKey={MOUSER_KEY}",
+                 {"SearchByPartRequest": {"mouserPartNumber": mpn, "partSearchOptions": "Exact"}})
+    except urllib.error.HTTPError as e:  # the reason comes in the body, as in a normal answer
+        try:
+            d = json.load(e)
+        except (ValueError, AttributeError, OSError):
+            d = None
+        if not (isinstance(d, dict) and d.get("Errors")):
+            raise
     if d.get("Errors"):
-        raise RuntimeError(d["Errors"][0].get("Message", "error"))
+        err = d["Errors"][0]
+        msg = err.get("Message") or err.get("Code") or "error"
+        # the quota per minute frees itself soon, the one per day does not
+        if re.search(r"too ?many ?requests|per minute", f"{err.get('Code')} {msg}", re.I) and "per day" not in msg.lower():
+            raise RateLimited(msg)
+        raise RuntimeError(msg)
     parts = [p for p in (d.get("SearchResults") or {}).get("Parts") or []
              if p.get("MouserPartNumber") not in (None, "", "N/A") and p.get("PriceBreaks")]
     p = next((p for p in parts if norm(p.get("ManufacturerPartNumber")) == norm(mpn)), None)
@@ -223,16 +241,8 @@ SUPPLIERS = [  # name, lookup, looked up by, enabled
     ("Farnell", farnell, "mpn", bool(FARNELL_KEY)),
     ("DigiKey", digikey, "mpn", bool(DK_ID and DK_SECRET)),
 ]
-status = {name: ("ok" if on else "no API key") for name, _, _, on in SUPPLIERS}
-errors = {}
-
-
-def lookup(name, fn, key):
-    try:
-        return fn(key)
-    except Exception as e:  # network, auth, quota, format change: note it and go on
-        errors.setdefault(name, f"{type(e).__name__}: {str(e)[:120]}")
-        return None
+lookups = Lookups()  # counts per supplier, for its status: ok, partial or failed
+lookup = lookups.run
 
 
 # --- Parts ---------------------------------------------------------------------------------
@@ -281,8 +291,6 @@ def fetch_line(line):
 
 with ThreadPoolExecutor(max_workers=6) as pool:
     list(pool.map(fetch_line, lines.values()))
-for name, err in errors.items():
-    status[name] = f"failed ({err})"
 
 # --- Currency ---------------------------------------------------------------------------------
 rates = {CUR: 1.0}
@@ -324,7 +332,7 @@ if args.choices and os.path.exists(args.choices):
             if t:
                 targets[norm(r["Part"])] = t
 
-out = {"currency": CUR, "batches": batches, "suppliers": [{"name": n, "status": status[n]} for n, *_ in SUPPLIERS],
+out = {"currency": CUR, "batches": batches, "suppliers": [lookups.entry(n, on) for n, _, _, on in SUPPLIERS],
        "choices_file": bool(choices), "targets": len(targets), "lines": [], "builds": [], "warnings": []}
 warned = set()
 

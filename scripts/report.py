@@ -12,6 +12,8 @@ import json
 import os
 import re
 
+from supplier_status import used_and_not
+
 MAX_ROWS = 60  # rows per table before cutting, to keep PR comments readable
 MAX_IMAGES = 12  # before/after images in the report
 
@@ -394,8 +396,7 @@ if args.sourcing and os.path.exists(args.sourcing):
         gaps.append(f"no MPN or LCSC code: {', '.join(sorted(d['unpriceable'], key=ref_key))}")
     if d["unpriced"]:
         gaps.append(f"not found: {', '.join(sorted(d['unpriced'], key=ref_key))}")
-    used = [s["name"] for s in src["suppliers"] if s["status"] == "ok"]
-    other = [f"{s['name']} ({s['status'].split(' (')[0]})" for s in src["suppliers"] if s["status"] != "ok"]
+    used, other = used_and_not(src["suppliers"])
     if d["priced"] == 0:
         # a design still being drawn: say what's missing instead of an empty table
         md += ["### Cost and stock",

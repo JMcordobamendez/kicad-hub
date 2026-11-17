@@ -574,6 +574,22 @@ From the first real use (owner's private board, 2026-11-06):
       offer the totals use or several suppliers agree, otherwise a note in `sourcing.html`;
       BOM diff rows ordered by importance with Datasheet URL changes folded into a collapsed
       list; a note when the workflow uses `@main` (a branch ref) instead of a tag
+- [x] **A supplier is "failed" only when all its lookups fail** (2026-11-17). Real-use bug
+      (PR comment of kicad-hub #54): the report said "not used: Mouser (failed)" and, two
+      lines below, that 7 parts came from Mouser. One failed request marked the whole
+      supplier as failed, although its other requests had returned offers; the likely
+      trigger was Mouser's limit of 30 requests per minute after several CI runs in a row
+      (not confirmed from the logs). Now lookups and failures are counted per supplier
+      (`scripts/supplier_status.py`): `ok`, `partial (3 of 40 lookups failed: <error>)` or
+      `failed (<error>)` when every lookup failed; `sourcing.json` also carries the two
+      counts. The report lists a partial supplier with those used, "Mouser (3 of 40 lookups
+      failed)", and `sourcing.html` shows it in the warning colour. A lookup refused for a
+      rate limit (HTTP 429, or Mouser's "calls per minute" error, read from the body of an
+      error status too; not the quota per day) gets one retry after 10 s, at most 3 per
+      supplier and run, so a quota that stays spent adds about 30 s at worst. Tests in
+      `tests/test_sourcing.py`: the real `sourcing.py` and `report.py` with canned Mouser
+      answers. **Not seen yet against Mouser's real rate-limit answer**: its status code and
+      text are taken from what is known of the API, so check the first real case
 - [ ] **Layout progress in PR comments**: unrouted-items trend between pushes, kept apart
       from real DRC errors (a board being routed shows hundreds of unconnected items that
       are not errors)
