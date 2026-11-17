@@ -1,5 +1,6 @@
 """Tests of scripts/kicad.py and scripts/kicad_hub.py with a fake kicad-cli (no KiCad needed)."""
 import contextlib
+import glob
 import io
 import json
 import os
@@ -30,13 +31,31 @@ if a[:3] == ["sch", "export", "bom"]:
     if variant == os.environ.get("FAKE_FAIL_VARIANT", "-"):
         sys.exit(3)
     labels = a[a.index("--labels") + 1].split(",")
+    grouped = labels[0] == "References"      # the assembly BOM: References,Qty,Value,...
     rows = [",".join(labels)]
     for line in open(target).read().split("\n"):
         p = line.split()
         if len(p) >= 2 and (len(p) == 2 or variant is None or variant in " ".join(p[2:]).split(";")):
-            rows.append(",".join([p[0], p[1]] + [""] * (len(labels) - 2)))
+            rows.append(",".join(([p[0], "1", p[1]] if grouped else [p[0], p[1]])
+                                 + [""] * (len(labels) - (3 if grouped else 2))))
     open(out, "w").write("\n".join(rows) + "\n")
-    json.dump(a, open(out + ".args", "w"))
+    if not grouped:
+        json.dump(a, open(out + ".args", "w"))
+    sys.exit(0)
+if a[:2] == ["pcb", "export"]:
+    kind = a[2]
+    if kind == os.environ.get("FAKE_FAIL_EXPORT", "-"):
+        sys.exit(3)
+    if kind == "gerbers":
+        open(os.path.join(out, "board-F_Cu.gbr"), "w").write("G04 fake*\n")
+        open(os.path.join(out, "board-Edge_Cuts.gbr"), "w").write("G04 fake*\n")
+    elif kind == "drill":
+        open(os.path.join(out, "board-PTH.drl"), "w").write("M48\n")
+    elif kind == "pos":
+        open(out, "w").write("Ref,Val,Package,PosX,PosY,Rot,Side\nR1,10k,R,1,1,0,top\nC1,100nF,C,2,2,0,top\n"
+                             "U5,nRF,QFN,3,3,90,bottom\n")
+    else:
+        open(out, "w").write(kind + " of " + target + "\n")
     sys.exit(0)
 fmt = a[a.index("--format") + 1]
 if fmt == "report":
@@ -153,7 +172,7 @@ class EngineCase(unittest.TestCase):
         self.old = os.getcwd()
         os.chdir(self.repo)
         self.addCleanup(os.chdir, self.old)
-        for name in ("FAKE_FAIL", "FAKE_FAIL_VARIANT"):
+        for name in ("FAKE_FAIL", "FAKE_FAIL_VARIANT", "FAKE_FAIL_EXPORT", "GITHUB_OUTPUT"):
             self.addCleanup(os.environ.pop, name, None)
 
     def put(self, path, text=""):
@@ -505,6 +524,146 @@ class SupplierKeysTest(unittest.TestCase):
         else:
             self.assertEqual(kicad_hub.keys_file({"XDG_CONFIG_HOME": "/cfg"}), "/cfg/kicad-hub/keys.env")
             self.assertTrue(kicad_hub.keys_file({}).endswith("/.config/kicad-hub/keys.env"))
+
+
+
+# Stands in for fabnotes.py, which needs KiCad's pcbnew: same arguments, same outputs.
+FAKE_FABNOTES = r'''import sys
+pcb, rev, readme, board_json, profile = sys.argv[1:6]
+open(readme, "w").write("FAB NOTES rev " + rev + " profile " + profile + "\n")
+open(board_json, "w").write("{}")
+print("Via drill 0.1 mm is below the project minimum drill 0.2 mm")
+'''
+
+
+class PackageTest(EngineCase):
+    def setUp(self):
+        super().setUp()
+        self.put("hw/board.kicad_pro", VARIANTS)
+        self.put("hw/board.kicad_sch", SCH)
+        self.put("hw/board.kicad_pcb", '(kicad_pcb (title_block (rev "B/1"))\n' + OUTLINE)
+        notes = os.path.join(self.tmp.name, "fake_fabnotes.py")
+        with open(notes, "w") as f:
+            f.write(FAKE_FABNOTES)
+        real = kicad_hub.FABNOTES
+        kicad_hub.FABNOTES = notes
+        self.addCleanup(setattr, kicad_hub, "FABNOTES", real)
+        self.assertEqual(self.engine("bom", "--variants", "lite")[0], 0)
+
+    def package(self, *extra):
+        return self.engine("package", "--kicad-python", sys.executable, *extra)
+
+    def files(self, folder):
+        return sorted(os.path.relpath(os.path.join(d, f), folder).replace(os.sep, "/")
+                      for d, _, fs in os.walk(folder) for f in fs)
+
+    def test_package_contents(self):
+        os.environ["GITHUB_OUTPUT"] = os.path.join(self.tmp.name, "outputs.txt")
+        code, out, err = self.package("--fab-profile", "jlcpcb", "--extra-formats", "odb, ipc2581, pdf")
+        self.assertEqual(code, 0, err)
+        pkg = ".kicad-hub/package/board-B_1"                       # the board's revision, made a safe name
+        self.assertEqual(self.files(pkg), [
+            "README.txt", "SHA256SUMS.txt",
+            "assembly/board-B_1-bom.csv", "assembly/board-B_1-cpl.csv",
+            "assembly/jlcpcb/board-B_1-bom-jlcpcb.csv", "assembly/jlcpcb/board-B_1-cpl-jlcpcb.csv",
+            "assembly/lite/board-B_1-lite-bom.csv", "assembly/lite/board-B_1-lite-cpl.csv",
+            "assembly/lite/jlcpcb/board-B_1-lite-bom-jlcpcb.csv", "assembly/lite/jlcpcb/board-B_1-lite-cpl-jlcpcb.csv",
+            "board-B_1-ipc2581.xml", "board-B_1-odb.zip", "board-B_1.d356",
+            "drill/board-PTH.drl", "gerber/board-Edge_Cuts.gbr", "gerber/board-F_Cu.gbr"])
+        cpl = lambda path: [line.split(",")[0] for line in self.read(path).splitlines()[1:]]
+        self.assertEqual(cpl(f"{pkg}/assembly/board-B_1-cpl.csv"), ["R1", "C1", "U5"])
+        self.assertEqual(cpl(f"{pkg}/assembly/lite/board-B_1-lite-cpl.csv"), ["R1", "C1"])   # U5 not fitted in lite
+        readme = self.read(f"{pkg}/README.txt")
+        self.assertTrue(readme.startswith("FAB NOTES rev B_1 profile jlcpcb\n"))
+        self.assertIn("VARIANTS (same bare board, different assembly)\n  default: assembly/\n"
+                      "  lite: assembly/lite/  No debugger\n", readme)
+        self.assertIn("::warning::Via drill 0.1 mm is below", err)
+        self.assertIn("::warning::Unknown extra format 'pdf'", err)
+        self.assertIn("Fab package: .kicad-hub/package/board-B_1-fab.zip", out)
+        self.assertIn("Check before ordering: Via drill 0.1 mm", out)
+        self.assertEqual(self.read(os.environ["GITHUB_OUTPUT"]),
+                         "rev=B_1\nboard_rev=B/1\nzip=.kicad-hub/package/board-B_1-fab.zip\nname=board-B_1-fab.zip\n")
+        self.assertFalse(os.path.exists(".kicad-hub/.fabnotes.py"))
+
+    def test_checksums_and_zip(self):
+        import hashlib
+        import zipfile
+        self.assertEqual(self.package()[0], 0)
+        pkg = ".kicad-hub/package/board-B_1"
+        sums = self.read(f"{pkg}/SHA256SUMS.txt").splitlines()
+        listed = [line.split("  ", 1)[1] for line in sums]
+        self.assertEqual(listed, sorted(listed))
+        self.assertEqual(sorted(p[2:] for p in listed), [f for f in self.files(pkg) if f != "SHA256SUMS.txt"])
+        for line in sums:
+            digest, rel = line.split("  ", 1)
+            with open(os.path.join(pkg, rel[2:]), "rb") as f:
+                self.assertEqual(hashlib.sha256(f.read()).hexdigest(), digest, rel)
+        with zipfile.ZipFile(".kicad-hub/package/board-B_1-fab.zip") as z:
+            self.assertEqual(sorted(z.namelist()), sorted("board-B_1/" + f for f in self.files(pkg)))
+
+    def test_revision_from_the_tag_or_the_commit(self):
+        self.assertEqual(self.package("--rev", "v1.0")[0], 0)
+        self.assertTrue(os.path.isfile(".kicad-hub/package/board-v1.0-fab.zip"))
+        self.assertFalse(os.path.exists(".kicad-hub/package/board-B_1"))        # the other revision is gone
+        self.put("hw/board.kicad_pcb", OUTLINE)                                   # no revision in the board
+        self.assertEqual(self.package()[0], 0)
+        self.assertEqual(sorted(os.listdir(".kicad-hub/package")), ["board-local", "board-local-fab.zip"])
+        self.assertTrue(os.path.isfile(".kicad-hub/package/board-local-fab.zip"))  # not a git repository here
+
+    def test_a_failing_export_stops_the_package(self):
+        os.environ["FAKE_FAIL_EXPORT"] = "drill"
+        code, _, err = self.package()
+        self.assertEqual(code, 1)
+        self.assertIn("kicad-cli pcb export drill failed", err)
+        self.assertEqual(glob.glob(".kicad-hub/package/*.zip"), [])
+
+    def test_board_without_outline_has_no_package(self):
+        self.put("hw/board.kicad_pcb", "(kicad_pcb)\n")
+        code, out, _ = self.package()
+        self.assertEqual(code, 0)
+        self.assertIn("no fab package", out)
+        self.assertFalse(os.path.exists(".kicad-hub/package"))
+
+    def test_needs_the_bom_and_a_known_profile(self):
+        code, _, err = self.package("--fab-profile", "acme")
+        self.assertEqual(code, 1)
+        self.assertIn("Unknown fab-profile 'acme'", err)
+        os.remove(".kicad-hub/reports/bom-parts.csv")
+        code, _, err = self.package()
+        self.assertEqual(code, 1)
+        self.assertIn("run `bom` first", err)
+
+
+class FindPythonTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def touch(self, *parts):
+        path = os.path.join(self.tmp.name, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "w").close()
+        return path
+
+    def test_the_running_python_when_it_has_pcbnew(self):
+        self.assertEqual(kicad.find_python("/x/kicad-cli", python="/kicad/python", has_pcbnew=True), "/kicad/python")
+
+    def test_the_python_beside_kicad_cli(self):
+        cli = self.touch("Kicad10", "bin", "kicad-cli.exe")
+        python = self.touch("Kicad10", "bin", "python.exe")
+        self.assertEqual(kicad.find_python(cli, python="/usr/bin/python3", has_pcbnew=False), python)
+
+    def test_the_system_python_last(self):
+        cli = self.touch("usr", "bin", "kicad-cli")
+        found = kicad.find_python(cli, python="/venv/python", which=lambda n: "/usr/bin/" + n, has_pcbnew=False)
+        self.assertEqual(found, "/usr/bin/python3")
+        self.assertIsNone(kicad.find_python(cli, python="/venv/python", which=lambda n: None, has_pcbnew=False))
+
+    def test_commands(self):
+        k = kicad.KiCad(cli="/opt/kicad-cli", python="/opt/python")
+        self.assertEqual(k.python_command(["notes.py", "b.kicad_pcb"]), ["/opt/python", "notes.py", "b.kicad_pcb"])
+        d = kicad.KiCad(image="img:1").python_command(["out/.notes.py", "b.kicad_pcb"], workdir="/work")
+        self.assertEqual(d[-4:], ["img:1", "python3", "out/.notes.py", "b.kicad_pcb"])
 
 
 if __name__ == "__main__":
