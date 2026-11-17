@@ -5,6 +5,8 @@
     kicad_hub.py bom    [--project-dir DIR] [--out DIR] [--required-fields LIST]
                         [--variants auto|none|LIST] [--base REF [--fetch]]
   both: [--kicad-cli PATH | --image IMAGE [--kicad-home DIR]]
+    kicad_hub.py package [--project-dir DIR] [--out DIR] [--fab-profile NAME] [--extra-formats LIST]
+                         [--rev REV]   (same KiCad options)
     kicad_hub.py datasheets [--project-dir DIR] [--out DIR] [--dirs LIST] [--check-links true|false]
     kicad_hub.py sourcing   [--project-dir DIR] [--out DIR] [--boards 1,5,10,100] [--currency USD]
                             [--choices kicad-hub-sourcing.csv]
@@ -15,6 +17,10 @@
 `bom`: one row per part in <out>/reports/bom-parts.csv, the same for every design variant
 (listed in variants.json) and, with --base, for that commit or branch too, so the report
 can say what changed.
+
+`package`: the fab package, <out>/package/<board>-<rev>-fab.zip: Gerbers, drill files, the
+IPC-D-356 netlist, BOM and pick & place of the default build and of each variant, fab notes
+read from the board and checksums. It reads the BOMs that `bom` wrote.
 
 Without --image they use the KiCad installed on this computer.
 
@@ -28,6 +34,7 @@ Run it from the repository's folder: paths are relative to it.
 """
 import argparse
 import glob
+import hashlib
 import json
 import os
 import re
@@ -35,6 +42,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 import bom_virtual
 import detect
@@ -42,6 +50,7 @@ import kicad
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAB_PROFILES = os.path.join(HERE, "..", "fab-profiles")
+FABNOTES = os.path.join(HERE, "fabnotes.py")
 
 
 class StepError(Exception):
@@ -264,6 +273,173 @@ def base_boms(k, project_dir, name, reports, labels, listed, ref, fetch=False, g
         git("worktree", "remove", "--force", BASE_DIR)
 
 
+# --- fab package ----------------------------------------------------------------------------
+
+ASSEMBLY_BOM = ["--fields", "Reference,${QUANTITY},Value,Footprint,MPN,Manufacturer,LCSC",
+                "--labels", "References,Qty,Value,Footprint,MPN,Manufacturer,LCSC",
+                "--group-by", "Value,Footprint,MPN,Manufacturer,LCSC"]
+EXTRA_FORMATS = {"odb": "-odb.zip", "ipc2581": "-ipc2581.xml"}
+
+
+def safe_name(text):
+    return re.sub(r"[^A-Za-z0-9._-]", "_", text)
+
+
+def board_revision(pcb):
+    """The revision in the board's title block, or "" when it has none."""
+    try:
+        with open(pcb, encoding="utf-8", errors="replace") as f:
+            m = re.search(r'\(rev "([^"]+)', f.read())
+    except OSError:
+        return ""
+    return m.group(1) if m else ""
+
+
+def commit_id():
+    """The short id of the commit being built; "local" outside a git repository."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True)
+    except OSError:
+        return "local"
+    return r.stdout.strip() if r.returncode == 0 and r.stdout.strip() else "local"
+
+
+def must(k, *args):
+    """Run kicad-cli; a failure stops the package (half a fab package is worse than none)."""
+    if k.run(*args) != 0:
+        raise StepError(f"kicad-cli {' '.join(args[:3])} failed ({k.where}): see its messages above")
+
+
+def need_script(name, *args):
+    if run_script(name, *args) != 0:
+        raise StepError(f"{name} failed: see its messages above")
+
+
+def package(k, project_dir, name, out, profile="generic", extra="", rev="", fabnotes=None):
+    """Build <out>/package/<name>-<rev>/ and its zip. Returns what later steps need:
+    {"rev", "board_rev", "zip", "name", "warnings"}.
+
+    Revision: `rev` when given (the tag, on a release), else the board's title block, else
+    the commit. Gerbers use the plot settings saved in the board.
+    """
+    reports = f"{out}/reports"
+    pcb, sch = f"{project_dir}/{name}.kicad_pcb", f"{project_dir}/{name}.kicad_sch"
+    need_bom(out)
+    board_rev = rev or board_revision(pcb)
+    rev = safe_name(board_rev or commit_id())
+    base = f"{name}-{rev}"
+    shutil.rmtree(f"{out}/package", ignore_errors=True)  # no files of another revision in the zip
+    pkg = f"{out}/package/{base}"
+    for sub in ("gerber", "drill", "assembly"):
+        os.makedirs(f"{pkg}/{sub}")
+
+    # Standard formats any fab accepts
+    must(k, "pcb", "export", "gerbers", "--board-plot-params", "-o", f"{pkg}/gerber/", pcb)
+    must(k, "pcb", "export", "drill", "--excellon-separate-th", "--generate-map", "--map-format", "pdf",
+         "--excellon-units", "mm", "-o", f"{pkg}/drill/", pcb)
+    must(k, "pcb", "export", "ipcd356", "-o", f"{pkg}/{base}.d356", pcb)
+    # Assembly files for the default build and each variant. DNP comes from the schematic
+    # (per-variant BOM), so the pick & place is right even if the PCB wasn't updated.
+    cpl_all = f"{reports}/cpl-all.csv"
+    must(k, "pcb", "export", "pos", "--format", "csv", "--units", "mm", "--side", "both", "-o", cpl_all, pcb)
+
+    def assembly(folder, prefix, per_part_bom, variant=None):
+        os.makedirs(folder, exist_ok=True)
+        bom, cpl = f"{folder}/{prefix}-bom.csv", f"{folder}/{prefix}-cpl.csv"
+        must(k, "sch", "export", "bom", "--exclude-dnp", *(["--variant", variant] if variant else []),
+             *ASSEMBLY_BOM, "-o", bom, sch)
+        bom_virtual.drop_virtual(bom)
+        need_script("variant_cpl.py", per_part_bom, cpl_all, cpl)
+        if profile != "generic":  # the fab's own column layout, next to the generic files
+            need_script("fab_assembly.py", os.path.join(FAB_PROFILES, profile, "profile.json"),
+                        bom, cpl, f"{folder}/{profile}", prefix)
+
+    assembly(f"{pkg}/assembly", base, f"{reports}/bom-parts.csv")
+    variant_lines = []
+    try:
+        with open(f"{reports}/variants.json", encoding="utf-8") as f:
+            variants = json.load(f)
+    except (OSError, ValueError):
+        variants = []
+    for v in variants:
+        assembly(f"{pkg}/assembly/{v['dir']}", f"{base}-{v['dir']}", v["bom"], v["name"])
+        variant_lines.append(f"  {v['name']}: assembly/{v['dir']}/  {v.get('description') or ''}\n")
+    for fmt in (f.strip() for f in extra.split(",")):
+        if fmt in EXTRA_FORMATS:
+            must(k, "pcb", "export", fmt, "-o", f"{pkg}/{base}{EXTRA_FORMATS[fmt]}", pcb)
+        elif fmt:
+            print(f"::warning::Unknown extra format '{fmt}' (use {', '.join(EXTRA_FORMATS)})", file=sys.stderr)
+
+    # Fab notes from the board, with KiCad's Python (pcbnew). It runs from a copy in the
+    # output folder, which the Docker image can see.
+    readme, notes, warnings_txt = f"{pkg}/README.txt", f"{out}/.fabnotes.py", f"{reports}/fab-warnings.txt"
+    shutil.copy(fabnotes or FABNOTES, notes)
+    try:
+        with open(warnings_txt, "w", encoding="utf-8") as f:
+            code = k.python(notes, pcb, rev, readme, f"{reports}/board.json", profile, stdout=f)
+    finally:
+        _remove(notes)
+    if code != 0 or not os.path.isfile(readme):
+        raise StepError(f"The fab notes could not be read from the board ({k.where}): see the messages above")
+    with open(readme, "a", encoding="utf-8") as f:
+        if variant_lines:
+            f.write("\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n" + "".join(variant_lines))
+        # Schematic vs PCB (DNP, attributes, values): the pick & place above follows the schematic
+        sync_json, sync_txt = f"{reports}/variant-sync.json", f"{reports}/variant-sync.txt"
+        _remove(sync_txt)
+        if run_script("variant_sync.py", pcb, reports, sync_json, sync_txt) != 0:
+            _remove(sync_json)
+        if os.path.isfile(sync_txt) and os.path.getsize(sync_txt):
+            with open(sync_txt, encoding="utf-8") as t:
+                f.write("\nSCHEMATIC vs PCB MISMATCH\n" + "".join("  " + line for line in t))
+    with open(warnings_txt, encoding="utf-8", errors="replace") as f:
+        warnings = [line.rstrip("\r\n") for line in f if line.strip()]
+    for w in warnings:
+        print(f"::warning::{w}", file=sys.stderr)
+
+    checksums(pkg)
+    zip_path = f"{out}/package/{base}-fab.zip"
+    zip_folder(pkg, zip_path, base)
+    return {"rev": rev, "board_rev": board_rev, "zip": zip_path, "name": f"{base}-fab.zip", "warnings": warnings}
+
+
+def package_files(pkg):
+    """Files of the package as ./relative/paths, in the order `sort` gives in the C locale."""
+    found = []
+    for folder, _, files in os.walk(pkg):
+        rel = os.path.relpath(folder, pkg).replace(os.sep, "/")
+        found += ["./" + (f if rel == "." else f"{rel}/{f}") for f in files]
+    return sorted(found, key=lambda p: p.encode("utf-8"))
+
+
+def checksums(pkg):
+    """SHA256SUMS.txt, in the format `sha256sum` writes and `sha256sum -c` checks."""
+    lines = []
+    for rel in package_files(pkg):
+        if rel == "./SHA256SUMS.txt":
+            continue
+        with open(os.path.join(pkg, rel[2:]), "rb") as f:
+            lines.append(f"{hashlib.sha256(f.read()).hexdigest()}  {rel}\n")
+    with open(os.path.join(pkg, "SHA256SUMS.txt"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("".join(lines))
+
+
+def zip_folder(pkg, zip_path, top):
+    """The package as a zip with everything under one folder (`top`)."""
+    _remove(zip_path)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel in package_files(pkg):
+            z.write(os.path.join(pkg, rel[2:]), f"{top}/{rel[2:]}")
+
+
+def github_output(values):
+    """Step outputs for the action; nothing to do outside GitHub Actions."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("".join(f"{key}={value}\n" for key, value in values.items()))
+
+
 # --- datasheets, cost and stock (no KiCad needed) -------------------------------------------
 
 SUPPLIER_KEYS = ("MOUSER_API_KEY", "FARNELL_API_KEY", "FARNELL_STORE", "DIGIKEY_CLIENT_ID", "DIGIKEY_CLIENT_SECRET")
@@ -358,7 +534,7 @@ def _remove(path):
 def make_kicad(args):
     if args.image:
         return kicad.KiCad(image=args.image, home=args.kicad_home)
-    return kicad.KiCad(cli=kicad.find_cli(args.kicad_cli))
+    return kicad.KiCad(cli=kicad.find_cli(args.kicad_cli), python=args.kicad_python)
 
 
 def cmd_checks(args):
@@ -406,6 +582,26 @@ def cmd_bom(args):
     return 0
 
 
+def cmd_package(args):
+    folder, name, has_pcb, note = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if note:
+        print(note, flush=True)
+    if not has_pcb:
+        print(f"{name} has no board outline yet: no fab package")
+        return 0
+    if args.fab_profile != "generic":
+        fab_rules(args.fab_profile)
+    k = make_kicad(args)
+    made = package(k, folder, name, args.out, args.fab_profile, args.extra_formats, args.rev.strip())
+    github_output({key: made[key] for key in ("rev", "board_rev", "zip", "name")})
+    sys.stdout.flush()
+    print(f"\n{name} ({k.where})")
+    print(f"  Fab package: {made['zip']}")
+    for w in made["warnings"]:
+        print(f"  Check before ordering: {w}")
+    return 0
+
+
 def cmd_datasheets(args):
     folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
     found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
@@ -430,6 +626,7 @@ def add_project(c):
 def add_common(c):
     add_project(c)
     c.add_argument("--kicad-cli", default="", help="path of the local kicad-cli (default: found automatically)")
+    c.add_argument("--kicad-python", default="", help="a Python that has KiCad's pcbnew (default: found automatically)")
     c.add_argument("--image", default="", help="run kicad-cli in this Docker image instead of the local KiCad")
     c.add_argument("--kicad-home", default="", help="with --image: folder mounted as KiCad's HOME (library tables)")
 
@@ -450,6 +647,12 @@ def main(argv=None):
     b.add_argument("--base", default="", help="commit or branch to compare with (e.g. main)")
     b.add_argument("--fetch", action="store_true", help="with --base: fetch it from origin first (CI)")
     b.set_defaults(func=cmd_bom)
+    f = sub.add_parser("package", help="fab package: Gerbers, drill, netlist, BOM and pick & place, fab notes")
+    add_common(f)
+    f.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
+    f.add_argument("--extra-formats", default="", help="odb, ipc2581 (comma-separated)")
+    f.add_argument("--rev", default="", help="revision (the tag, on a release); default: the board's, else the commit")
+    f.set_defaults(func=cmd_package)
     d = sub.add_parser("datasheets", help="datasheet of every part: links checked, local files bundled")
     add_project(d)
     d.add_argument("--dirs", default="", help="extra folders with datasheet files, comma-separated")

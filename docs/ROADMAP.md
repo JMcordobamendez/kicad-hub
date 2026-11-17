@@ -87,8 +87,8 @@ the UTF-8 locale fix and the fixes from the first real use (one of the owner's b
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
 from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-the per-part BOMs, datasheets and prices run from `scripts/kicad_hub.py`; the first piece
-was tried with the real KiCad there);
+the per-part BOMs, datasheets, prices and the fab package run from
+`scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
 then the KiCad plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -405,6 +405,15 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       Windows, `~/.config/kicad-hub/keys.env` elsewhere; lines `NAME=value`, only the
       supplier key names are read, the environment wins). A supplier that fails is still
       a warning, and now leaves no old `sourcing.json` behind
+- [x] **Fourth piece: `kicad_hub.py package`** (2026-11-17): the fab package. Gerbers,
+      drill, IPC-D-356, BOM and pick & place of the default build and of each variant
+      (and the fab's own layout with a profile), fab notes, the schematic vs PCB check,
+      checksums and the zip, which no longer need `sha256sum`, `zip` or `jq` (Windows has
+      none). The action's longest step, 80 lines of bash, is one call; the engine sets
+      its outputs. `fabnotes.py` runs with a Python that has `pcbnew`: the image's in CI,
+      on a PC the one beside `kicad-cli` (found by itself, or `--kicad-python`).
+      **Not tried on a PC yet**: the README warned that `fabnotes.py` may open a "font
+      not found" dialog on Windows that blocks until closed; to check on the owner's PC
 - [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
       system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
       English. The report groups the fab DRC violations by reading English text
@@ -412,7 +421,7 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       made to answer in English, before the report runs locally
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Left: fab package, requirements, report, portal; then one
+      the action's order. Left: requirements, report, portal; then one
       `run` command that does them all and compares against `main` by default.
       `requirements.py` needs PyYAML, which KiCad's Python does not have (in CI it runs
       inside the image): it needs its own small reader for the requirements file

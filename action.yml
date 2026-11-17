@@ -348,7 +348,6 @@ runs:
       shell: bash
       env:
         PROJECT_DIR: ${{ steps.detect.outputs.dir }}
-        NAME: ${{ steps.detect.outputs.name }}
         OUT: ${{ inputs.output-dir }}
         IMAGE: ${{ inputs.image }}
         EXTRA: ${{ inputs.extra-formats }}
@@ -357,77 +356,15 @@ runs:
         PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
-        run() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" "$@"; }
-        pcb="$PROJECT_DIR/$NAME.kicad_pcb"
-        sch="$PROJECT_DIR/$NAME.kicad_sch"
-
-        # Revision: the tag on releases, else the board's title block, else the commit
-        rev=$(grep -oP '\(rev "\K[^"]+' "$pcb" | head -n 1 || true)
-        [ "$REF_TYPE" != tag ] || rev="$REF_NAME"
-        board_rev="$rev"
-        rev=${rev:-$(git rev-parse --short HEAD)}
-        rev=$(printf '%s' "$rev" | tr -c 'A-Za-z0-9._-' '_')
-        base="$NAME-$rev"
-        pkg="$OUT/package/$base"
-        mkdir -p "$pkg/gerber" "$pkg/drill" "$pkg/assembly"
-
-        # Standard formats any fab accepts. Gerbers use the plot settings saved in the board.
-        run kicad-cli pcb export gerbers --board-plot-params -o "$pkg/gerber/" "$pcb"
-        run kicad-cli pcb export drill --excellon-separate-th --generate-map --map-format pdf \
-            --excellon-units mm -o "$pkg/drill/" "$pcb"
-        run kicad-cli pcb export ipcd356 -o "$pkg/$base.d356" "$pcb"
-        # Assembly files for the default build and each variant. DNP comes from the
-        # schematic (per-variant BOM), so the CPL is right even if the PCB wasn't updated.
-        run kicad-cli pcb export pos --format csv --units mm --side both -o "$OUT/reports/cpl-all.csv" "$pcb"
-        assembly() {  # $1 dir, $2 file prefix, $3 per-part BOM, $4 variant name (empty = default)
-          mkdir -p "$1"
-          run kicad-cli sch export bom --exclude-dnp ${4:+--variant "$4"} \
-              --fields 'Reference,${QUANTITY},Value,Footprint,MPN,Manufacturer,LCSC' \
-              --labels 'References,Qty,Value,Footprint,MPN,Manufacturer,LCSC' \
-              --group-by 'Value,Footprint,MPN,Manufacturer,LCSC' \
-              -o "$1/$2-bom.csv" "$sch"
-          python3 "$GITHUB_ACTION_PATH/scripts/bom_virtual.py" "$1/$2-bom.csv"
-          python3 "$GITHUB_ACTION_PATH/scripts/variant_cpl.py" "$3" "$OUT/reports/cpl-all.csv" "$1/$2-cpl.csv"
-          if [ "$PROFILE" != generic ]; then  # the fab's own column layout, next to the generic files
-            python3 "$GITHUB_ACTION_PATH/scripts/fab_assembly.py" "$GITHUB_ACTION_PATH/fab-profiles/$PROFILE/profile.json" \
-                "$1/$2-bom.csv" "$1/$2-cpl.csv" "$1/$PROFILE" "$2"
-          fi
-        }
-        assembly "$pkg/assembly" "$base" "$OUT/reports/bom-parts.csv" ""
-        variant_lines=""
-        while IFS=$'\t' read -r vname vdir vbom vdesc; do
-          [ -n "$vname" ] || continue
-          assembly "$pkg/assembly/$vdir" "$base-$vdir" "$vbom" "$vname"
-          variant_lines="$variant_lines  $vname: assembly/$vdir/  ${vdesc}"$'\n'
-        done < <(jq -r '.[] | [.name, .dir, .bom, .description] | @tsv' "$OUT/reports/variants.json")
-        for fmt in $(printf '%s' "$EXTRA" | tr ',' ' '); do
-          case "$fmt" in
-            odb) run kicad-cli pcb export odb -o "$pkg/$base-odb.zip" "$pcb" ;;
-            ipc2581) run kicad-cli pcb export ipc2581 -o "$pkg/$base-ipc2581.xml" "$pcb" ;;
-            *) echo "::warning::Unknown extra format '$fmt' (use odb, ipc2581)" ;;
-          esac
-        done
-
-        # Fab notes from the board (KiCad's Python, inside the image)
-        cp "$GITHUB_ACTION_PATH/scripts/fabnotes.py" "$OUT/.fabnotes.py"
-        run python3 "$OUT/.fabnotes.py" "$pcb" "$rev" "$pkg/README.txt" "$OUT/reports/board.json" "$PROFILE" > "$OUT/reports/fab-warnings.txt"
-        rm "$OUT/.fabnotes.py"
-        if [ -n "$variant_lines" ]; then
-          printf '\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n%s' "$variant_lines" >> "$pkg/README.txt"
-        fi
-        # Schematic vs PCB (DNP, attributes, values): the pick & place above follows the schematic
-        python3 "$GITHUB_ACTION_PATH/scripts/variant_sync.py" "$pcb" "$OUT/reports" "$OUT/reports/variant-sync.json" "$OUT/reports/variant-sync.txt" || rm -f "$OUT/reports/variant-sync.json"
-        if [ -s "$OUT/reports/variant-sync.txt" ]; then
-          { printf '\nSCHEMATIC vs PCB MISMATCH\n'; sed 's/^/  /' "$OUT/reports/variant-sync.txt"; } >> "$pkg/README.txt"
-        fi
-        while IFS= read -r w; do echo "::warning::$w"; done < "$OUT/reports/fab-warnings.txt"
-
-        (cd "$pkg" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
-        (cd "$OUT/package" && zip -qr "$base-fab.zip" "$base")
-        echo "rev=$rev" >> "$GITHUB_OUTPUT"
-        echo "board_rev=$board_rev" >> "$GITHUB_OUTPUT"
-        echo "zip=$OUT/package/$base-fab.zip" >> "$GITHUB_OUTPUT"
-        echo "name=$base-fab.zip" >> "$GITHUB_OUTPUT"
+        # Standard formats any fab accepts (Gerber X2, Excellon, IPC-D-356), BOM and pick &
+        # place of the default build and of each variant, fab notes read from the board,
+        # checksums and the zip. Revision: the tag on releases, else the board's title
+        # block, else the commit. The engine sets the outputs rev, board_rev, zip and name.
+        rev=()
+        [ "$REF_TYPE" != tag ] || rev=(--rev "$REF_NAME")
+        python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" package --project-dir "$PROJECT_DIR" --out "$OUT" \
+          --fab-profile "$PROFILE" --extra-formats "$EXTRA" ${rev[@]+"${rev[@]}"} \
+          --image "$IMAGE" --kicad-home "$RUNNER_TEMP/kicad-home"
 
     - name: Requirements
       id: requirements
