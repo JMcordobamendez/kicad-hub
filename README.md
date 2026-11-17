@@ -609,7 +609,8 @@ examples/                   boards used to test the action (see examples/README.
 tests/                      unit tests of the scripts (python3 -m unittest discover -s tests)
 .github/workflows/test.yml  runs the unit tests and the action on the example board on every push/PR/tag
 .github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
-docs/                       roadmap and screenshots
+.github/workflows/release.yml  publishes a version: tag, moving major tag, GitHub Release (run by hand)
+docs/                       manual, roadmap, screenshots and release notes (docs/releases/)
 ```
 
 New board repositories start from [`template/`](template/): folder layout,
@@ -629,6 +630,11 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   `examples/royalblue54l-feather` (`.github/workflows/test.yml`). A PR shows the
   report comment. Version tags (`v*`) run the tests only; an `example-*` tag also
   publishes the example's fab package as a release, to test that step.
+- **Releasing a version:** write its notes in `docs/releases/vX.Y.Z.md` (first line
+  `# title`), merge, then *Actions → Release → Run workflow* with the version
+  (`.github/workflows/release.yml`). It tags the head of `main`, moves `v1` to it and
+  creates the GitHub Release. A tag pushed by a workflow does not start other workflows,
+  so the tests that count are those of that commit on `main`.
 - `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have
   them (no KiCad needed); CI runs them in the `unit` job.
 - The Python scripts can be run locally against files exported with a local
