@@ -4,8 +4,11 @@ author: JMcordobamendez
 
 inputs:
   project-dir:
-    description: Directory that contains the .kicad_pro file, relative to the repository root.
-    required: true
+    description: >-
+      Directory that contains the .kicad_pro file, relative to the repository root. Empty
+      (the default) = the only .kicad_pro in the repository; set it when there are several.
+    required: false
+    default: ""
   strict:
     description: >-
       Fail the job when ERC or DRC report errors, or a requirement fails. Keep false while
@@ -153,24 +156,12 @@ runs:
       shell: bash
       env:
         PROJECT_DIR: ${{ inputs.project-dir }}
+        OUT: ${{ inputs.output-dir }}
       run: |
         set -euo pipefail
-        pro=$(find "$PROJECT_DIR" -maxdepth 1 -name '*.kicad_pro' | head -n 1)
-        if [ -z "$pro" ]; then
-          echo "::error::No .kicad_pro found in $PROJECT_DIR"
-          exit 1
-        fi
-        name=$(basename "$pro" .kicad_pro)
-        pcb="$PROJECT_DIR/$name.kicad_pcb"
-        # A board without anything on Edge.Cuts is still being drawn: skip PCB checks and outputs
-        if [ -f "$pcb" ] && grep -q '(layer "Edge.Cuts")' "$pcb"; then
-          has_pcb=true
-        else
-          has_pcb=false
-          echo "::warning::$name has no board outline yet: skipping DRC and PCB outputs"
-        fi
-        echo "name=$name" >> "$GITHUB_OUTPUT"
-        echo "has_pcb=$has_pcb" >> "$GITHUB_OUTPUT"
+        # project-dir, or the only .kicad_pro in the repository; a board with nothing on
+        # Edge.Cuts is still being drawn (has_pcb=false: no PCB checks or outputs)
+        python3 "$GITHUB_ACTION_PATH/scripts/detect.py" --project-dir "$PROJECT_DIR" --exclude "$OUT" >> "$GITHUB_OUTPUT"
 
     - name: Pull KiBot image
       shell: bash
@@ -201,7 +192,7 @@ runs:
     - name: ERC / DRC
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
         OUT: ${{ inputs.output-dir }}
@@ -223,7 +214,7 @@ runs:
       if: inputs.fab-profile != 'generic' && steps.detect.outputs.has_pcb == 'true'
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         OUT: ${{ inputs.output-dir }}
         IMAGE: ${{ inputs.image }}
@@ -253,7 +244,7 @@ runs:
       id: bom
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         OUT: ${{ inputs.output-dir }}
         IMAGE: ${{ inputs.image }}
@@ -330,7 +321,7 @@ runs:
       if: github.event_name == 'pull_request' && inputs.visual-diff == 'true'
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
         OUT: ${{ inputs.output-dir }}
@@ -415,7 +406,7 @@ runs:
     - name: Datasheets
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         OUT: ${{ inputs.output-dir }}
         DIRS: ${{ inputs.datasheet-dirs }}
         CHECK: ${{ inputs.check-datasheet-links }}
@@ -429,7 +420,7 @@ runs:
       if: inputs.sourcing == 'true'
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         OUT: ${{ inputs.output-dir }}
         BOARDS: ${{ inputs.boards }}
         CURRENCY: ${{ inputs.currency }}
@@ -451,7 +442,7 @@ runs:
       if: steps.detect.outputs.has_pcb == 'true'
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         OUT: ${{ inputs.output-dir }}
         IMAGE: ${{ inputs.image }}
@@ -537,7 +528,7 @@ runs:
       id: requirements
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         OUT: ${{ inputs.output-dir }}
         REQ: ${{ inputs.requirements }}
         IMAGE: ${{ inputs.image }}
@@ -609,7 +600,7 @@ runs:
       if: steps.portal.outputs.dest != ''
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
         IMAGE: ${{ inputs.image }}
@@ -650,6 +641,7 @@ runs:
         BASE_REF: ${{ github.event.pull_request.base.ref }}
         PORTAL_URL: ${{ steps.portal.outputs.url }}
         PORTAL_STATE: ${{ steps.pages_state.outputs.state }}
+        PAGES_BRANCH: ${{ inputs.pages-branch }}
         ACTION_REF: ${{ github.action_ref }}
         FAB_PROFILE: ${{ inputs.fab-profile }}
       run: |
@@ -662,7 +654,8 @@ runs:
           --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
           --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
           --variants "$r/variants.json" --variant-sync "$r/variant-sync.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
-          --portal-url "$PORTAL_URL" --portal-state "${PORTAL_STATE:-unknown}" --action-ref "$ACTION_REF" \
+          --portal-url "$PORTAL_URL" --portal-state "${PORTAL_STATE:-unknown}" \
+          --pages-branch "$PAGES_BRANCH" --pages-settings-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/settings/pages" --action-ref "$ACTION_REF" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
           --out "$r/report.md" --out-json "$r/counts.json"
         cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
@@ -693,7 +686,7 @@ runs:
     - name: Outputs (KiBot)
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         HAS_PCB: ${{ steps.detect.outputs.has_pcb }}
         OUT: ${{ inputs.output-dir }}
@@ -725,7 +718,7 @@ runs:
       if: steps.portal.outputs.dest != ''
       shell: bash
       env:
-        PROJECT_DIR: ${{ inputs.project-dir }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         NAME: ${{ steps.detect.outputs.name }}
         OUT: ${{ inputs.output-dir }}
         BRANCH: ${{ inputs.pages-branch }}

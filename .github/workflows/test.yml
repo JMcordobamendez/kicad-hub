@@ -14,6 +14,13 @@ permissions:
   issues: read           # the activity page reads the issues commits and PRs mention
 
 jobs:
+  # Fast tests of the scripts that have them (no KiCad needed)
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests -v
+
   royalblue54l-feather:
     runs-on: ubuntu-latest
     steps:
@@ -22,7 +29,8 @@ jobs:
           lfs: true
       - uses: ./
         with:
-          project-dir: examples/royalblue54l-feather
+          # No project-dir: the example is the only KiCad project in this repository, so
+          # this run also tests that the action finds it by itself
           # Only example-* tags attach the example's fab package to a release
           release: ${{ startsWith(github.ref_name, 'example-') }}
           currency: EUR
