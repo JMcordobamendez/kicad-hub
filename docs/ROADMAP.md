@@ -87,8 +87,8 @@ the UTF-8 locale fix and the fixes from the first real use (one of the owner's b
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
 from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-the per-part BOMs, datasheets, prices, the fab package, the requirements and the report
-run from `scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
+the per-part BOMs, datasheets, prices, the fab package, the requirements, the report and
+the portal page run from `scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
 then the KiCad plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -429,6 +429,18 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       reports"), adds the report to the job summary and sets the step outputs the strict
       mode reads, without `jq`. The action's "Report" step is one call. On a PC:
       `report --base-ref main` after `bom --base main`; `run` will pass it by itself
+- [x] **Seventh piece: `kicad_hub.py portal`** (2026-11-17): the design portal page. On a
+      PC it builds the working tree's page in `<out>/portal/<branch>/` (label, commit, board
+      revision and the GitHub repository from git and the board; "+ local changes" when the
+      project has uncommitted edits) and the site around it (front page, builds list, viewer
+      scripts), so it opens with `python -m http.server --directory .kicad-hub/portal`;
+      pages of other branches built earlier stay listed. In CI the action's three page
+      builds (the build, the history snapshot, the PR commit snapshot) call it with `--site`
+      and everything they passed before; nothing is guessed from git there. Publishing to
+      the site branch stays in the action (GitHub only). Checked in Chromium on the example
+      board: viewer (schematic and PCB) and front page work from the local server. Limits:
+      without a GitHub `origin` the "on GitHub" and commit links point to `local/<board>`;
+      the page has no KiBot outputs (schematic PDF, BOM HTML, iBOM) until KiBot is optional
 - [x] **Language of local reports** (2026-11-17): on a PC `kicad-cli` writes its messages
       in the system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI
       in English. The report grouped the fab DRC violations by reading English text
@@ -443,15 +455,18 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       script reads `kicad-cli`'s text: the rest uses the JSON's `severity` and counts
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Left: the portal; then one `run` command that does them all
-      and compares against `main` by default
+      the action's order. Done up to the portal page (2026-11-17); left: one `run`
+      command that does them all and compares against `main` by default. The visual
+      diff, the page renders and the KiBot outputs stay bash in the action until the
+      two items below (no PIL or `rsvg-convert` locally; KiBot optional)
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders
 - [ ] KiBot optional (see decisions): schematic PDF from `kicad-cli sch export pdf`, BOM
       HTML from our own script, iBOM only where its generator is available
 - [ ] `kicad-hub serve`: a small local server for the portal (it can't load its JSON and
-      KiCad files from `file://`); `--quick` for ERC/DRC and BOM only
+      KiCad files from `file://`; until then `python -m http.server`, see the seventh
+      piece); `--quick` for ERC/DRC and BOM only
 - Not in local mode (GitHub only): the PR comment, pinned comments, the activity page's
   PRs and reviews, publishing the portal, releases
 

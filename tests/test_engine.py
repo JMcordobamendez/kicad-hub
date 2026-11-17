@@ -851,5 +851,98 @@ class ReportTest(EngineCase):
         self.assertIn("report.py failed", err)
         self.assertFalse(os.path.exists(".kicad-hub/reports/report.md"))
 
+
+class PortalTest(EngineCase):
+    """The real portal.py: the local site on a PC, one page in CI."""
+
+    def setUp(self):
+        super().setUp()
+        self.put("hw/board.kicad_sch", "(kicad_sch)\n")
+        self.put("hw/board.kicad_pcb", OUTLINE.replace("(kicad_pcb", '(kicad_pcb\n  (title_block (rev "B"))'))
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV)
+        self.put(".kicad-hub/reports/report.md", "<!-- kicad-hub:board -->\n## KiCad checks: board\n")
+        self.put(".kicad-hub/reports/counts.json", json.dumps({"erc_errors": 0, "drc_errors": 1}))
+
+    git = BomTest.git
+
+    def commit(self, message="first"):
+        self.git("init", "-q")
+        self.put(".gitignore", ".kicad-hub/\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def test_repo_and_folder_names(self):
+        for url in ("https://github.com/Owner/Board.git", "git@github.com:Owner/Board.git",
+                    "ssh://git@github.com/Owner/Board", "https://user@github.com/Owner/Board/"):
+            self.assertEqual(kicad_hub.github_repo(url), ("https://github.com", "Owner/Board"), url)
+        self.assertEqual(kicad_hub.github_repo(""), ("", ""))
+        self.assertEqual(kicad_hub.site_folder("feat/new board"), "feat_new_board")
+        self.assertEqual(kicad_hub.site_folder("pr-3"), "branch-pr-3")
+        self.assertEqual(kicad_hub.site_folder("releases"), "branch-releases")
+
+    def test_local_site_of_the_working_tree(self):
+        self.commit("-first line")
+        self.git("remote", "add", "origin", "git@github.com:Owner/Board.git")
+        code, out, err = self.engine_plain("portal")
+        self.assertEqual(code, 0, err)
+        page = ".kicad-hub/portal/main"
+        build = self.load(f"{page}/build.json")
+        self.assertEqual((build["label"], build["kind"], build["branch"], build["rev"], build["name"]),
+                         ("main", "branch", "main", "B", "board"))
+        self.assertEqual(build["commit"]["message"], "-first line")
+        self.assertEqual(build["counts"], {"erc_errors": 0, "drc_errors": 1})
+        self.assertTrue(os.path.isfile(f"{page}/design/board.kicad_sch"))
+        self.assertTrue(os.path.isfile(f"{page}/bom-parts.csv"))
+        html = self.read(f"{page}/index.html")
+        self.assertIn('"repo":"Owner/Board"', html)
+        self.assertIn("## KiCad checks: board", html)                    # the report, without its marker
+        self.assertNotIn("kicad-hub:board", html)
+        self.assertTrue(os.path.isfile(".kicad-hub/portal/index.html"))  # the site around it
+        self.assertTrue(os.path.isfile(".kicad-hub/portal/assets/kicanvas.js"))
+        self.assertEqual([b["path"] for b in self.load(".kicad-hub/portal/builds.json")], ["main/"])
+        self.assertIn(f"Portal page: {page}/index.html", out)
+        self.assertIn("python -m http.server --directory .kicad-hub/portal 8000", out)
+        self.assertIn("http://localhost:8000/main/", out)
+
+    def test_local_changes_other_branch_and_no_git(self):
+        code, _, err = self.engine_plain("portal")                       # not a repository
+        self.assertEqual(code, 0, err)
+        build = self.load(".kicad-hub/portal/local/build.json")
+        self.assertEqual((build["label"], build["sha"]), ("local", "0" * 40))
+        self.assertIn('"repo":"local/board"', self.read(".kicad-hub/portal/local/index.html"))
+        self.commit()
+        self.git("checkout", "-q", "-b", "feat/rev-c")
+        self.put("hw/board.kicad_sch", "(kicad_sch changed)\n")
+        self.assertEqual(self.engine_plain("portal")[0], 0)
+        self.assertEqual(self.load(".kicad-hub/portal/feat_rev-c/build.json")["label"], "feat/rev-c + local changes")
+        self.assertEqual(sorted(b["path"] for b in self.load(".kicad-hub/portal/builds.json")),
+                         ["feat_rev-c/", "local/"])                      # earlier local builds stay listed
+
+    def test_ci_page_only_with_what_the_action_passes(self):
+        self.commit()
+        code, _, err = self.engine_plain("portal", "--site", "site", "--label", "PR #7", "--kind", "pr", "--sha", "abc",
+                                         "--repo", "o/r", "--rev", "", "--title", "Fix", "--base-ref", "main",
+                                         "--light", "--commit-message=")
+        self.assertEqual(code, 0, err)
+        build = self.load("site/build.json")
+        self.assertEqual((build["label"], build["kind"], build["sha"], build["rev"], build["title"]),
+                         ("PR #7", "pr", "abc", "", "Fix"))
+        self.assertNotIn("commit", build)                                 # nothing taken from git in CI
+        self.assertTrue(build["light"])
+        self.assertFalse(os.path.exists(".kicad-hub/portal"))             # no local site
+
+    def test_build_options_only_with_site(self):
+        code, _, err = self.engine_plain("portal", "--label", "x")
+        self.assertEqual(code, 1)
+        self.assertIn("--label only with --site", err)
+
+    def test_a_failing_portal_is_an_error(self):
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda *a, **k: 1
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        code, _, err = self.engine_plain("portal")
+        self.assertEqual(code, 1)
+        self.assertIn("portal.py build failed", err)
+
 if __name__ == "__main__":
     unittest.main()

@@ -647,7 +647,10 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   the same from `main` to compare with), then `datasheets`, `sourcing`, `package` (the
   fab zip in `.kicad-hub/package/`) and `requirements` on those BOMs, and last
   `report --base-ref main` (`.kicad-hub/reports/report.md`, the same report as the PR
-  comment, from whatever of the above was run).
+  comment, from whatever of the above was run) and `portal` (the design portal of the
+  working tree in `.kicad-hub/portal/`, one page per branch built; open it with
+  `python -m http.server --directory .kicad-hub/portal 8000`, since a browser can't load
+  its files straight from disk).
   Supplier keys on a PC go in a personal file outside the repository
   (`%APPDATA%\kicad-hub\keys.env` on Windows, `~/.config/kicad-hub/keys.env` elsewhere),
   one `NAME=value` per line with the names of the [secrets](#supplier-api-keys). It finds `kicad-cli` by

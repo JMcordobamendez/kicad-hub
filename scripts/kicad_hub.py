@@ -14,6 +14,7 @@
                             [--choices kicad-hub-sourcing.csv]
     kicad_hub.py report     [--project-dir DIR] [--out DIR] [--fab-profile NAME] [--base-ref NAME]
                             [--package FILE] [--required-fields LIST] (+ CI links: --portal-url …)
+    kicad_hub.py portal     [--project-dir DIR] [--out DIR]   (CI: --site DIR and portal.py's build options)
 
 `checks`: ERC and DRC (with schematic parity) of the project, as JSON and text reports in
 <out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given.
@@ -38,6 +39,10 @@ repository (see keys_file).
 
 `report`: the markdown report (PR comment, job summary) in <out>/reports/report.md from
 whatever the other commands wrote there, plus counts.json; run it last.
+
+`portal`: the design portal page (viewer, report, BOM, suppliers, downloads). On a PC, of the
+working tree, in <out>/portal/<branch>/ with the site's front page around it; in CI only the
+page, in --site, with what the action passes (publishing it is GitHub-only, in the action).
 
 The action calls it step by step while the rest of its steps move here (roadmap, phase 7B).
 Run it from the repository's folder: paths are relative to it.
@@ -603,6 +608,85 @@ def report(out, name, profile="generic", package=None, options=()):
     return result
 
 
+# --- design portal ----------------------------------------------------------------------------
+
+PORTAL_DIR = "portal"  # <out>/portal/: the local site, one folder per branch built on this PC
+
+
+def _git_out(*args):
+    """Output of a git command, stripped; "" when git or the repository is not there."""
+    try:
+        r = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def github_repo(url):
+    """("https://github.com", "owner/name") from a remote URL (https or ssh), else ("", "")."""
+    m = re.match(r"(?:https?://(?:[^@/]+@)?|ssh://git@|git@)([^/:]+)[/:]([^/]+)/([^/]+?)(?:\.git)?/?$", url or "")
+    return (f"https://{m.group(1)}", f"{m.group(2)}/{m.group(3)}") if m else ("", "")
+
+
+def site_folder(label):
+    """A build's folder in the site, by the action's rules (`pr-*` and `releases` are taken)."""
+    dest = re.sub(r"[^A-Za-z0-9._-]", "_", label) or "local"
+    return f"branch-{dest}" if dest.startswith("pr-") or dest == "releases" else dest
+
+
+def working_tree_build(project_dir, name):
+    """What a build of the working tree on this PC is, from git and the board."""
+    head = _git_out("rev-parse", "HEAD")  # "" outside a repository or before its first commit
+    sha = head or "0" * 40
+    branch = _git_out("rev-parse", "--abbrev-ref", "HEAD") if head else ""
+    if branch == "HEAD":  # detached
+        branch = ""
+    label = branch or (head[:7] if head else "local")
+    if _git_out("status", "--porcelain", "--", project_dir):
+        label += " + local changes"
+    server, repo = github_repo(_git_out("remote", "get-url", "origin"))
+    info = {"sha": sha, "label": label, "kind": "branch", "branch": branch, "repo": repo or f"local/{name}",
+            "server": server or "https://github.com", "rev": board_revision(f"{project_dir}/{name}.kicad_pcb"),
+            "commit-date": _git_out("log", "-1", "--format=%cI") if head else "",
+            "commit-author": _git_out("log", "-1", "--format=%an") if head else "",
+            "commit-message": _git_out("log", "-1", "--format=%s") if head else "", "folder": site_folder(label.split(" ")[0])}
+    return info
+
+
+PORTAL_BUILD = ("rev", "label", "kind", "sha", "repo", "server", "run-url", "title", "base-ref", "branch",
+                "commit-date", "commit-author", "commit-message", "renders", "pr")
+
+
+def portal(project_dir, name, out, site=None, build=None, light=False, activity=False):
+    """The design portal page of this build.
+
+    With `site` (CI): only the page, in that folder; `build` holds every portal.py build
+    option, as the action knows them. Without it (a PC): the page of the working tree in
+    <out>/portal/<branch>/, and the site's front page, builds list and viewer scripts in
+    <out>/portal/, so it opens with any local web server. Returns the page's folder.
+    """
+    local = site is None
+    build = dict(working_tree_build(project_dir, name) if local else {}, **(build or {}))
+    if local:
+        root = f"{out}/{PORTAL_DIR}"
+        site = f"{root}/{build['folder']}"
+        shutil.rmtree(site, ignore_errors=True)  # no files of an earlier build of this branch
+    args = ["build", "--site", site, "--out", out, "--project-dir", project_dir, "--name", name]
+    for key in PORTAL_BUILD:
+        if build.get(key) not in (None, ""):
+            args.append(f"--{key}={build[key]}")  # =: a commit message starting with "-" is still a value
+    if light:
+        args.append("--light")
+    if activity:
+        args.append("--activity")
+    if run_script("portal.py", *args) != 0:
+        raise StepError("portal.py build failed: see its messages above")
+    if local and run_script("portal.py", "index", "--root", root, "--repo", build["repo"],
+                            "--server", build["server"]) != 0:
+        raise StepError("portal.py index failed: see its messages above")
+    return site
+
+
 def _git(*args):
     try:
         return subprocess.run(["git", *args]).returncode
@@ -732,6 +816,24 @@ def cmd_report(args):
     return 0
 
 
+def cmd_portal(args):
+    folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    build = {key: getattr(args, key.replace("-", "_")) for key in PORTAL_BUILD}
+    if not args.site:
+        given = [f"--{k}" for k, v in build.items() if v is not None]
+        if given:
+            raise StepError(f"{', '.join(given)} only with --site (CI); on a PC they come from git and the board")
+    site = portal(folder, name, args.out, args.site or None,
+                  {k: v for k, v in build.items() if v is not None}, args.light, args.activity)
+    if not args.site:
+        root = f"{args.out}/{PORTAL_DIR}"
+        print(f"\n{name}\n  Portal page: {site}/index.html")
+        print(f"Open it through a local web server (a browser can't load its files from disk):\n"
+              f"  python -m http.server --directory {root} 8000\n"
+              f"  then http://localhost:8000/{os.path.basename(site)}/")
+    return 0
+
+
 def add_project(c):
     c.add_argument("--project-dir", default="", help="folder with the .kicad_pro (default: the only one in the repository)")
     c.add_argument("--out", default=".kicad-hub", help="output folder (reports go to <out>/reports)")
@@ -802,6 +904,16 @@ def main(argv=None):
     r.add_argument("--action-ref", default="", help="ref the workflow uses for the action (CI)")
     r.add_argument("--run-url", default="", help="link to the CI run")
     r.set_defaults(func=cmd_report)
+    w = sub.add_parser("portal", help="the design portal page: viewer, report, BOM, suppliers, downloads")
+    add_project(w)
+    w.add_argument("--site", default="", help="CI: folder for this build's page only (default: the local "
+                                              "site in <out>/portal/, page and front page)")
+    for key in PORTAL_BUILD:
+        w.add_argument(f"--{key}", default=None, type=int if key == "pr" else str,
+                       help=argparse.SUPPRESS)  # CI only, with --site: as portal.py build takes them
+    w.add_argument("--light", action="store_true", help="CI: light snapshot for the timeline")
+    w.add_argument("--activity", action="store_true", help="CI: the site has an activity page")
+    w.set_defaults(func=cmd_portal)
     args = ap.parse_args(argv)
     try:
         return args.func(args)
