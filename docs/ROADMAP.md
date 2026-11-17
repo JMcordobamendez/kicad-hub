@@ -67,8 +67,8 @@ flowchart LR
 
   subgraph P7["7 · Plug and play"]
     direction TB
-    a1["A · Short GitHub setup<br/>no options, Quickstart, GitHub Desktop"]:::doing
-    a2["B · One engine<br/>(kicad-hub run, local mode)"]:::todo
+    a1["A · Short GitHub setup<br/>no options, Quickstart, GitHub Desktop"]:::done
+    a2["B · One engine<br/>(kicad-hub run, local mode)"]:::doing
     a3["C · KiCad plugin"]:::todo
     a4["D · Versions and review<br/>without the terminal"]:::todo
   end
@@ -86,7 +86,8 @@ settings, manual section for GitHub Desktop), comparing the commits of a pull re
 the UTF-8 locale fix and the fixes from the first real use (one of the owner's boards
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
-from phase A, then the engine (B), the KiCad plugin (C) and versions without the
+from phase A; the engine (B) has started (the spike on the owner's PC is done and ERC/DRC
+run from `scripts/kicad_hub.py`); then the KiCad plugin (C) and versions without the
 terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -365,15 +366,34 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       `template/` (needs a new repository: the owner creates it)
 
 ### B — One engine (large)
-- [ ] Spike first, on the owner's Windows PC (one day): does the Python that ships with
-      KiCad have PIL and numpy? `rsvg-convert` is not there for sure; if they are missing,
-      the before/after images and the page renders move to the browser
-- [ ] `kicad-hub run`: the sequence that today is about 900 lines of bash inside
-      `action.yml` becomes one Python program; the action calls it (`scripts/detect.py`
-      is the first piece). It also reads the working tree, so changes are checked before
-      committing, and compares against `main` or any commit (`git worktree`, as the
-      action does with a PR's base)
-- [ ] KiBot optional (see decisions): schematic PDF, BOM HTML and iBOM without it
+- [x] **Spike on the owner's Windows PC** (2026-11-17, read-only, run from a session on
+      that PC). KiCad 10.0.5 in `C:\APP\Kicad10` (not under Program Files; a 7.0 beside
+      it). Its own Python is 3.11.5 with `pcbnew`, `wx`, `requests` and a working
+      `python -m pip`, and it sits next to `kicad-cli.exe`. PIL, numpy and cairosvg are
+      there but were added with pip a month after KiCad was installed (their `INSTALLER`
+      says pip), so **a stock KiCad should be assumed not to have them**; `yaml` is not
+      there. No `rsvg-convert` and no Docker, on Windows or in WSL. `bin\` has
+      `cairo-2.dll`. Git 2.55 with LFS on Windows; git in WSL has no LFS.
+      `kicad-cli` 10.0.5 exports, among others: `sch` bom, netlist, pdf, svg; `pcb`
+      gerbers, drill, pos, ipcd356, ipc2581, odb, pdf, svg, stats
+- [x] **First piece of the engine: `kicad_hub.py checks`** (2026-11-17): ERC, DRC and
+      the DRC with a fab's rules, with the KiCad installed on the PC or with the Docker
+      image (`scripts/kicad.py` hides which one). The action's "ERC / DRC" and "DRC vs
+      fab rules" steps are now one call to it. `kicad-cli` is found by itself: a given
+      path, `KICAD_CLI`, the PATH, next to the running Python (KiCad's own), the usual
+      install folders. Tests with a fake `kicad-cli` in `tests/test_engine.py`. Awaiting
+      a run with the real KiCad on the owner's PC
+- [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
+      moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
+      the action's order: per-part BOM and variants, datasheets, cost and stock, fab
+      package, requirements, report, portal. It also reads the working tree, so changes
+      are checked before committing, and compares against `main` or any commit
+      (`git worktree`, as the action does with a PR's base)
+- [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
+      local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
+      exports. CI keeps its PNG renders
+- [ ] KiBot optional (see decisions): schematic PDF from `kicad-cli sch export pdf`, BOM
+      HTML from our own script, iBOM only where its generator is available
 - [ ] `kicad-hub serve`: a small local server for the portal (it can't load its JSON and
       KiCad files from `file://`); `--quick` for ERC/DRC and BOM only
 - [ ] Supplier keys from the environment or a personal file (`~/.config/kicad-hub/`),
@@ -591,6 +611,11 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       screenshot (2026-10-30)
 
 ## Decisions so far
+- **Local mode depends only on what a stock KiCad ships** (2026-11-17, from the spike):
+  `kicad-cli` and KiCad's own Python with `pcbnew` and the standard library. No PIL,
+  numpy, `rsvg-convert` or Docker (the owner's PC has no Docker at all), and nothing
+  installed with pip behind the user's back. Whatever needs more (pixel comparison of
+  renders) is done in the browser or stays a CI-only extra.
 - **Releases with a button** (2026-11-17): `.github/workflows/release.yml`, run by hand
   with the version, tags the head of `main`, moves the major tag and creates the GitHub
   Release from `docs/releases/vX.Y.Z.md`. No terminal needed (it came up when v1.4.0 had
