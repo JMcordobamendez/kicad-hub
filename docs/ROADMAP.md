@@ -358,8 +358,9 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       workflow declares the permissions it needs, so the setting only matters when an
       organisation forbids write tokens. To confirm on a new personal repository with
       the default (read-only) setting
-- [x] **Release v1.4.0 and move `v1`** (2026-11-17): the template and the Quickstart use
-      `@v1` with no `project-dir`, which v1.3.0 did not accept
+- [x] **Release v1.4.0 and move `v1`** (2026-11-17, with the new Release workflow): the
+      template and the Quickstart use `@v1` with no `project-dir`, which v1.3.0 did not
+      accept
 - [ ] **Template repository** with the "Use this template" button, kept in sync with
       `template/` (needs a new repository: the owner creates it)
 
@@ -590,6 +591,11 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       screenshot (2026-10-30)
 
 ## Decisions so far
+- **Releases with a button** (2026-11-17): `.github/workflows/release.yml`, run by hand
+  with the version, tags the head of `main`, moves the major tag and creates the GitHub
+  Release from `docs/releases/vX.Y.Z.md`. No terminal needed (it came up when v1.4.0 had
+  to be published from a session that could not push tags). The tests of a release are
+  those of its commit on `main`: a tag pushed by a workflow does not start `test.yml`.
 - **Plug and play: two doors, one engine** (2026-11-17): a KiCad plugin for working
   alone and GitHub for working with others, both on one Python engine (phase 7). **Not a
   desktop application**: it would need code signing on Windows and macOS, installers and

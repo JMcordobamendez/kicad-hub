@@ -1,0 +1,58 @@
+# Publishes a version of kicad-hub: creates the tag vX.Y.Z on the head of the default
+# branch, moves the major tag (v1) to it and creates the GitHub Release.
+# Run it by hand: Actions → Release → Run workflow, with the version.
+# Notes: docs/releases/vX.Y.Z.md (first line "# title", the rest is the text); without
+# that file GitHub writes the notes from the merged pull requests.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, as vX.Y.Z (e.g. v1.4.0)
+        required: true
+
+permissions:
+  contents: write        # tags and the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag, move the major tag, publish the release
+        env:
+          VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version must look like v1.4.0, not '$VERSION'"; exit 1
+          fi
+          major="v${BASH_REMATCH[1]}"
+          if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::Run this workflow on $DEFAULT_BRANCH, not on $GITHUB_REF_NAME"; exit 1
+          fi
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$VERSION")" ]; then
+            echo "::error::The tag $VERSION already exists"; exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "refs/tags/$VERSION"
+          # users pin the major tag: it follows the newest release
+          git tag -fa "$major" -m "$major -> $VERSION"
+          git push --force origin "refs/tags/$major"
+
+          notes="docs/releases/$VERSION.md"
+          if [ -f "$notes" ]; then
+            title=$(sed -n '1s/^# *//p' "$notes")
+            tail -n +2 "$notes" > "$RUNNER_TEMP/notes.md"
+            gh release create "$VERSION" --verify-tag --title "${title:-$VERSION}" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes
+          fi
+          echo "Published $VERSION ($major moved to it) at ${GITHUB_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY"
