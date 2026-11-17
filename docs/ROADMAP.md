@@ -87,7 +87,8 @@ the UTF-8 locale fix and the fixes from the first real use (one of the owner's b
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
 from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-and the per-part BOMs run from `scripts/kicad_hub.py`, tried with the real KiCad there);
+the per-part BOMs, datasheets and prices run from `scripts/kicad_hub.py`; the first piece
+was tried with the real KiCad there);
 then the KiCad plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -397,6 +398,13 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       PC, where the working tree is what gets compared, committed or not). The action's
       "Per-part BOM" step, 60 lines of bash and `jq`, is now one call. `bom_virtual.py`
       is a function too. Tests in `tests/test_engine.py` with real git repositories
+- [x] **Third piece: `kicad_hub.py datasheets` and `sourcing`** (2026-11-17): the engine
+      runs `datasheets.py` and `sourcing.py` on the BOMs it wrote (no KiCad needed), and
+      the action's two steps call it. **Supplier keys on a PC** come from the environment
+      or from a personal file outside the repository (`%APPDATA%\kicad-hub\keys.env` on
+      Windows, `~/.config/kicad-hub/keys.env` elsewhere; lines `NAME=value`, only the
+      supplier key names are read, the environment wins). A supplier that fails is still
+      a warning, and now leaves no old `sourcing.json` behind
 - [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
       system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
       English. The report groups the fab DRC violations by reading English text
@@ -404,9 +412,10 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       made to answer in English, before the report runs locally
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Left: datasheets, cost and stock, fab package, requirements,
-      report, portal; then one `run` command that does them all and compares against
-      `main` by default
+      the action's order. Left: fab package, requirements, report, portal; then one
+      `run` command that does them all and compares against `main` by default.
+      `requirements.py` needs PyYAML, which KiCad's Python does not have (in CI it runs
+      inside the image): it needs its own small reader for the requirements file
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders
@@ -414,8 +423,6 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       HTML from our own script, iBOM only where its generator is available
 - [ ] `kicad-hub serve`: a small local server for the portal (it can't load its JSON and
       KiCad files from `file://`); `--quick` for ERC/DRC and BOM only
-- [ ] Supplier keys from the environment or a personal file (`~/.config/kicad-hub/`),
-      never from the repository
 - Not in local mode (GitHub only): the PR comment, pinned comments, the activity page's
   PRs and reviews, publishing the portal, releases
 

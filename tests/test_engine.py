@@ -171,9 +171,12 @@ class EngineCase(unittest.TestCase):
         return json.loads(self.read(path))
 
     def engine(self, command, *extra):
+        return self.engine_plain(command, "--kicad-cli", self.cli, *extra)
+
+    def engine_plain(self, command, *extra):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = kicad_hub.main([command, "--kicad-cli", self.cli, *extra])
+            code = kicad_hub.main([command, *extra])
         return code, out.getvalue(), err.getvalue()
 
 
@@ -394,6 +397,114 @@ class BomTest(EngineCase):
         code, _, _ = self.bom("--base", "main", "--fetch")
         self.assertEqual(code, 0)
         self.assertEqual(self.refs(".kicad-hub/reports/bom-parts-base.csv"), ["R7"])
+
+
+
+BOM_CSV = ("Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage\n"
+           "R1,RC0603,R_0603,,,,,,\n"
+           "U1,CN3722,SOP,,,CN3722,,,\n"
+           "U2,LDO,SOT,docs/ldo.pdf,,,,,\n"
+           "C1,1uF,C_0603,https://example.invalid/c.pdf,,,,,\n"
+           "C2,1uF,C_0603,,DNP,,,,\n")
+
+
+class DatasheetsAndSourcingTest(EngineCase):
+    """The real datasheets.py and sourcing.py, on a BOM that needs no network."""
+
+    def setUp(self):
+        super().setUp()
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV)
+        self.put(".kicad-hub/reports/variants.json", "[]")
+        self.put("hw/datasheets/CN3722.pdf", "pdf")
+        self.put("hw/docs/ldo.pdf", "pdf")
+
+    def test_datasheets(self):
+        code, out, err = self.engine_plain("datasheets", "--check-links", "false")
+        self.assertEqual(code, 0, err)
+        found = self.load(".kicad-hub/reports/datasheets.json")
+        self.assertEqual({ref: e["status"] for ref, e in found.items()},
+                         {"R1": "missing", "U1": "ok", "U2": "ok", "C1": "unverified"})   # C2 is not fitted
+        self.assertTrue(os.path.isfile(".kicad-hub/datasheets/CN3722.pdf"))                # bundled
+        self.assertTrue(os.path.isfile(".kicad-hub/datasheets/index.html"))
+        self.assertIn("Datasheets: 2 found, 0 broken, 1 not checked, 1 missing", out)
+
+    def test_datasheets_extra_folder(self):
+        self.put("vendor/pdf/RC0603-series.pdf", "pdf")
+        self.assertEqual(self.engine_plain("datasheets", "--check-links", "false", "--dirs", "vendor/pdf")[0], 0)
+        self.assertEqual(self.load(".kicad-hub/reports/datasheets.json")["R1"]["status"], "ok")
+
+    def test_needs_the_bom_first(self):
+        os.remove(".kicad-hub/reports/bom-parts.csv")
+        for command in ("datasheets", "sourcing"):
+            code, _, err = self.engine_plain(command)
+            self.assertEqual(code, 1)
+            self.assertIn("bom-parts.csv is missing: run `bom` first", err)
+
+    def test_sourcing_writes_its_files(self):
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV.replace("U1,CN3722,SOP,,,CN3722", "U1,CN3722,SOP,,,"))
+        code, out, err = self.engine_plain("sourcing", "--boards", "1,10", "--currency", "EUR")
+        self.assertEqual(code, 0, err)
+        data = self.load(".kicad-hub/reports/sourcing.json")
+        self.assertEqual(data["builds"][0]["fitted"], 4)
+        self.assertEqual(data["builds"][0]["priced"], 0)           # no MPN or LCSC code: nothing to look up
+        self.assertTrue(os.path.isfile(".kicad-hub/reports/sourcing.csv"))
+        self.assertTrue(os.path.isfile(".kicad-hub/sourcing.html"))
+        self.assertIn("Suppliers: .kicad-hub/sourcing.html", out)
+
+    def test_sourcing_failure_is_a_warning_and_leaves_nothing_old(self):
+        self.put(".kicad-hub/reports/sourcing.json", "{}")
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda *a, **k: 1
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        code, out, err = self.engine_plain("sourcing")
+        self.assertEqual(code, 0)
+        self.assertIn("::warning::Cost and stock lookup failed: skipped", err)
+        self.assertNotIn("Suppliers:", out)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/sourcing.json"))
+
+    def test_choices_file_is_relative_to_the_project(self):
+        seen = {}
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda name, *a, **k: seen.update(args=a, env=k.get("env")) or 0
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        self.assertEqual(self.engine_plain("sourcing", "--choices", "picks.csv")[0], 0)
+        self.assertEqual(seen["args"][seen["args"].index("--choices") + 1], "hw/picks.csv")
+        self.assertEqual(seen["args"][seen["args"].index("--variants") + 1], ".kicad-hub/reports/variants.json")
+
+
+class SupplierKeysTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "keys.env")
+
+    def write(self, text):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_keys_from_the_personal_file(self):
+        self.write("# my keys\nMOUSER_API_KEY = abc\nFARNELL_STORE=\"es.farnell.com\"\nPATH=/evil\nnonsense\n")
+        env = kicad_hub.supplier_env({"PATH": "/bin"}, self.path)
+        self.assertEqual(env["MOUSER_API_KEY"], "abc")
+        self.assertEqual(env["FARNELL_STORE"], "es.farnell.com")
+        self.assertEqual(env["PATH"], "/bin")                       # only supplier keys are taken
+
+    def test_the_environment_wins(self):
+        self.write("MOUSER_API_KEY=from-file\nDIGIKEY_CLIENT_ID=id\n")
+        env = kicad_hub.supplier_env({"MOUSER_API_KEY": "from-env", "DIGIKEY_CLIENT_ID": " "}, self.path)
+        self.assertEqual(env["MOUSER_API_KEY"], "from-env")
+        self.assertEqual(env["DIGIKEY_CLIENT_ID"], "id")            # blank in the environment = not set
+
+    def test_no_file(self):
+        self.assertEqual(kicad_hub.supplier_env({"A": "1"}, os.path.join(self.tmp.name, "none")), {"A": "1"})
+
+    def test_where_the_file_lives(self):
+        if os.name == "nt":
+            self.assertEqual(kicad_hub.keys_file({"APPDATA": "C:\\Users\\x\\AppData\\Roaming"}),
+                             "C:\\Users\\x\\AppData\\Roaming\\kicad-hub\\keys.env")
+        else:
+            self.assertEqual(kicad_hub.keys_file({"XDG_CONFIG_HOME": "/cfg"}), "/cfg/kicad-hub/keys.env")
+            self.assertTrue(kicad_hub.keys_file({}).endswith("/.config/kicad-hub/keys.env"))
 
 
 if __name__ == "__main__":
