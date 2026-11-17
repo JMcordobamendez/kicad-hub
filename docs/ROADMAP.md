@@ -86,10 +86,11 @@ settings, manual section for GitHub Desktop), comparing the commits of a pull re
 the UTF-8 locale fix and the fixes from the first real use (one of the owner's boards
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
-from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-the per-part BOMs, datasheets, prices, the fab package, the requirements, the report and
-the portal page run from `scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
-then the KiCad plugin (C) and versions without the terminal (D).
+from phase A; the engine (B): every step from ERC/DRC to the report and the portal page
+runs from `scripts/kicad_hub.py`, and `kicad_hub.py run` does them all on a PC (only the
+first piece has been tried with the real KiCad there: `run` is next to try on the owner's
+PC); left in B: before/after images without PIL, KiBot optional and `serve`. Then the KiCad
+plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -453,12 +454,18 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       per type instead of one per measured value. Tests in `tests/test_drc_groups.py` use
       the strings of KiCad 10's Spanish translation (`translation/pofiles/es.po`). No other
       script reads `kicad-cli`'s text: the rest uses the JSON's `severity` and counts
-- [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
-      moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Done up to the portal page (2026-11-17); left: one `run`
-      command that does them all and compares against `main` by default. The visual
-      diff, the page renders and the KiBot outputs stay bash in the action until the
-      two items below (no PIL or `rsvg-convert` locally; KiBot optional)
+- [x] `kicad-hub run`: the rest of the sequence that was bash inside `action.yml`
+      moved to `scripts/kicad_hub.py`, one step per pull request so CI stayed green, in
+      the action's order (pieces above). **`kicad_hub.py run`** (2026-11-17) does them all
+      on a PC: ERC/DRC (+ fab DRC), BOMs compared with `main` (else `master`; `--base`
+      to choose, `none` for no comparison), datasheets, prices, fab package,
+      requirements, report and portal, each step titled in the terminal, then a summary
+      with where the report and the portal are. `--skip` leaves out datasheets, sourcing,
+      package, requirements or portal (e.g. no network). The action keeps calling the
+      steps one by one: it has GitHub-only steps between them. The visual diff, the page
+      renders and the KiBot outputs stay bash in the action until the two items below (no
+      PIL or `rsvg-convert` locally; KiBot optional). **Not run with the real KiCad yet**:
+      to try on the owner's PC (the fab notes dialog, see the fourth piece, and the time)
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders

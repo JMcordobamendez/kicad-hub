@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """kicad-hub's engine: the steps of the action as one program, for CI and for a PC.
 
+    kicad_hub.py run [--project-dir DIR] [--out DIR] [--base REF|none] [--fab-profile NAME]
+                     [--skip datasheets,sourcing,package,requirements,portal] (+ the options below)
+
+`run`: every step below in a row on a PC, comparing with main (else master), then where the
+report and the portal are. Or one at a time:
+
     kicad_hub.py checks [--project-dir DIR] [--out DIR] [--fab-profile NAME]
     kicad_hub.py bom    [--project-dir DIR] [--out DIR] [--required-fields LIST]
                         [--variants auto|none|LIST] [--base REF [--fetch]]
@@ -729,6 +735,105 @@ def cmd_checks(args):
     return 0
 
 
+def write_variants(reports, listed):
+    """variants.json: the variants and their BOMs (and base BOMs), for the report and the portal."""
+    with open(f"{reports}/variants.json", "w", encoding="utf-8") as f:
+        json.dump([{key: v[key] for key in ("name", "description", "bom", "dir", "base_bom") if key in v}
+                   for v in listed], f, indent=2)
+        f.write("\n")
+
+
+def default_base():
+    """The branch a PC run compares with: main, else master, else none ("")."""
+    for ref in ("main", "master"):
+        if _git_out("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"):
+            return ref
+    return ""
+
+
+RUN_STEPS = ("datasheets", "sourcing", "package", "requirements", "portal")  # the ones --skip can leave out
+
+
+def cmd_run(args):
+    """Every step, in the action's order, with this computer's KiCad: what a PC needs."""
+    skip = {x.strip() for x in args.skip.split(",") if x.strip()}
+    unknown = skip - set(RUN_STEPS)
+    if unknown:
+        raise StepError(f"--skip: unknown step {', '.join(sorted(unknown))} (use {', '.join(RUN_STEPS)})")
+    folder, name, has_pcb, note = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if note:
+        print(note, flush=True)
+    if args.fab_profile != "generic":
+        fab_rules(args.fab_profile)  # a wrong profile name stops here, not after the checks
+    base = default_base() if args.base is None else args.base.strip()
+    if base.lower() == "none":
+        base = ""
+    k = make_kicad(args)
+    reports = f"{args.out}/reports"
+    lines = []
+
+    def step(title):
+        sys.stdout.flush()
+        print(f"\n== {title}", flush=True)
+
+    step(f"ERC / DRC ({k.where})")
+    clean(reports)
+    erc_drc(k, folder, name, has_pcb, reports)
+    if args.fab_profile != "generic" and has_pcb:
+        fab_drc(k, folder, name, reports, args.fab_profile, args.out, tmp_root=args.tmp or None)
+    lines += summary(reports, args.fab_profile)
+
+    step("BOM" + (f" (and {base}, to compare with)" if base else ""))
+    labels = bom_labels(args.required_fields)
+    parts, listed = boms(k, folder, name, reports, labels, wanted_variants(args.variants, f"{folder}/{name}.kicad_pro"))
+    base_parts = base_boms(k, folder, name, reports, labels, listed, base) if base else None
+    write_variants(reports, listed)
+    lines.append(f"BOM: {parts} parts" + "".join(f", {v['name']} {v['parts']}" for v in listed)
+                 + (f"; {base}: {base_parts}" if base_parts is not None else ""))
+
+    if "datasheets" not in skip:
+        step("Datasheets")
+        try:
+            found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
+            lines.append(f"Datasheets: {found['ok']} found, {found['broken']} broken, "
+                         f"{found['unverified']} not checked, {found['missing']} missing")
+        except StepError as e:  # an extra: the rest still runs
+            print(f"::warning::{e}: skipped", file=sys.stderr)
+    if "sourcing" not in skip:
+        step("Cost and stock")
+        sourcing(folder, args.out, args.boards, args.currency, args.choices)
+    zip_name = ""
+    if "package" not in skip and has_pcb:
+        step("Fab package")
+        made = package(k, folder, name, args.out, args.fab_profile, args.extra_formats)
+        zip_name = made["name"]
+        lines.append(f"Fab package: {made['zip']}")
+    if "requirements" not in skip:
+        step("Requirements")
+        requirements(folder, args.out, args.requirements_file.strip(), k)
+
+    step("Report")
+    counts = report(args.out, name, args.fab_profile, zip_name,
+                    ["--base-ref", base or "base", "--required", args.required_fields])
+    shown = {key: "-" if counts.get(key) is None else counts[key] for key in REPORT_OUTPUTS}
+    lines.append(f"Parts missing fields: {shown['missing_fields']} · requirements failed: "
+                 f"{shown['requirements_failed']}")
+    site = None
+    if "portal" not in skip:
+        step("Portal")
+        site = portal(folder, name, args.out)
+
+    sys.stdout.flush()
+    print(f"\n{name} ({k.where})")
+    for line in lines:
+        print("  " + line)
+    print(f"Report: {reports}/report.md")
+    if site:
+        print(f"Portal: python -m http.server --directory {args.out}/{PORTAL_DIR} 8000, "
+              f"then http://localhost:8000/{os.path.basename(site)}/")
+    return 0
+
+
 def cmd_bom(args):
     folder, name, _, note = detect.detect(args.project_dir.strip(), ".", [args.out])
     if note:
@@ -738,10 +843,7 @@ def cmd_bom(args):
     labels = bom_labels(args.required_fields)
     parts, listed = boms(k, folder, name, reports, labels, wanted_variants(args.variants, f"{folder}/{name}.kicad_pro"))
     base_parts = base_boms(k, folder, name, reports, labels, listed, args.base, args.fetch) if args.base else None
-    with open(f"{reports}/variants.json", "w", encoding="utf-8") as f:
-        json.dump([{key: v[key] for key in ("name", "description", "bom", "dir", "base_bom") if key in v}
-                   for v in listed], f, indent=2)
-        f.write("\n")
+    write_variants(reports, listed)
     sys.stdout.flush()
     print(f"\n{name} ({k.where})")
     print(f"  BOM: {parts} parts")
@@ -914,6 +1016,25 @@ def main(argv=None):
     w.add_argument("--light", action="store_true", help="CI: light snapshot for the timeline")
     w.add_argument("--activity", action="store_true", help="CI: the site has an activity page")
     w.set_defaults(func=cmd_portal)
+    n = sub.add_parser("run", help="every step on this computer: checks, BOMs, datasheets, prices, fab "
+                                   "package, requirements, report and portal")
+    add_common(n)
+    n.add_argument("--base", default=None, help="branch or commit to compare with (default: main, else master; "
+                                                "none: no comparison)")
+    n.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
+    n.add_argument("--skip", default="", help="steps to leave out, comma-separated: " + ", ".join(RUN_STEPS))
+    n.add_argument("--required-fields", default="Footprint,Datasheet,MPN|LCSC", help="fields every part needs")
+    n.add_argument("--variants", default="auto", help="auto (all in the project) | none | a comma-separated list")
+    n.add_argument("--dirs", default="", help="extra folders with datasheet files, comma-separated")
+    n.add_argument("--check-links", default="true", help="true | false: check that the datasheet links answer")
+    n.add_argument("--boards", default="1,5,10,100", help="batch sizes to price")
+    n.add_argument("--currency", default="USD")
+    n.add_argument("--choices", default="kicad-hub-sourcing.csv", help="supplier picked per part (project folder)")
+    n.add_argument("--extra-formats", default="", help="odb, ipc2581 (comma-separated)")
+    n.add_argument("--requirements-file", default="kicad-hub-requirements.yaml",
+                   help="requirements file, relative to the project folder")
+    n.add_argument("--tmp", default="", help="folder for temporary copies (default: the system's)")
+    n.set_defaults(func=cmd_run)
     args = ap.parse_args(argv)
     try:
         return args.func(args)
