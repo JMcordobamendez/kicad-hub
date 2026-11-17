@@ -381,8 +381,21 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       image (`scripts/kicad.py` hides which one). The action's "ERC / DRC" and "DRC vs
       fab rules" steps are now one call to it. `kicad-cli` is found by itself: a given
       path, `KICAD_CLI`, the PATH, next to the running Python (KiCad's own), the usual
-      install folders. Tests with a fake `kicad-cli` in `tests/test_engine.py`. Awaiting
-      a run with the real KiCad on the owner's PC
+      install folders. Tests with a fake `kicad-cli` in `tests/test_engine.py`.
+      **Run with the real KiCad 10.0.5 on the owner's Windows PC** (2026-11-17, with
+      KiCad's own Python, from a clone on `C:`): it found `kicad-cli.exe` by itself and
+      gave the same numbers as CI on the example board (ERC 5 errors and 13 warnings, DRC
+      237 and 46, 408 violations with the jlcpcb rules), in 79 s with the fab DRC and
+      22 s without; no dialog, no path trouble. It found one bug, fixed: a run without
+      `--fab-profile` showed the fab DRC of the run before (old reports are now removed
+      first). Also fixed after it: a wrong profile name stops before any check, and the
+      tests no longer assume Linux (7 of 29 failed on Windows: `os.getuid`, and a fake
+      `kicad-cli` Windows could not start). Awaiting a second run of the tests on Windows
+- [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
+      system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
+      English. The report groups the fab DRC violations by reading English text
+      (`(rule '…'`), so it has to group by violation type instead, or `kicad-cli` be
+      made to answer in English, before the report runs locally
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
       the action's order: per-part BOM and variants, datasheets, cost and stock, fab

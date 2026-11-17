@@ -17,6 +17,7 @@ OUTLINE = '(kicad_pcb\n  (gr_line (start 0 0) (end 10 0) (layer "Edge.Cuts"))\n)
 
 # Stands in for kicad-cli: writes the file given with -o. For a DRC it puts the project's
 # .kicad_dru and the list of files beside the board in the JSON, so tests can look at them.
+# Windows can't start a script by its first line, so there it gets a .cmd in front.
 FAKE_CLI = r'''#!/usr/bin/env python3
 import json, os, sys
 a = sys.argv[1:]
@@ -96,9 +97,11 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(cmd[:2], ["docker", "run"])
         self.assertEqual(cmd[-5:], ["img:1", "kicad-cli", "pcb", "drc", "b.kicad_pcb"])
         joined = " ".join(cmd)
-        for part in ("-e LANG=C.UTF-8", "-e LC_ALL=C.UTF-8", "-e HOME=/kh", "-v /tmp/kh:/kh", "-v /work:/w", "-w /w",
-                     f"-u {os.getuid()}:{os.getgid()}"):
+        for part in ("-e LANG=C.UTF-8", "-e LC_ALL=C.UTF-8", "-e HOME=/kh", f"-v {os.path.abspath('/tmp/kh')}:/kh",
+                     f"-v {os.path.abspath('/work')}:/w", "-w /w"):
             self.assertIn(part, joined)
+        if hasattr(os, "getuid"):  # not on Windows
+            self.assertIn(f"-u {os.getuid()}:{os.getgid()}", joined)
 
     def test_one_of_cli_or_image(self):
         with self.assertRaises(ValueError):
@@ -123,6 +126,10 @@ class ChecksTest(unittest.TestCase):
         with open(self.cli, "w") as f:
             f.write(FAKE_CLI)
         os.chmod(self.cli, os.stat(self.cli).st_mode | stat.S_IEXEC)
+        if os.name == "nt":
+            script, self.cli = self.cli, self.cli + ".cmd"
+            with open(self.cli, "w") as f:
+                f.write(f'@echo off\r\n"{sys.executable}" "{script}" %*\r\nexit /b %errorlevel%\r\n')
         self.put("hw/board.kicad_pro")
         self.put("hw/board.kicad_sch")
         self.put("hw/board.kicad_pcb", OUTLINE)
@@ -188,16 +195,29 @@ class ChecksTest(unittest.TestCase):
         self.assertTrue(os.path.isfile("hw/fab/reports/drc-fab.rpt"))
         self.assertIn("DRC with jlcpcb rules: 1 errors", out)
 
+    def test_a_check_not_run_now_shows_no_old_numbers(self):
+        self.assertEqual(self.run_checks("--fab-profile", "jlcpcb")[0], 0)
+        code, out, _ = self.run_checks()                       # same folder, no fab profile this time
+        self.assertEqual(code, 0)
+        self.assertNotIn("rules:", out)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/drc-fab.json"))
+        self.assertFalse(os.path.exists(".kicad-hub/reports/drc-fab.rpt"))
+        self.put("hw/board.kicad_pcb", "(kicad_pcb)\n")        # and now the board loses its outline
+        code, out, _ = self.run_checks()
+        self.assertIn("DRC: skipped", out)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/drc.json"))
+
     def test_fab_drc_without_project_rules(self):
         code, _, _ = self.run_checks("--fab-profile", "pcbway")
         self.assertEqual(code, 0)
         self.assertTrue(self.load(".kicad-hub/reports/drc-fab.json")["dru"].startswith("(version 1)\n"))
 
-    def test_unknown_fab_profile(self):
+    def test_unknown_fab_profile_stops_before_any_check(self):
         code, _, err = self.run_checks("--fab-profile", "acme")
         self.assertEqual(code, 1)
         self.assertIn("::error::Unknown fab-profile 'acme'", err)
         self.assertIn("jlcpcb", err)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/erc.json"))
 
     def test_kicad_cli_that_fails_is_an_error(self):
         os.environ["FAKE_FAIL"] = "1"

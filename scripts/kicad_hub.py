@@ -29,6 +29,15 @@ class StepError(Exception):
     pass
 
 
+REPORTS = [f"{check}.{ext}" for check in ("erc", "drc", "drc-fab") for ext in ("json", "rpt")]
+
+
+def clean(reports):
+    """Remove the reports of an earlier run, so a check not run now can't show old numbers."""
+    for name in REPORTS:
+        _remove(os.path.join(reports, name))
+
+
 def erc_drc(k, project_dir, name, has_pcb, reports):
     """ERC, and DRC when the board has an outline. Returns the report files written."""
     os.makedirs(reports, exist_ok=True)
@@ -52,12 +61,18 @@ def erc_drc(k, project_dir, name, has_pcb, reports):
     return wanted
 
 
-def fab_drc(k, project_dir, name, reports, profile, out_dir, profiles_dir=FAB_PROFILES, tmp_root=None):
-    """DRC of a copy of the project with the fab's rules appended to its own .kicad_dru."""
+def fab_rules(profile, profiles_dir=FAB_PROFILES):
+    """The rules file of a fab profile; StepError for a profile that does not exist."""
     rules = os.path.join(profiles_dir, profile, "rules.kicad_dru")
     if not os.path.isfile(rules):
         known = sorted(d for d in os.listdir(profiles_dir) if os.path.isdir(os.path.join(profiles_dir, d)))
         raise StepError(f"Unknown fab-profile '{profile}' (use generic, {', '.join(known)})")
+    return rules
+
+
+def fab_drc(k, project_dir, name, reports, profile, out_dir, profiles_dir=FAB_PROFILES, tmp_root=None):
+    """DRC of a copy of the project with the fab's rules appended to its own .kicad_dru."""
+    rules = fab_rules(profile, profiles_dir)
     os.makedirs(reports, exist_ok=True)
     tmp = tempfile.mkdtemp(prefix="fab-drc-", dir=tmp_root)
     try:
@@ -114,7 +129,7 @@ def summary(reports, profile="generic"):
         lines.append(f"DRC: {count(drc.get('violations', []))}, {len(drc.get('unconnected_items', []))} unconnected")
     else:
         lines.append("DRC: skipped (no board outline yet)")
-    fab = load("drc-fab.json")
+    fab = load("drc-fab.json") if profile != "generic" else None
     if fab is not None:
         lines.append(f"DRC with {profile} rules: {count(fab.get('violations', []))}")
     return lines
@@ -136,12 +151,17 @@ def make_kicad(args):
 def cmd_checks(args):
     folder, name, has_pcb, note = detect.detect(args.project_dir.strip(), ".", [args.out])
     if note:
-        print(note)
+        print(note, flush=True)  # before kicad-cli's own output, which does not go through Python
+    fab = args.fab_profile != "generic" and has_pcb
+    if fab:
+        fab_rules(args.fab_profile)  # a wrong profile name stops here, not after a minute of checks
     k = make_kicad(args)
     reports = f"{args.out}/reports"
+    clean(reports)
     erc_drc(k, folder, name, has_pcb, reports)
-    if args.fab_profile != "generic" and has_pcb:
+    if fab:
         fab_drc(k, folder, name, reports, args.fab_profile, args.out, tmp_root=args.tmp or None)
+    sys.stdout.flush()
     print(f"\n{name} ({k.where})")
     for line in summary(reports, args.fab_profile):
         print("  " + line)
