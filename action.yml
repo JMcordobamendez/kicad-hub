@@ -208,7 +208,6 @@ runs:
       shell: bash
       env:
         PROJECT_DIR: ${{ steps.detect.outputs.dir }}
-        NAME: ${{ steps.detect.outputs.name }}
         OUT: ${{ inputs.output-dir }}
         IMAGE: ${{ inputs.image }}
         REQUIRED: ${{ inputs.required-fields }}
@@ -216,69 +215,14 @@ runs:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -euo pipefail
-        kicad() { docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -e HOME=/kh -v "$RUNNER_TEMP/kicad-home:/kh" -v "$PWD:/w" -w /w "$IMAGE" kicad-cli "$@"; }
-
-        # Fields to export: fixed ones + every alternative named in required-fields
-        labels="Reference,Value,Footprint,Datasheet,DNP,MPN,Manufacturer,LCSC,Voltage"
-        while IFS= read -r f; do
-          [ -n "$f" ] || continue
-          case ",$labels," in *",$f,"*) ;; *) labels="$labels,$f" ;; esac
-        done < <(echo "$REQUIRED" | tr ',|' '\n\n' | sed 's/^ *//;s/ *$//')
-        fields=$(echo "$labels" | sed 's/\bDNP\b/${DNP}/')
-        # PWR_FLAG and other virtual symbols are dropped from every per-part BOM
-        virtual() { python3 "$GITHUB_ACTION_PATH/scripts/bom_virtual.py" "$@"; }
-        bom() { kicad sch export bom --fields "$fields" --labels "$labels" --group-by "" --ref-range-delimiter "" -o "$2" "$1" && virtual "$2"; }
-
-        bom "$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts.csv"
-
-        # Design variants (KiCad 10): one per-part BOM each, listed in variants.json
-        pro="$PROJECT_DIR/$NAME.kicad_pro"
-        case "$VARIANTS" in
-          none) names="" ;;
-          auto) names=$(jq -r '.schematic.variants[]?.name' "$pro") ;;
-          *)    names=$(printf '%s' "$VARIANTS" | tr ',' '\n' | sed 's/^ *//;s/ *$//') ;;
-        esac
-        echo "[]" > "$OUT/reports/variants.json"
-        while IFS= read -r v; do
-          [ -n "$v" ] || continue
-          safe=$(printf '%s' "$v" | tr -c 'A-Za-z0-9._-' '_')
-          vbom="$OUT/reports/bom-parts-variant-$safe.csv"
-          kicad sch export bom --variant "$v" --fields "$fields" --labels "$labels" \
-            --group-by "" --ref-range-delimiter "" -o "$vbom" "$PROJECT_DIR/$NAME.kicad_sch"
-          virtual "$vbom"
-          desc=$(jq -r --arg v "$v" '.schematic.variants[]? | select(.name == $v) | .description // ""' "$pro")
-          jq --arg n "$v" --arg d "$desc" --arg b "$vbom" --arg s "$safe" \
-             '. + [{name: $n, description: $d, bom: $b, dir: $s}]' "$OUT/reports/variants.json" > "$OUT/reports/v.tmp"
-          mv "$OUT/reports/v.tmp" "$OUT/reports/variants.json"
-        done <<< "$names"
-
-        # On pull requests, the same BOM from the target branch, for the diff
-        if [ -n "$BASE_SHA" ]; then
-          base_dir=.kicad-hub-base
-          if git fetch --no-tags --depth=1 origin "$BASE_SHA" && git worktree add --detach "$base_dir" FETCH_HEAD; then
-            if [ -f "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" ]; then
-              bom "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" "$OUT/reports/bom-parts-base.csv"
-              # each variant as it is on the base too, when the base already has it
-              base_pro="$base_dir/$PROJECT_DIR/$NAME.kicad_pro"
-              while IFS=$'\t' read -r v safe; do
-                [ -n "$v" ] || continue
-                jq -e --arg v "$v" '.schematic.variants[]? | select(.name == $v)' "$base_pro" > /dev/null 2>&1 || continue
-                bbom="$OUT/reports/bom-parts-variant-$safe-base.csv"
-                kicad sch export bom --variant "$v" --fields "$fields" --labels "$labels" \
-                  --group-by "" --ref-range-delimiter "" -o "$bbom" "$base_dir/$PROJECT_DIR/$NAME.kicad_sch" || continue
-                virtual "$bbom"
-                jq --arg n "$v" --arg b "$bbom" 'map(if .name == $n then . + {base_bom: $b} else . end)' \
-                  "$OUT/reports/variants.json" > "$OUT/reports/v.tmp" && mv "$OUT/reports/v.tmp" "$OUT/reports/variants.json"
-              done < <(jq -r '.[] | [.name, .dir] | @tsv' "$OUT/reports/variants.json")
-            else
-              # board is new in this PR: every part counts as added
-              head -n 1 "$OUT/reports/bom-parts.csv" > "$OUT/reports/bom-parts-base.csv"
-            fi
-            git worktree remove --force "$base_dir"
-          else
-            echo "::warning::Could not check out the PR base: BOM diff skipped"
-          fi
-        fi
+        # One row per part (virtual symbols such as PWR_FLAG dropped), the same for every
+        # design variant (variants.json) and, on pull requests, for the target branch, for
+        # the diff. The engine: scripts/kicad_hub.py
+        base=()
+        [ -z "$BASE_SHA" ] || base=(--base "$BASE_SHA" --fetch)
+        python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" bom --project-dir "$PROJECT_DIR" --out "$OUT" \
+          --required-fields "$REQUIRED" --variants "$VARIANTS" ${base[@]+"${base[@]}"} \
+          --image "$IMAGE" --kicad-home "$RUNNER_TEMP/kicad-home"
 
     - name: Visual diff (pull requests)
       if: github.event_name == 'pull_request' && inputs.visual-diff == 'true'

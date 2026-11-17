@@ -86,9 +86,9 @@ settings, manual section for GitHub Desktop), comparing the commits of a pull re
 the UTF-8 locale fix and the fixes from the first real use (one of the owner's boards
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
-from phase A; the engine (B) has started (the spike on the owner's PC is done and ERC/DRC
-run from `scripts/kicad_hub.py`); then the KiCad plugin (C) and versions without the
-terminal (D).
+from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
+and the per-part BOMs run from `scripts/kicad_hub.py`, tried with the real KiCad there);
+then the KiCad plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -391,6 +391,12 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       first). Also fixed after it: a wrong profile name stops before any check, and the
       tests no longer assume Linux (7 of 29 failed on Windows: `os.getuid`, and a fake
       `kicad-cli` Windows could not start). Awaiting a second run of the tests on Windows
+- [x] **Second piece: `kicad_hub.py bom`** (2026-11-17): the per-part BOM, one per design
+      variant (`variants.json`) and, with `--base <commit or branch>`, the same from that
+      commit for the diff (a PR's target in CI with `--fetch`; `main` or any commit on a
+      PC, where the working tree is what gets compared, committed or not). The action's
+      "Per-part BOM" step, 60 lines of bash and `jq`, is now one call. `bom_virtual.py`
+      is a function too. Tests in `tests/test_engine.py` with real git repositories
 - [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
       system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
       English. The report groups the fab DRC violations by reading English text
@@ -398,10 +404,9 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       made to answer in English, before the report runs locally
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order: per-part BOM and variants, datasheets, cost and stock, fab
-      package, requirements, report, portal. It also reads the working tree, so changes
-      are checked before committing, and compares against `main` or any commit
-      (`git worktree`, as the action does with a PR's base)
+      the action's order. Left: datasheets, cost and stock, fab package, requirements,
+      report, portal; then one `run` command that does them all and compares against
+      `main` by default
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders

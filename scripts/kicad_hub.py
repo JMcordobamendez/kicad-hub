@@ -2,22 +2,33 @@
 """kicad-hub's engine: the steps of the action as one program, for CI and for a PC.
 
     kicad_hub.py checks [--project-dir DIR] [--out DIR] [--fab-profile NAME]
-                        [--kicad-cli PATH | --image IMAGE [--kicad-home DIR]]
+    kicad_hub.py bom    [--project-dir DIR] [--out DIR] [--required-fields LIST]
+                        [--variants auto|none|LIST] [--base REF [--fetch]]
+  both: [--kicad-cli PATH | --image IMAGE [--kicad-home DIR]]
 
 `checks`: ERC and DRC (with schematic parity) of the project, as JSON and text reports in
-<out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given. Without
---image it uses the KiCad installed on this computer.
+<out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given.
+
+`bom`: one row per part in <out>/reports/bom-parts.csv, the same for every design variant
+(listed in variants.json) and, with --base, for that commit or branch too, so the report
+can say what changed.
+
+Without --image they use the KiCad installed on this computer.
 
 The action calls it step by step while the rest of its steps move here (roadmap, phase 7B).
 Run it from the repository's folder: paths are relative to it.
 """
 import argparse
+import glob
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 
+import bom_virtual
 import detect
 import kicad
 
@@ -135,6 +146,124 @@ def summary(reports, profile="generic"):
     return lines
 
 
+# --- per-part BOM ---------------------------------------------------------------------
+
+BOM_LABELS = ["Reference", "Value", "Footprint", "Datasheet", "DNP", "MPN", "Manufacturer", "LCSC", "Voltage"]
+BASE_DIR = ".kicad-hub-base"  # worktree of the commit to compare with; hidden, so never taken for a project
+
+
+def bom_labels(required=""):
+    """Columns of the per-part BOM: the fixed ones plus every field named in required-fields
+    ("Footprint,Datasheet,MPN|LCSC": comma = all of them, | = either)."""
+    labels = list(BOM_LABELS)
+    for field in re.split(r"[,|]", required or ""):
+        field = field.strip()
+        if field and field not in labels:
+            labels.append(field)
+    return labels
+
+
+def export_bom(k, sch, out, labels, variant=None):
+    """`out`: one row per part of the schematic `sch`, without virtual symbols. Parts left."""
+    fields = ",".join("${DNP}" if label == "DNP" else label for label in labels)
+    _remove(out)
+    k.run("sch", "export", "bom", *(["--variant", variant] if variant else []),
+          "--fields", fields, "--labels", ",".join(labels), "--group-by", "", "--ref-range-delimiter", "",
+          "-o", out, sch)
+    if not os.path.isfile(out):
+        what = f"variant {variant} of {sch}" if variant else sch
+        raise StepError(f"kicad-cli ({k.where}) did not write the BOM of {what}: see its messages above")
+    return bom_virtual.drop_virtual(out)
+
+
+def project_variants(pro):
+    """[(name, description)] of the design variants stored in the project file (KiCad 10)."""
+    try:
+        with open(pro, encoding="utf-8") as f:
+            variants = (json.load(f).get("schematic") or {}).get("variants") or []
+    except (OSError, ValueError):
+        return []
+    return [(v["name"], v.get("description") or "") for v in variants if isinstance(v, dict) and v.get("name")]
+
+
+def wanted_variants(setting, pro):
+    """The variants to build: auto = all in the project, none, or a comma-separated list."""
+    known = dict(project_variants(pro))
+    setting = (setting or "auto").strip()
+    if setting == "none":
+        return []
+    if setting == "auto":
+        return list(known.items())
+    return [(n, known.get(n, "")) for n in (p.strip() for p in setting.split(",")) if n]
+
+
+def boms(k, project_dir, name, reports, labels, variants):
+    """bom-parts.csv, one bom-parts-variant-<name>.csv per variant, and variants.json."""
+    os.makedirs(reports, exist_ok=True)
+    for old in glob.glob(os.path.join(reports, "bom-parts*.csv")):
+        _remove(old)
+    sch = f"{project_dir}/{name}.kicad_sch"
+    parts = export_bom(k, sch, f"{reports}/bom-parts.csv", labels)
+    listed = []
+    for vname, description in variants:
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", vname)
+        vbom = f"{reports}/bom-parts-variant-{safe}.csv"
+        listed.append({"name": vname, "description": description, "bom": vbom, "dir": safe,
+                       "parts": export_bom(k, sch, vbom, labels, vname)})
+    return parts, listed
+
+
+def base_boms(k, project_dir, name, reports, labels, listed, ref, fetch=False, git=None):
+    """The same BOMs from another commit (a PR's target, or `main` on a PC), for the diff.
+
+    Adds "base_bom" to the variants that exist there. Returns None when that commit
+    could not be checked out (a warning, not an error), else its number of parts.
+    """
+    git = git or _git
+    if os.path.exists(BASE_DIR):
+        git("worktree", "remove", "--force", BASE_DIR)
+    if fetch:
+        ok = git("fetch", "--no-tags", "--depth=1", "origin", ref) == 0
+        ref = "FETCH_HEAD"
+    else:
+        ok = True
+    if not (ok and git("worktree", "add", "--detach", BASE_DIR, ref) == 0):
+        print("::warning::Could not check out the base to compare with: BOM diff skipped", file=sys.stderr)
+        return None
+    try:
+        sch = f"{BASE_DIR}/{project_dir}/{name}.kicad_sch"
+        base = f"{reports}/bom-parts-base.csv"
+        if not os.path.isfile(sch):
+            # the board is new since then: every part counts as added
+            with open(f"{reports}/bom-parts.csv", encoding="utf-8-sig") as f:
+                header = f.readline()
+            with open(base, "w", encoding="utf-8", newline="") as f:
+                f.write(header)
+            return 0
+        parts = export_bom(k, sch, base, labels)
+        there = dict(project_variants(f"{BASE_DIR}/{project_dir}/{name}.kicad_pro"))
+        for v in listed:  # each variant as it was there, when it already existed
+            if v["name"] not in there:
+                continue
+            vbase = f"{reports}/bom-parts-variant-{v['dir']}-base.csv"
+            try:
+                export_bom(k, sch, vbase, labels, v["name"])
+            except StepError:
+                continue
+            v["base_bom"] = vbase
+        return parts
+    finally:
+        git("worktree", "remove", "--force", BASE_DIR)
+
+
+def _git(*args):
+    try:
+        return subprocess.run(["git", *args]).returncode
+    except OSError as e:
+        print(f"::warning::Could not run git: {e}", file=sys.stderr)
+        return 127
+
+
 def _remove(path):
     try:
         os.remove(path)
@@ -169,18 +298,54 @@ def cmd_checks(args):
     return 0
 
 
+def cmd_bom(args):
+    folder, name, _, note = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if note:
+        print(note, flush=True)
+    k = make_kicad(args)
+    reports = f"{args.out}/reports"
+    labels = bom_labels(args.required_fields)
+    parts, listed = boms(k, folder, name, reports, labels, wanted_variants(args.variants, f"{folder}/{name}.kicad_pro"))
+    base_parts = base_boms(k, folder, name, reports, labels, listed, args.base, args.fetch) if args.base else None
+    with open(f"{reports}/variants.json", "w", encoding="utf-8") as f:
+        json.dump([{key: v[key] for key in ("name", "description", "bom", "dir", "base_bom") if key in v}
+                   for v in listed], f, indent=2)
+        f.write("\n")
+    sys.stdout.flush()
+    print(f"\n{name} ({k.where})")
+    print(f"  BOM: {parts} parts")
+    for v in listed:
+        print(f"  Variant {v['name']}: {v['parts']} parts")
+    if base_parts is not None:
+        print(f"  {args.base}: {base_parts} parts (to compare with)")
+    print(f"BOMs: {reports}/bom-parts*.csv")
+    return 0
+
+
+def add_common(c):
+    c.add_argument("--project-dir", default="", help="folder with the .kicad_pro (default: the only one in the repository)")
+    c.add_argument("--out", default=".kicad-hub", help="output folder (reports go to <out>/reports)")
+    c.add_argument("--kicad-cli", default="", help="path of the local kicad-cli (default: found automatically)")
+    c.add_argument("--image", default="", help="run kicad-cli in this Docker image instead of the local KiCad")
+    c.add_argument("--kicad-home", default="", help="with --image: folder mounted as KiCad's HOME (library tables)")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="kicad-hub engine")
     sub = ap.add_subparsers(dest="command", required=True)
     c = sub.add_parser("checks", help="ERC, DRC and the optional DRC with a fab's rules")
-    c.add_argument("--project-dir", default="", help="folder with the .kicad_pro (default: the only one in the repository)")
-    c.add_argument("--out", default=".kicad-hub", help="output folder (reports go to <out>/reports)")
+    add_common(c)
     c.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
-    c.add_argument("--kicad-cli", default="", help="path of the local kicad-cli (default: found automatically)")
-    c.add_argument("--image", default="", help="run kicad-cli in this Docker image instead of the local KiCad")
-    c.add_argument("--kicad-home", default="", help="with --image: folder mounted as KiCad's HOME (library tables)")
     c.add_argument("--tmp", default="", help="folder for temporary copies (default: the system's)")
     c.set_defaults(func=cmd_checks)
+    b = sub.add_parser("bom", help="per-part BOM of the project, of each variant and of a base commit")
+    add_common(b)
+    b.add_argument("--required-fields", default="Footprint,Datasheet,MPN|LCSC",
+                   help="fields every part needs; they become columns of the BOM")
+    b.add_argument("--variants", default="auto", help="auto (all in the project) | none | a comma-separated list")
+    b.add_argument("--base", default="", help="commit or branch to compare with (e.g. main)")
+    b.add_argument("--fetch", action="store_true", help="with --base: fetch it from origin first (CI)")
+    b.set_defaults(func=cmd_bom)
     args = ap.parse_args(argv)
     try:
         return args.func(args)
