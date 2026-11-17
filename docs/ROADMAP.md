@@ -421,11 +421,18 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       numbers, text, lists), and anything else YAML allows is refused with its line
       number, never guessed. Tested against PyYAML on the example's and the template's
       files, and with `import yaml` made to fail
-- [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
-      system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
-      English. The report groups the fab DRC violations by reading English text
-      (`(rule '…'`), so it has to group by violation type instead, or `kicad-cli` be
-      made to answer in English, before the report runs locally
+- [x] **Language of local reports** (2026-11-17): on a PC `kicad-cli` writes its messages
+      in the system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI
+      in English. The report grouped the fab DRC violations by reading English text
+      (`(rule '…'`), which a Spanish KiCad writes as `(regla '…'`. Now
+      `scripts/drc_groups.py` groups them by the violation's `type` (the same in every
+      language) and by the fab rule's name, found quoted in the text: the names come
+      from the profile's `.kicad_dru` and KiCad never translates them. The row shows the
+      title as `kicad-cli` wrote it, so a local report reads "Ancho de anular: JLC min
+      annular ring". Violations of no fab rule (e.g. a netclass clearance) are now one row
+      per type instead of one per measured value. Tests in `tests/test_drc_groups.py` use
+      the strings of KiCad 10's Spanish translation (`translation/pofiles/es.po`). No other
+      script reads `kicad-cli`'s text: the rest uses the JSON's `severity` and counts
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
       the action's order. Left: report and portal; then one `run` command that does
