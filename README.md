@@ -645,7 +645,9 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC) and
   `python scripts/kicad_hub.py bom --base main` (one row per part, per variant too, and
   the same from `main` to compare with), then `datasheets`, `sourcing`, `package` (the
-  fab zip in `.kicad-hub/package/`) and `requirements` on those BOMs.
+  fab zip in `.kicad-hub/package/`) and `requirements` on those BOMs, and last
+  `report --base-ref main` (`.kicad-hub/reports/report.md`, the same report as the PR
+  comment, from whatever of the above was run).
   Supplier keys on a PC go in a personal file outside the repository
   (`%APPDATA%\kicad-hub\keys.env` on Windows, `~/.config/kicad-hub/keys.env` elsewhere),
   one `NAME=value` per line with the names of the [secrets](#supplier-api-keys). It finds `kicad-cli` by
