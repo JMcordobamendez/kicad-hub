@@ -22,3 +22,6 @@ output/
 Thumbs.db
 desktop.ini
 .vscode/
+
+# Local kicad-hub outputs (python scripts/kicad_hub.py ...)
+.kicad-hub/

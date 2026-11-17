@@ -594,7 +594,9 @@ the commit hash.
 ```
 action.yml                  the action
 fab-profiles/               optional per-fab DRC rules and assembly column layouts
-scripts/                    detect.py (finds the KiCad project), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
+scripts/                    kicad_hub.py (the engine: steps shared by the action and local mode),
+                            kicad.py (runs kicad-cli, installed or in Docker),
+                            detect.py (finds the KiCad project), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
                             variant_cpl.py, variant_sync.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
@@ -635,6 +637,12 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   (`.github/workflows/release.yml`). It tags the head of `main`, moves `v1` to it and
   creates the GitHub Release. A tag pushed by a workflow does not start other workflows,
   so the tests that count are those of that commit on `main`.
+- **Local mode (in progress, roadmap phase 7B):** `scripts/kicad_hub.py` is the engine
+  the action is moving to. Today it runs the checks with the KiCad installed on a PC, from
+  the repository's folder: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
+  `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC). It finds `kicad-cli` by
+  itself when run with KiCad's own Python or when it is on the PATH; otherwise
+  `--kicad-cli <path>`.
 - `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have
   them (no KiCad needed); CI runs them in the `unit` job.
 - The Python scripts can be run locally against files exported with a local
