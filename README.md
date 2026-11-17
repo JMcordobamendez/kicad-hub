@@ -596,7 +596,8 @@ action.yml                  the action
 fab-profiles/               optional per-fab DRC rules and assembly column layouts
 scripts/                    kicad_hub.py (the engine: steps shared by the action and local mode),
                             kicad.py (runs kicad-cli, installed or in Docker),
-                            detect.py (finds the KiCad project), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
+                            detect.py (finds the KiCad project), yaml_subset.py (reads the
+                            requirements file where there is no PyYAML), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
                             variant_cpl.py, variant_sync.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
@@ -642,8 +643,8 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   the repository's folder: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
   `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC) and
   `python scripts/kicad_hub.py bom --base main` (one row per part, per variant too, and
-  the same from `main` to compare with), then `datasheets`, `sourcing` and `package` (the
-  fab zip in `.kicad-hub/package/`) on those BOMs.
+  the same from `main` to compare with), then `datasheets`, `sourcing`, `package` (the
+  fab zip in `.kicad-hub/package/`) and `requirements` on those BOMs.
   Supplier keys on a PC go in a personal file outside the repository
   (`%APPDATA%\kicad-hub\keys.env` on Windows, `~/.config/kicad-hub/keys.env` elsewhere),
   one `NAME=value` per line with the names of the [secrets](#supplier-api-keys). It finds `kicad-cli` by

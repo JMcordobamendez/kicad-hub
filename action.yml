@@ -375,16 +375,11 @@ runs:
         REQ: ${{ inputs.requirements }}
         IMAGE: ${{ inputs.image }}
       run: |
-        set -uo pipefail
-        file="$PROJECT_DIR/$REQ"
-        if [ -z "$REQ" ] || [ ! -f "$file" ]; then
-          echo "No requirements file ($file): skipped"
-          exit 0
-        fi
-        # In the KiBot image, which has PyYAML (the runner's Python may not)
-        cp "$GITHUB_ACTION_PATH/scripts/requirements.py" "$OUT/.requirements.py"
-        docker run --rm -u "$(id -u):$(id -g)" -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 -v "$PWD:/w" -w /w "$IMAGE"           python3 "$OUT/.requirements.py" "$file" "$OUT/reports" "$OUT/reports/requirements.json"           || echo "::warning::Requirements check failed to run: skipped"
-        rm -f "$OUT/.requirements.py"
+        set -euo pipefail
+        # The board against its requirements file; no file = nothing checked, and a check
+        # that can't run is a warning. It runs in the KiBot image, which has PyYAML.
+        python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" requirements --project-dir "$PROJECT_DIR" --out "$OUT" \
+          --file "$REQ" --image "$IMAGE" --kicad-home "$RUNNER_TEMP/kicad-home"
 
     - name: Portal address
       id: portal

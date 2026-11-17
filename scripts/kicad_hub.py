@@ -7,6 +7,8 @@
   both: [--kicad-cli PATH | --image IMAGE [--kicad-home DIR]]
     kicad_hub.py package [--project-dir DIR] [--out DIR] [--fab-profile NAME] [--extra-formats LIST]
                          [--rev REV]   (same KiCad options)
+    kicad_hub.py requirements [--project-dir DIR] [--out DIR] [--file kicad-hub-requirements.yaml]
+                              [--image IMAGE [--kicad-home DIR]]
     kicad_hub.py datasheets [--project-dir DIR] [--out DIR] [--dirs LIST] [--check-links true|false]
     kicad_hub.py sourcing   [--project-dir DIR] [--out DIR] [--boards 1,5,10,100] [--currency USD]
                             [--choices kicad-hub-sourcing.csv]
@@ -23,6 +25,9 @@ IPC-D-356 netlist, BOM and pick & place of the default build and of each variant
 read from the board and checksums. It reads the BOMs that `bom` wrote.
 
 Without --image they use the KiCad installed on this computer.
+
+`requirements`: checks the board against the project's requirements file, using only what
+the other commands wrote to <out>/reports/ (run it after them).
 
 `datasheets` and `sourcing` read the BOMs that `bom` wrote and need no KiCad: the datasheet of
 every part (links checked, local files bundled) and the price and stock at each supplier.
@@ -516,6 +521,36 @@ def sourcing(project_dir, out, boards="1,5,10,100", currency="USD", choices="kic
     return code == 0
 
 
+def requirements(project_dir, out, req_file="kicad-hub-requirements.yaml", k=None):
+    """Check the requirements file of the project: <out>/reports/requirements.json.
+
+    Returns its entries, or None when there is no file or the check could not run (a
+    warning: requirements never stop the other outputs). With a Docker image the check
+    runs inside it, as it always did; otherwise with this Python.
+    """
+    reports = f"{out}/reports"
+    result = f"{reports}/requirements.json"
+    _remove(result)
+    file = f"{project_dir}/{req_file}"
+    if not req_file or not os.path.isfile(file):
+        print(f"No requirements file ({file}): skipped")
+        return None
+    if k is not None and k.image:
+        copy = f"{out}/.requirements.py"  # where the image can see it
+        shutil.copy(os.path.join(HERE, "requirements.py"), copy)
+        try:
+            code = k.python(copy, file, reports, result)
+        finally:
+            _remove(copy)
+    else:
+        code = run_script("requirements.py", file, reports, result)
+    if code != 0 or not os.path.isfile(result):
+        print("::warning::Requirements check failed to run: skipped", file=sys.stderr)
+        return None
+    with open(result, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def _git(*args):
     try:
         return subprocess.run(["git", *args]).returncode
@@ -602,6 +637,13 @@ def cmd_package(args):
     return 0
 
 
+def cmd_requirements(args):
+    folder, _, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    k = kicad.KiCad(image=args.image, home=args.kicad_home) if args.image else None
+    requirements(folder, args.out, args.file.strip(), k)
+    return 0
+
+
 def cmd_datasheets(args):
     folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
     found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
@@ -653,6 +695,12 @@ def main(argv=None):
     f.add_argument("--extra-formats", default="", help="odb, ipc2581 (comma-separated)")
     f.add_argument("--rev", default="", help="revision (the tag, on a release); default: the board's, else the commit")
     f.set_defaults(func=cmd_package)
+    q = sub.add_parser("requirements", help="check the board against the project's requirements file")
+    add_project(q)
+    q.add_argument("--file", default="kicad-hub-requirements.yaml", help="requirements file, relative to the project folder")
+    q.add_argument("--image", default="", help="run the check in this Docker image (CI) instead of this Python")
+    q.add_argument("--kicad-home", default="", help="with --image: folder mounted as KiCad's HOME")
+    q.set_defaults(func=cmd_requirements)
     d = sub.add_parser("datasheets", help="datasheet of every part: links checked, local files bundled")
     add_project(d)
     d.add_argument("--dirs", default="", help="extra folders with datasheet files, comma-separated")

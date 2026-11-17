@@ -87,7 +87,7 @@ the UTF-8 locale fix and the fixes from the first real use (one of the owner's b
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
 from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-the per-part BOMs, datasheets, prices and the fab package run from
+the per-part BOMs, datasheets, prices, the fab package and the requirements run from
 `scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
 then the KiCad plugin (C) and versions without the terminal (D).
 
@@ -414,6 +414,13 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       on a PC the one beside `kicad-cli` (found by itself, or `--kicad-python`).
       **Not tried on a PC yet**: the README warned that `fabnotes.py` may open a "font
       not found" dialog on Windows that blocks until closed; to check on the owner's PC
+- [x] **Fifth piece: `kicad_hub.py requirements`** (2026-11-17): the requirements check
+      from the engine. In CI it still runs inside the image, with PyYAML. On a PC,
+      where KiCad's Python has no PyYAML, `requirements.py` reads the file with
+      `scripts/yaml_subset.py`: the plain entries the file is made of (`key: value`,
+      numbers, text, lists), and anything else YAML allows is refused with its line
+      number, never guessed. Tested against PyYAML on the example's and the template's
+      files, and with `import yaml` made to fail
 - [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
       system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
       English. The report groups the fab DRC violations by reading English text
@@ -421,10 +428,8 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       made to answer in English, before the report runs locally
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Left: requirements, report, portal; then one
-      `run` command that does them all and compares against `main` by default.
-      `requirements.py` needs PyYAML, which KiCad's Python does not have (in CI it runs
-      inside the image): it needs its own small reader for the requirements file
+      the action's order. Left: report and portal; then one `run` command that does
+      them all and compares against `main` by default
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders
