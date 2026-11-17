@@ -19,7 +19,6 @@ Revision: **A** · KiCad 9/10
 │   └── 3d/                3D models (stored with Git LFS)
 ├── docs/                  datasheets notes, calculations, images
 │   └── approvals.md       branch rules, issue forms, CODEOWNERS, release approval
-├── x      branch rules, issue forms, CODEOWNERS, release approval
 └── .github/               PR template, issue forms, CODEOWNERS.example, CI workflow
 ```
 
@@ -52,7 +51,8 @@ on every push and pull request: ERC/DRC, BOM checks and diff, prices and stock,
 before/after images in the PR comment and the fab package (artifact
 `<board>-fab`). Tag `vX.Y` to publish the fab package as a release.
 
-- Set `project-dir` in the workflow if the `.kicad_pro` isn't at the repo root.
+- The workflow finds the `.kicad_pro` by itself, at the root or in a subfolder. Set
+  `project-dir` only if the repository has more than one KiCad project.
 - Prices come from LCSC and JLCPCB out of the box. For Mouser, Farnell and DigiKey,
   add your own API keys as repository secrets (`MOUSER_API_KEY`,
   `FARNELL_API_KEY`, `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`):

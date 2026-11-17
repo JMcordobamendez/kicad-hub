@@ -35,6 +35,8 @@ ap.add_argument("--variant-sync", help="JSON from variant_sync.py (schematic vs 
 ap.add_argument("--portal-url", default="", help="this build's page in the design portal")
 ap.add_argument("--portal-state", default="serving", choices=["serving", "disabled", "unknown"],
                 help="is GitHub Pages serving the portal? (pages_status.py); 'disabled' replaces the link by an explanation")
+ap.add_argument("--pages-branch", default="kicad-hub-site", help="branch the portal is published to")
+ap.add_argument("--pages-settings-url", default="", help="the repository's Settings → Pages page, linked when the portal is disabled")
 ap.add_argument("--action-ref", default="", help="ref the workflow uses for this action (github.action_ref)")
 ap.add_argument("--requirements", help="JSON from requirements.py")
 ap.add_argument("--sourcing", help="JSON from sourcing.py (cost and stock)")
@@ -77,9 +79,10 @@ def table(header, rows):
 
 md = [f"<!-- kicad-hub:{args.name} -->", f"## KiCad checks: {args.name}", ""]
 if args.portal_url and args.portal_state == "disabled":
+    where = f"[Settings → Pages]({args.pages_settings_url})" if args.pages_settings_url else "*Settings → Pages*"
     md += ["ℹ️ **Design portal not available**: it is published to its branch but GitHub Pages is not serving it. "
-           "A private repository needs a paid plan (GitHub Pro) for Pages; otherwise enable it in *Settings → Pages → "
-           "Deploy from a branch* with the portal branch (`kicad-hub-site` by default). "
+           f"Turn it on once in {where}: *Deploy from a branch*, branch `{args.pages_branch}`, folder `/ (root)`, *Save*. "
+           "A private repository needs a paid plan (GitHub Pro) for Pages. "
            "[Details](https://github.com/JMcordobamendez/kicad-hub#design-portal)", ""]
 elif args.portal_url:
     md += [f"🔎 **[Open this design in the browser]({args.portal_url})**: schematic and PCB viewer, "

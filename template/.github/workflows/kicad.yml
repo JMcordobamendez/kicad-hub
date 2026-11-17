@@ -23,7 +23,7 @@ jobs:
           lfs: true
       - uses: JMcordobamendez/kicad-hub@v1
         with:
-          project-dir: .                 # folder with the .kicad_pro
+          # project-dir: hardware/my-board   # only if the repository has more than one KiCad project
           # strict: true                 # fail on ERC/DRC errors
           # fab-profile: jlcpcb          # also DRC with that fab's rules + its BOM/CPL (jlcpcb | pcbway | eurocircuits)
           # boards: "1,5,10,100"         # batch sizes to price
@@ -58,5 +58,4 @@ jobs:
   #       with:
   #         lfs: true
   #     - uses: JMcordobamendez/kicad-hub@v1
-  #       with:
-  #         project-dir: .
+  #       # with: the same options as the job above

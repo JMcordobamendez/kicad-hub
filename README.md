@@ -27,6 +27,25 @@ More: [schematic](docs/screenshots/portal-schematic.png) ·
 [BOM](docs/screenshots/portal-bom.png). Real screenshots of the example board's
 portal and PR comment, taken by the "Docs screenshots" workflow.
 
+## Quickstart
+
+For a KiCad project that is already on GitHub. Nothing to install and no command line:
+the three steps are done on github.com.
+
+1. **Add one file** to the repository, `.github/workflows/kicad.yml`, with the workflow
+   shown in [Usage](#usage). On github.com: *Add file → Create new file*, type that path
+   as the file name, paste the workflow, *Commit changes*. There is nothing to edit:
+   kicad-hub finds the `.kicad_pro` by itself.
+2. **Wait for the first run** (*Actions* tab, about five minutes). Its summary shows the
+   report (ERC/DRC, BOM, prices) and *Artifacts* has the fab package. From now on every
+   push and pull request is checked, and pull requests get the report as a comment.
+3. **Turn on the portal** (optional; free for public repositories). The report has a
+   link to *Settings → Pages*: choose *Deploy from a branch*, branch `kicad-hub-site`,
+   *Save*. A minute later the report links to the design in the browser.
+
+Starting a new board, or the project is not on GitHub yet? The [manual](docs/manual.md)
+goes step by step, with or [without the command line](docs/manual.md#9-without-the-command-line-github-desktop).
+
 ## What works today
 
 On every push and pull request of a KiCad project, the action:
@@ -145,9 +164,11 @@ jobs:
         with:
           lfs: true
       - uses: JMcordobamendez/kicad-hub@v1
-        with:
-          project-dir: hardware/my-board   # folder with the .kicad_pro
 ```
+
+That is the whole setup: the action finds the `.kicad_pro` in the repository, at the
+root or in a subfolder. Options go under `with:` (see [Inputs](#inputs)); with more than
+one KiCad project in the repository, `project-dir` says which one to check.
 
 Ready-made workflows are in [`template/.github/workflows/`](template/.github/workflows/):
 `kicad.yml` (the one above, with every option and the supplier keys) and
@@ -162,7 +183,7 @@ version.
 
 | Input | Default | What it does |
 |---|---|---|
-| `project-dir` | — | Folder with the `.kicad_pro` (required) |
+| `project-dir` | the only `.kicad_pro` in the repository | Folder with the `.kicad_pro`. Needed only when the repository has more than one KiCad project (hidden folders and the output folder are not searched) |
 | `strict` | `false` | Fail on ERC/DRC errors or a failed requirement |
 | `required-fields` | `Footprint,Datasheet,MPN\|LCSC` | Fields every fitted part needs; `A\|B` = either |
 | `check-capacitor-voltage` | `true` | Capacitors need a `Voltage` field or a value like `10uF 16V` |
@@ -572,7 +593,7 @@ the commit hash.
 ```
 action.yml                  the action
 fab-profiles/               optional per-fab DRC rules and assembly column layouts
-scripts/                    fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
+scripts/                    detect.py (finds the KiCad project), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
                             variant_cpl.py, variant_sync.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
@@ -584,7 +605,8 @@ scripts/                    fab_assembly.py, report.py, requirements.py, datashe
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
-.github/workflows/test.yml  runs the action on the example board on every push/PR/tag
+tests/                      unit tests of the scripts (python3 -m unittest discover -s tests)
+.github/workflows/test.yml  runs the unit tests and the action on the example board on every push/PR/tag
 .github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
 docs/                       roadmap and screenshots
 ```
@@ -606,6 +628,8 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   `examples/royalblue54l-feather` (`.github/workflows/test.yml`). A PR shows the
   report comment. Version tags (`v*`) run the tests only; an `example-*` tag also
   publishes the example's fab package as a release, to test that step.
+- `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have
+  them (no KiCad needed); CI runs them in the `unit` job.
 - The Python scripts can be run locally against files exported with a local
   `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` needs
   KiCad's own Python (`pcbnew`); on Windows it may open a "font not found" dialog

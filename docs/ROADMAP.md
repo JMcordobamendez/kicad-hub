@@ -65,22 +65,34 @@ flowchart LR
     i8["Activity page<br/>branches, PRs, pushes"]:::done
   end
 
+  subgraph P7["7 · Plug and play"]
+    direction TB
+    a1["A · Short GitHub setup<br/>no options, Quickstart, GitHub Desktop"]:::doing
+    a2["B · One engine<br/>(kicad-hub run, local mode)"]:::todo
+    a3["C · KiCad plugin"]:::todo
+    a4["D · Versions and review<br/>without the terminal"]:::todo
+  end
+
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
   P4 --> P5
   PUB --> P6
+  PUB --> P7
   b7 -. same diff engine .- p4
 ```
 
 **Now:** v1.3.0 released (2026-10-30, `v1` moved to it): everything in v1.2.0 plus
 variant selector in the viewer, schematic vs PCB variant check, cross-probing between
 PCB and schematic, and picking a net by clicking a wire, label or pin in the schematic
-(KiCanvas fork). The viewer is frozen (see decisions). Next: a full run on one of the
-owner's real boards, cutting the noise it shows; then GitLab and Altium.
+(KiCanvas fork). The viewer is frozen (see decisions). One of the owner's
+real boards runs on it. Next: **plug and play** (phase 7): make it
+quick to start for someone with no software background. Phase A (short GitHub setup) is
+written and waits for a release; then the engine (B), the KiCad plugin (C) and versions
+without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
 
-*Last update: 2026-10-30. Update the classes (`:::done`, `:::doing`, `:::todo`)
+*Last update: 2026-11-17. Update the classes (`:::done`, `:::doing`, `:::todo`)
 whenever a task changes state.*
 
 ## Phase 1 — Project template (~1 day)
@@ -101,7 +113,8 @@ Lives in `template/`.
       counted as parts (now dropped from every BOM); no warning for unannotated parts or
       `TBD` values (new "Design to finish" section); an empty price table when nothing has
       an LCSC code or MPN (now a short hint)
-- [ ] Make it usable as a GitHub template repository (or a `new-board` script)
+- [ ] Make it usable as a GitHub template repository (or a `new-board` script): now
+      part of phase 7A
 
 ## Phase 2 — CI (~1–2 days)
 First user: one of the owner's personal boards (schematic in progress, empty PCB).
@@ -316,6 +329,82 @@ clicking a component creates a PR review comment through the GitHub API
 Wanted (owner, 2026-10-29), no longer optional. It is a software project in its own
 right: start with a prototype on the PR portal page.
 
+## Phase 7 — Plug and play
+Owner, 2026-11-17: kicad-hub is tedious to set up, and someone with no software
+background should be able to start working with it, and later commit, branch and merge,
+without a terminal. Counted that day: nine manual steps and two waits from an empty
+repository to a working portal, and about five minutes per run (the owner's board).
+
+**Two doors, one engine.** Working alone: a KiCad plugin (button → checks, BOM, prices,
+viewer and fab package in the browser; no account, no git, no terminal). Working with
+others: GitHub, as today, with a setup of three steps. Both run the same code.
+
+### A — Short GitHub setup (small; no change of architecture)
+- [x] **`project-dir` optional** (2026-11-17): without it the action uses the only
+      `.kicad_pro` in the repository (hidden folders and the output folder are not
+      searched); none or several is an error that says what to do. `scripts/detect.py`,
+      unit tests in `tests/` (new `unit` job in `test.yml`), and `test.yml` itself no
+      longer passes `project-dir`. Awaiting a check on a real run
+- [x] **Link to the Pages settings** in the report when Pages is not serving the portal,
+      with the branch to choose (2026-11-17). Pages can't be turned on by the workflow
+      token, so one click stays
+- [x] **Quickstart** at the top of the README: add one file, wait for the run, turn on
+      the portal (2026-11-17)
+- [x] **Manual section 9, "Without the command line"**: the same flow with GitHub Desktop
+      (put a project on GitHub, branch, commit, PR, merge, tag) (2026-11-17). Written from
+      the application's documented menus, not walked through: the owner should follow it
+      once on a new project and correct what differs
+- [x] **"Workflow permissions" is no longer a setup step** (manual 2.5, 2026-11-17): the
+      workflow declares the permissions it needs, so the setting only matters when an
+      organisation forbids write tokens. To confirm on a new personal repository with
+      the default (read-only) setting
+- [ ] **Release v1.4.0 and move `v1`** right after merging: the template and the
+      Quickstart use `@v1` with no `project-dir`, which v1.3.0 does not accept
+- [ ] **Template repository** with the "Use this template" button, kept in sync with
+      `template/` (needs a new repository: the owner creates it)
+
+### B — One engine (large)
+- [ ] Spike first, on the owner's Windows PC (one day): does the Python that ships with
+      KiCad have PIL and numpy? `rsvg-convert` is not there for sure; if they are missing,
+      the before/after images and the page renders move to the browser
+- [ ] `kicad-hub run`: the sequence that today is about 900 lines of bash inside
+      `action.yml` becomes one Python program; the action calls it (`scripts/detect.py`
+      is the first piece). It also reads the working tree, so changes are checked before
+      committing, and compares against `main` or any commit (`git worktree`, as the
+      action does with a PR's base)
+- [ ] KiBot optional (see decisions): schematic PDF, BOM HTML and iBOM without it
+- [ ] `kicad-hub serve`: a small local server for the portal (it can't load its JSON and
+      KiCad files from `file://`); `--quick` for ERC/DRC and BOM only
+- [ ] Supplier keys from the environment or a personal file (`~/.config/kicad-hub/`),
+      never from the repository
+- Not in local mode (GitHub only): the PR comment, pinned comments, the activity page's
+  PRs and reviews, publishing the portal, releases
+
+### C — KiCad plugin (medium, after B)
+- [ ] A thin plugin: a button runs the engine and opens the local portal. KiCad already
+      ships `kicad-cli` and a Python with `pcbnew` (`fabnotes.py` needs it anyway)
+- [ ] "Prepare for GitHub" button: writes the workflow and the template files into the
+      project folder
+- [ ] Distribution: a ZIP for *Install from File* first, then a request to KiCad's
+      official plugin repository (how long that takes is not known)
+- To choose when it starts: KiCad's older plugin interface or the newer one
+
+### D — Versions and review without the terminal (medium to large, after B and C)
+- [ ] Five actions, in plain words, in the plugin or the local portal: **Save version**
+      (commit; shows the before/after of sheets and layers and the BOM diff first),
+      **Start a change** (branch), **Send for review** (push + PR), **Update** (pull),
+      **Accept change** (merge the PR on GitHub, only with green checks). The portal on
+      GitHub Pages is static and can't touch the files on disk; opening and accepting a
+      PR could also live there, through the GitHub API
+- [ ] KiCad files don't merge: warn before ("Ana also changed `Power.kicad_sch`") and,
+      on a conflict, offer only "keep mine" / "keep theirs" per file
+- [ ] Changing branch with the project open: force save and reload (not checked how
+      KiCad behaves; the easiest place to lose work)
+- [ ] Sign-in through Git for Windows (browser login and LFS included)
+- Before starting: the owner tries KiCad 10's own Version Control menu (commit, switch
+  branch, default remote, file status icons; push, pull and merge not confirmed) to see
+  how much it already covers. Until D exists, manual section 9 (GitHub Desktop) covers it
+
 ## Improvements to what's done
 Picked by the owner (2026-10-29):
 
@@ -355,7 +444,7 @@ Picked by the owner (2026-10-29):
 - [ ] **Electrical requirements** (max current, voltage derating…): need data the CI
       doesn't produce yet
 - [ ] **Template repository**: make the board template a GitHub template repository
-      ("Use this template" button)
+      ("Use this template" button). Now part of phase 7A
 - [x] **Cross-probing PCB ↔ schematic**: Show in schematic / Show on PCB for parts and nets,
       optional sync mode (requested by the owner on 2026-10-30, from the commercial-platform
       review; done 2026-10-30). Stock KiCanvas cannot pick pins, labels or wires, so at first
@@ -501,6 +590,22 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       screenshot (2026-10-30)
 
 ## Decisions so far
+- **Plug and play: two doors, one engine** (2026-11-17): a KiCad plugin for working
+  alone and GitHub for working with others, both on one Python engine (phase 7). **Not a
+  desktop application**: it would need code signing on Windows and macOS, installers and
+  updates, and it would lose what the project is for (the PR comment, a portal others open
+  with a link). **Not Docker or `pipx` as the way in**: on Windows they need WSL, admin
+  rights and a terminal.
+- **KiBot becomes optional with the engine** (2026-11-17, takes effect with phase 7B):
+  it is made for Linux, so in local mode the schematic PDF, BOM HTML and iBOM come from
+  `kicad-cli` and our own scripts. CI may keep KiBot. Until then "`kicad-cli` first,
+  KiBot for the rest" stands.
+- **Five actions, not a git client** (2026-11-17): phase 7D adds save version, start a
+  change, send for review, update and accept change. History, undo, stash and the rest
+  stay in GitHub Desktop or in KiCad ("reuse existing tools"; each feature costs more
+  than the last, as with the viewer).
+- **`project-dir` optional** (2026-11-17): a board repository's workflow needs no
+  option. Explicit `project-dir` still wins and is required with several projects.
 - **Viewer frozen** (2026-10-30): after schematic net picking (#39) no more viewer
   features (buttons, modes, KiCanvas changes) unless a real use asks for it. Each one
   costs more than the last and adds to the KiCanvas fork to maintain; reviewers who

@@ -1,6 +1,7 @@
 # kicad-hub user manual
 
-For hardware designers who know KiCad and basic git, but not GitHub Actions.
+For hardware designers who know KiCad and basic git, but not GitHub Actions. No git or
+command line? Section 9 does the same with GitHub Desktop, with buttons only.
 Reference material (every input, every requirement check) is in the
 [README](../README.md); this manual is the step-by-step version.
 
@@ -11,7 +12,8 @@ Contents: [1 What you get](#1-what-kicad-hub-gives-you) ·
 [5 The portal](#5-using-the-portal) ·
 [6 Suppliers, variants, requirements, fab profiles](#6-suppliers-variants-requirements-and-fab-profiles) ·
 [7 Releasing](#7-releasing-a-board-revision) ·
-[8 Troubleshooting](#8-troubleshooting-and-faq)
+[8 Troubleshooting](#8-troubleshooting-and-faq) ·
+[9 Without the command line](#9-without-the-command-line-github-desktop)
 
 ---
 
@@ -73,7 +75,7 @@ In a private repository without Pages, the portal is still built and pushed to t
 2. Copy the contents of [`template/`](../template/) into it (including the hidden
    `.github/`, `.gitignore` and `.gitattributes`).
 3. Copy your KiCad project (`.kicad_pro`, `.kicad_sch`, `.kicad_pcb`, sheets) into the
-   root, or into a subfolder (then set `project-dir`, see 2.3).
+   root or into a subfolder: kicad-hub finds the `.kicad_pro` by itself.
 
 What the template gives you:
 
@@ -97,11 +99,11 @@ board needs.
 
 ### 2.3 Edit `kicad.yml`
 
-Open `.github/workflows/kicad.yml`. Usually you only change:
+The workflow works as it is. Open `.github/workflows/kicad.yml` only to change an option:
 
 | Option | When |
 |---|---|
-| `project-dir` | The `.kicad_pro` is not at the repository root (e.g. `hardware/my-board`) |
+| `project-dir` | The repository has more than one KiCad project: the folder of the one to check (e.g. `hardware/my-board`). With a single project it is found automatically, at the root or in a subfolder |
 | `strict: true` | You want the job to fail on ERC/DRC errors or a failed requirement |
 | `currency` | Prices in EUR, etc. (default USD) |
 | `fab-profile` | `jlcpcb`, `pcbway` or `eurocircuits` (see 6.4) |
@@ -126,11 +128,13 @@ Manager works).
 
 ### 2.5 Repository settings
 
-Before or right after the first run:
+Usually there is nothing to do: the workflow asks for the permissions it needs
+(`contents: write`, `pull-requests: write`). Only if the run fails with "Resource not
+accessible by integration", or a pull request gets no comment:
 
 1. **Settings → Actions → General → Workflow permissions** → **Read and write
-   permissions** → **Save**. (The workflow also declares `contents: write` and
-   `pull-requests: write`; an organisation policy set to read-only overrides it.)
+   permissions** → **Save**. (An organisation can forbid write tokens in its
+   repositories; then its owner has to allow them.)
 2. **Actions → Allow actions** must permit `actions/checkout` and
    `JMcordobamendez/kicad-hub` (the default "Allow all actions" does).
 
@@ -140,7 +144,8 @@ Before or right after the first run:
    container image, so it takes a few minutes.
 2. Open the run: the **summary** shows the report; **Artifacts** at the bottom has
    `<board>-fab` (zip with everything).
-3. When the run finishes, the `kicad-hub-site` branch exists. Turn Pages on once:
+3. When the run finishes, the `kicad-hub-site` branch exists and the report says
+   "Design portal not available", with a link to the Pages settings. Turn Pages on once:
    **Settings → Pages → Build and deployment → Source: Deploy from a branch →
    Branch: `kicad-hub-site` / `(root)` → Save**.
 4. After a minute the portal is at `https://<you>.github.io/<repo>/`
@@ -179,7 +184,9 @@ If the project is already in a GitHub repository:
    - `.github/pull_request_template.md`, `ISSUE_TEMPLATE/`, `CODEOWNERS.example` (optional);
    - `.gitignore` and `.gitattributes`: **merge** with yours rather than overwrite;
    - `kicad-hub-requirements.yaml` next to the `.kicad_pro` (optional).
-3. Edit `kicad.yml`: set `project-dir` to the folder with the `.kicad_pro`.
+3. `kicad.yml` needs no editing: the `.kicad_pro` is found automatically. Only with more
+   than one KiCad project in the repository, set `project-dir` to the folder of the one
+   to check.
 4. If you already have 3D models in git, check the LFS rules in `.gitattributes` first:
    adding LFS rules does not convert files already committed
    (`git lfs migrate import --include="*.step,*.stp,*.wrl"` does, but rewrites history:
@@ -187,7 +194,7 @@ If the project is already in a GitHub repository:
 5. Make the project self-contained: library tables using `${KIPRJMOD}` (as in the
    template's `fp-lib-table`/`sym-lib-table`), so CI can open it. Footprints or 3D models
    that only exist in your global libraries will show as missing in CI.
-6. Apply sections 2.5 and 2.6 (permissions, Pages), commit, push the branch and open a
+6. Apply section 2.6 (Pages; and 2.5 if the run complains about permissions), commit, push the branch and open a
    PR: the PR itself is the first run, and the comment links to the portal page.
    The Pages setting in 2.6 step 3 needs the `kicad-hub-site` branch, which appears
    after the first run; the portal only goes live once Pages is on.
@@ -599,7 +606,7 @@ a paid plan.
 
 | Problem | Cause and fix |
 |---|---|
-| Run failed | **Actions** → the run → the red step. Often: the `.kicad_pro` is not where `project-dir` says; or Workflow permissions are read-only (2.5); or `strict: true` with errors |
+| Run failed | **Actions** → the run → the red step. Often: more than one `.kicad_pro` in the repository and no `project-dir` (the error lists them), or it is not where `project-dir` says; or write tokens are not allowed (2.5); or `strict: true` with errors |
 | Portal URL gives 404 | Pages not enabled, or wrong branch: **Settings → Pages**, source `kicad-hub-site` / `(root)`. Needs at least one successful run, and a few minutes to deploy. Private repo without a paid plan: not served |
 | Front page is empty | Pages was enabled before the first publish; push a commit or re-run |
 | No PR comment | `pull-requests: write` missing, or the PR comes from a **fork** (forks can't write and get no secrets or portal page) |
@@ -617,3 +624,59 @@ a paid plan.
 **Known limits:** no real-time co-editing (split the schematic by sheet, one PCB owner at a
 time); Pages is free only for public repos; KiCanvas is alpha; pinned comments are a
 prototype.
+
+---
+
+## 9. Without the command line (GitHub Desktop)
+
+Everything in sections 2 to 4 and 7 can be done with
+[GitHub Desktop](https://desktop.github.com/), a free application with buttons instead of
+git commands. It includes git and Git LFS, so there is nothing else to install. Sign in
+with your GitHub account the first time it opens.
+
+The words, once: a **commit** is a saved version with a note; a **branch** is a separate
+line of work that does not touch `main` until it is accepted; a **pull request** (PR) asks
+to bring a branch into `main` and is where the review happens.
+
+### 9.1 Put a KiCad project on GitHub
+
+1. Get the template files: on the [kicad-hub page](https://github.com/JMcordobamendez/kicad-hub),
+   **Code → Download ZIP**, unzip, and copy what is inside its `template/` folder into your
+   project folder, next to the `.kicad_pro`. Copy the folder `.github` and the files
+   `.gitignore` and `.gitattributes` too (on macOS, Finder hides names that start with a
+   dot: **Cmd + Shift + .** shows them). Do this before the first commit, so 3D models are
+   stored with Git LFS from the start.
+2. In GitHub Desktop: **File → Add local repository…**, choose your project folder. It says
+   the folder is not a repository yet and offers to **create a repository** there: accept,
+   then **Create repository**.
+3. Bottom left: write a summary ("Initial board"), **Commit to main**.
+4. Top bar: **Publish repository**. Untick *Keep this code private* for a public
+   repository (the portal is free only for public ones, see 2.1). **Publish repository**.
+5. On github.com, open the repository's **Actions** tab and follow section 2.6: watch the
+   first run, then turn Pages on with the link the report gives.
+
+If the project is already on GitHub, **File → Clone repository…** downloads it; to add
+kicad-hub, copy the template files as in step 1, commit and push.
+
+### 9.2 Day to day
+
+| To | In GitHub Desktop |
+|---|---|
+| Start a change | **Current Branch → New Branch**, name it (`new-ldo`), **Create Branch** |
+| Save a version | Save in KiCad. The changed files appear on the left: write a summary, **Commit to new-ldo** |
+| Send it to GitHub | **Publish branch** the first time, **Push origin** afterwards. kicad-hub runs on every push |
+| Ask for review | **Create Pull Request**: the browser opens, fill the checklist, **Create pull request**. The report arrives as a comment in a few minutes |
+| Accept the change | On the PR page on github.com, **Merge pull request** (section 4 explains what to check first) |
+| Get what others did | **Current Branch → main**, then **Fetch origin** and **Pull origin** |
+| Release a revision | **History** tab, right-click the newest commit of `main` → **Create Tag…**, type `v1.0`, then **Push origin** (section 7) |
+
+Three habits that avoid trouble:
+
+- **Save in KiCad before committing.** Only what is saved to disk goes into the commit.
+- **Close the schematic and PCB editors before changing branch**, and open them again
+  after: KiCad keeps showing the files it loaded, and saving then would overwrite the
+  other branch's version.
+- **One person per file at a time.** If GitHub Desktop reports a conflict in a
+  `.kicad_sch` or `.kicad_pcb`, do not try to fix it by hand in a text editor: choose one
+  side's file (the menu next to the file → *Use the modified file from…*) and redo the smaller
+  change in KiCad.
