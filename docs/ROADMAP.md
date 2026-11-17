@@ -80,14 +80,14 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** v1.3.0 released (2026-10-30, `v1` moved to it): everything in v1.2.0 plus
-variant selector in the viewer, schematic vs PCB variant check, cross-probing between
-PCB and schematic, and picking a net by clicking a wire, label or pin in the schematic
-(KiCanvas fork). The viewer is frozen (see decisions). One of the owner's
-real boards runs on it. Next: **plug and play** (phase 7): make it
-quick to start for someone with no software background. Phase A (short GitHub setup) is
-written and waits for a release; then the engine (B), the KiCad plugin (C) and versions
-without the terminal (D).
+**Now:** v1.4.0 released (2026-11-17, `v1` moved to it): everything in v1.3.0 plus the
+short GitHub setup (phase 7A: `project-dir` optional, Quickstart, link to the Pages
+settings, manual section for GitHub Desktop), comparing the commits of a pull request,
+the UTF-8 locale fix and the fixes from the first real use (one of the owner's boards
+runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
+so someone with no software background can start quickly: the template repository left
+from phase A, then the engine (B), the KiCad plugin (C) and versions without the
+terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -344,7 +344,7 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       `.kicad_pro` in the repository (hidden folders and the output folder are not
       searched); none or several is an error that says what to do. `scripts/detect.py`,
       unit tests in `tests/` (new `unit` job in `test.yml`), and `test.yml` itself no
-      longer passes `project-dir`. Awaiting a check on a real run
+      longer passes `project-dir`. Confirmed by the CI runs of PR #48 and of `main`
 - [x] **Link to the Pages settings** in the report when Pages is not serving the portal,
       with the branch to choose (2026-11-17). Pages can't be turned on by the workflow
       token, so one click stays
@@ -358,8 +358,8 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       workflow declares the permissions it needs, so the setting only matters when an
       organisation forbids write tokens. To confirm on a new personal repository with
       the default (read-only) setting
-- [ ] **Release v1.4.0 and move `v1`** right after merging: the template and the
-      Quickstart use `@v1` with no `project-dir`, which v1.3.0 does not accept
+- [x] **Release v1.4.0 and move `v1`** (2026-11-17): the template and the Quickstart use
+      `@v1` with no `project-dir`, which v1.3.0 did not accept
 - [ ] **Template repository** with the "Use this template" button, kept in sync with
       `template/` (needs a new repository: the owner creates it)
 
