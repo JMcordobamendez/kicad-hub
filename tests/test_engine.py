@@ -666,5 +666,98 @@ class FindPythonTest(unittest.TestCase):
         self.assertEqual(d[-4:], ["img:1", "python3", "out/.notes.py", "b.kicad_pcb"])
 
 
+
+REQUIREMENTS = """# what this board must meet
+- id: R1
+  text: "Fewer than 10 parts"
+  check: max_parts
+  max: 10
+- id: R2
+  text: Two parts at most   # fails: the BOM has four fitted parts
+  check: max_parts
+  max: 2
+- id: R3
+  text: Every IC has a footprint
+  check: required_fields
+  refs: 'U\\d+'
+  fields: [Footprint]
+"""
+
+
+class RequirementsTest(EngineCase):
+    """The real requirements.py, with PyYAML when this Python has it and without."""
+
+    def setUp(self):
+        super().setUp()
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV)
+        self.put(".kicad-hub/reports/variants.json", "[]")
+        self.put("hw/kicad-hub-requirements.yaml", REQUIREMENTS)
+
+    def without_pyyaml(self):
+        """Make `import yaml` fail in the scripts the engine starts, as in KiCad's own Python."""
+        blocker = os.path.join(self.tmp.name, "no-pyyaml")
+        os.makedirs(blocker)
+        with open(os.path.join(blocker, "yaml.py"), "w") as f:
+            f.write('raise ImportError("no PyYAML here")\n')
+        old = os.environ.get("PYTHONPATH")
+        os.environ["PYTHONPATH"] = blocker + (os.pathsep + old if old else "")
+        self.addCleanup(lambda: os.environ.pop("PYTHONPATH") if old is None
+                        else os.environ.__setitem__("PYTHONPATH", old))
+
+    def check(self):
+        code, out, err = self.engine_plain("requirements")
+        self.assertEqual(code, 0, err)
+        got = {r["id"]: r["status"] for r in self.load(".kicad-hub/reports/requirements.json")}
+        self.assertEqual(got, {"R1": "pass", "R2": "fail", "R3": "pass"})
+
+    def test_requirements(self):
+        self.check()
+
+    def test_requirements_without_pyyaml(self):
+        self.without_pyyaml()
+        self.check()
+
+    def test_yaml_the_small_reader_refuses_is_a_failed_entry(self):
+        self.without_pyyaml()
+        self.put("hw/kicad-hub-requirements.yaml", "- id: R1\n  text: |\n    long text\n  check: max_parts\n")
+        self.assertEqual(self.engine_plain("requirements")[0], 0)
+        (only,) = self.load(".kicad-hub/reports/requirements.json")
+        self.assertEqual(only["status"], "fail")
+        self.assertIn("line 2", only["detail"])
+
+    def test_no_file_means_nothing_checked(self):
+        self.put(".kicad-hub/reports/requirements.json", "[]")     # from an earlier run
+        code, out, _ = self.engine_plain("requirements", "--file", "other.yaml")
+        self.assertEqual(code, 0)
+        self.assertIn("No requirements file (hw/other.yaml): skipped", out)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/requirements.json"))
+        self.assertEqual(self.engine_plain("requirements", "--file", "")[0], 0)
+
+    def test_a_check_that_cannot_run_is_a_warning(self):
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda *a, **k: 1
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        code, _, err = self.engine_plain("requirements")
+        self.assertEqual(code, 0)
+        self.assertIn("::warning::Requirements check failed to run: skipped", err)
+
+    def test_in_ci_it_runs_inside_the_image(self):
+        calls = []
+
+        class Image:
+            image = "img:1"
+
+            def python(self, *args):
+                calls.append(args)
+                with open(args[3], "w") as f:
+                    f.write("[]")
+                return 0
+
+        self.assertEqual(kicad_hub.requirements("hw", ".kicad-hub", k=Image()), [])
+        self.assertEqual(calls, [(".kicad-hub/.requirements.py", "hw/kicad-hub-requirements.yaml",
+                                  ".kicad-hub/reports", ".kicad-hub/reports/requirements.json")])
+        self.assertFalse(os.path.exists(".kicad-hub/.requirements.py"))
+
+
 if __name__ == "__main__":
     unittest.main()

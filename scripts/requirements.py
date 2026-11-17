@@ -7,7 +7,9 @@ A requirement whose data isn't there (no prices, no board outline...) is "unknow
 a crash; a malformed entry is "fail" with the reason.
 
 Usage: requirements.py <requirements.yaml> <reports dir> <output JSON>
-Needs PyYAML (present in the KiBot image the action runs it in).
+Reads the file with PyYAML when this Python has it (the KiBot image the action runs it
+in), else with yaml_subset.py, which reads the plain `key: value` entries the file is
+made of (KiCad's own Python has no PyYAML).
 """
 import csv
 import json
@@ -360,14 +362,21 @@ def entry(rid, text, check, status, measured="", detail=""):
 
 try:
     import yaml
+    read_yaml, yaml_errors = yaml.safe_load, (OSError, yaml.YAMLError)
 except ImportError:
-    write([entry("-", "Read the requirements file", "", "fail", "",
-                 "PyYAML is not available in this environment")])
-    sys.exit(0)
+    try:  # no PyYAML (KiCad's own Python): the reader for the plain entries this file is made of
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import yaml_subset
+        read_yaml, yaml_errors = yaml_subset.load, (OSError, yaml_subset.SubsetError)
+    except ImportError:
+        write([entry("-", "Read the requirements file", "", "fail", "",
+                     "PyYAML is not available in this environment")])
+        sys.exit(0)
 
 try:
-    data = yaml.safe_load(open(REQ_FILE, encoding="utf-8"))
-except (OSError, yaml.YAMLError) as e:
+    with open(REQ_FILE, encoding="utf-8") as f:
+        data = read_yaml(f.read())
+except yaml_errors as e:
     write([entry("-", "Read the requirements file", "", "fail", "", f"{os.path.basename(REQ_FILE)} is not valid YAML: "
                  + " ".join(str(e).split())[:200])])
     sys.exit(0)
