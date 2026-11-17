@@ -319,9 +319,8 @@ runs:
         CHECK: ${{ inputs.check-datasheet-links }}
       run: |
         set -euo pipefail
-        python3 "$GITHUB_ACTION_PATH/scripts/datasheets.py" --bom "$OUT/reports/bom-parts.csv" \
-          --project-dir "$PROJECT_DIR" --dirs "$DIRS" --check-urls "$CHECK" \
-          --out-dir "$OUT" --json "$OUT/reports/datasheets.json"
+        python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" datasheets --project-dir "$PROJECT_DIR" --out "$OUT" \
+          --dirs "$DIRS" --check-links "$CHECK"
 
     - name: Cost and stock
       if: inputs.sourcing == 'true'
@@ -338,11 +337,10 @@ runs:
         DIGIKEY_CLIENT_ID: ${{ inputs.digikey-client-id }}
         DIGIKEY_CLIENT_SECRET: ${{ inputs.digikey-client-secret }}
       run: |
-        python3 "$GITHUB_ACTION_PATH/scripts/sourcing.py" --bom "$OUT/reports/bom-parts.csv" \
-          --variants "$OUT/reports/variants.json" --choices "$PROJECT_DIR/$CHOICES" \
-          --boards "$BOARDS" --currency "$CURRENCY" \
-          --json "$OUT/reports/sourcing.json" --csv "$OUT/reports/sourcing.csv" --html "$OUT/sourcing.html" \
-          || echo "::warning::Cost and stock lookup failed: skipped"
+        set -euo pipefail
+        # a supplier that fails is a warning inside the engine, never a failed job
+        python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" sourcing --project-dir "$PROJECT_DIR" --out "$OUT" \
+          --boards "$BOARDS" --currency "$CURRENCY" --choices "$CHOICES"
 
     - name: Fab package
       id: package

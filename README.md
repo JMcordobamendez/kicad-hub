@@ -642,7 +642,10 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   the repository's folder: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
   `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC) and
   `python scripts/kicad_hub.py bom --base main` (one row per part, per variant too, and
-  the same from `main` to compare with). It finds `kicad-cli` by
+  the same from `main` to compare with), then `datasheets` and `sourcing` on those BOMs.
+  Supplier keys on a PC go in a personal file outside the repository
+  (`%APPDATA%\kicad-hub\keys.env` on Windows, `~/.config/kicad-hub/keys.env` elsewhere),
+  one `NAME=value` per line with the names of the [secrets](#supplier-api-keys). It finds `kicad-cli` by
   itself when run with KiCad's own Python or when it is on the PATH; otherwise
   `--kicad-cli <path>`.
 - `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have

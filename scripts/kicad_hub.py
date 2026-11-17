@@ -5,6 +5,9 @@
     kicad_hub.py bom    [--project-dir DIR] [--out DIR] [--required-fields LIST]
                         [--variants auto|none|LIST] [--base REF [--fetch]]
   both: [--kicad-cli PATH | --image IMAGE [--kicad-home DIR]]
+    kicad_hub.py datasheets [--project-dir DIR] [--out DIR] [--dirs LIST] [--check-links true|false]
+    kicad_hub.py sourcing   [--project-dir DIR] [--out DIR] [--boards 1,5,10,100] [--currency USD]
+                            [--choices kicad-hub-sourcing.csv]
 
 `checks`: ERC and DRC (with schematic parity) of the project, as JSON and text reports in
 <out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given.
@@ -14,6 +17,11 @@
 can say what changed.
 
 Without --image they use the KiCad installed on this computer.
+
+`datasheets` and `sourcing` read the BOMs that `bom` wrote and need no KiCad: the datasheet of
+every part (links checked, local files bundled) and the price and stock at each supplier.
+Supplier keys come from the environment or, on a PC, from a personal file outside the
+repository (see keys_file).
 
 The action calls it step by step while the rest of its steps move here (roadmap, phase 7B).
 Run it from the repository's folder: paths are relative to it.
@@ -256,6 +264,82 @@ def base_boms(k, project_dir, name, reports, labels, listed, ref, fetch=False, g
         git("worktree", "remove", "--force", BASE_DIR)
 
 
+# --- datasheets, cost and stock (no KiCad needed) -------------------------------------------
+
+SUPPLIER_KEYS = ("MOUSER_API_KEY", "FARNELL_API_KEY", "FARNELL_STORE", "DIGIKEY_CLIENT_ID", "DIGIKEY_CLIENT_SECRET")
+
+
+def need_bom(out):
+    bom = f"{out}/reports/bom-parts.csv"
+    if not os.path.isfile(bom):
+        raise StepError(f"{bom} is missing: run `bom` first")
+    return bom
+
+
+def run_script(name, *args, env=None):
+    """Run one of the scripts beside this file with the same Python; its exit code."""
+    return subprocess.run([sys.executable, os.path.join(HERE, name), *args], env=env).returncode
+
+
+def datasheets(project_dir, out, dirs="", check_links=True):
+    """Datasheet of every fitted part: <out>/reports/datasheets.json and <out>/datasheets/."""
+    bom = need_bom(out)
+    result = f"{out}/reports/datasheets.json"
+    _remove(result)
+    code = run_script("datasheets.py", "--bom", bom, "--project-dir", project_dir, "--dirs", dirs,
+                      "--check-urls", "true" if check_links else "false", "--out-dir", out, "--json", result)
+    if code or not os.path.isfile(result):
+        raise StepError("The datasheet step failed: see its messages above")
+    with open(result, encoding="utf-8") as f:
+        status = [e.get("status") for e in json.load(f).values()]
+    return {name: status.count(name) for name in ("ok", "broken", "unverified", "missing")}
+
+
+def keys_file(env=None):
+    """Where a PC keeps the supplier keys: never in the repository.
+
+    %APPDATA%\\kicad-hub\\keys.env on Windows, ~/.config/kicad-hub/keys.env elsewhere
+    ($XDG_CONFIG_HOME respected). Lines NAME=value, # for comments; names as in SUPPLIER_KEYS.
+    """
+    env = os.environ if env is None else env
+    base = env.get("APPDATA") if os.name == "nt" else env.get("XDG_CONFIG_HOME")
+    return os.path.join(base or os.path.join(os.path.expanduser("~"), ".config"), "kicad-hub", "keys.env")
+
+
+def supplier_env(env=None, path=None):
+    """The environment for sourcing.py: the caller's, plus the keys of the personal file
+    for those not already set (repository secrets in CI, the file on a PC)."""
+    env = dict(os.environ if env is None else env)
+    try:
+        with open(path or keys_file(env), encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return env
+    for line in lines:
+        name, sep, value = line.strip().partition("=")
+        name, value = name.strip(), value.strip().strip('"').strip("'")
+        if sep and name in SUPPLIER_KEYS and value and not env.get(name, "").strip():
+            env[name] = value
+    return env
+
+
+def sourcing(project_dir, out, boards="1,5,10,100", currency="USD", choices="kicad-hub-sourcing.csv", env=None):
+    """Price and stock of every part per supplier: sourcing.json, sourcing.csv, sourcing.html.
+    Suppliers are other people's services: a failure is a warning (False), not an error."""
+    bom = need_bom(out)
+    reports = f"{out}/reports"
+    written = [f"{reports}/sourcing.json", f"{reports}/sourcing.csv", f"{out}/sourcing.html"]
+    for old in written:
+        _remove(old)
+    code = run_script("sourcing.py", "--bom", bom, "--variants", f"{reports}/variants.json",
+                      "--choices", f"{project_dir}/{choices}", "--boards", boards, "--currency", currency,
+                      "--json", written[0], "--csv", written[1], "--html", written[2],
+                      env=supplier_env(env))
+    if code:
+        print("::warning::Cost and stock lookup failed: skipped", file=sys.stderr)
+    return code == 0
+
+
 def _git(*args):
     try:
         return subprocess.run(["git", *args]).returncode
@@ -322,9 +406,29 @@ def cmd_bom(args):
     return 0
 
 
-def add_common(c):
+def cmd_datasheets(args):
+    folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
+    print(f"\n{name}\n  Datasheets: {found['ok']} found, {found['broken']} broken, "
+          f"{found['unverified']} not checked, {found['missing']} missing")
+    print(f"Datasheets: {args.out}/datasheets/index.html")
+    return 0
+
+
+def cmd_sourcing(args):
+    folder, _, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if sourcing(folder, args.out, args.boards, args.currency, args.choices):
+        print(f"Suppliers: {args.out}/sourcing.html")
+    return 0
+
+
+def add_project(c):
     c.add_argument("--project-dir", default="", help="folder with the .kicad_pro (default: the only one in the repository)")
     c.add_argument("--out", default=".kicad-hub", help="output folder (reports go to <out>/reports)")
+
+
+def add_common(c):
+    add_project(c)
     c.add_argument("--kicad-cli", default="", help="path of the local kicad-cli (default: found automatically)")
     c.add_argument("--image", default="", help="run kicad-cli in this Docker image instead of the local KiCad")
     c.add_argument("--kicad-home", default="", help="with --image: folder mounted as KiCad's HOME (library tables)")
@@ -346,6 +450,18 @@ def main(argv=None):
     b.add_argument("--base", default="", help="commit or branch to compare with (e.g. main)")
     b.add_argument("--fetch", action="store_true", help="with --base: fetch it from origin first (CI)")
     b.set_defaults(func=cmd_bom)
+    d = sub.add_parser("datasheets", help="datasheet of every part: links checked, local files bundled")
+    add_project(d)
+    d.add_argument("--dirs", default="", help="extra folders with datasheet files, comma-separated")
+    d.add_argument("--check-links", default="true", help="true | false: check that the links answer")
+    d.set_defaults(func=cmd_datasheets)
+    p = sub.add_parser("sourcing", help="price and stock of every part at each supplier")
+    add_project(p)
+    p.add_argument("--boards", default="1,5,10,100", help="batch sizes to price")
+    p.add_argument("--currency", default="USD")
+    p.add_argument("--choices", default="kicad-hub-sourcing.csv",
+                   help="supplier picked per part, a file relative to the project folder")
+    p.set_defaults(func=cmd_sourcing)
     args = ap.parse_args(argv)
     try:
         return args.func(args)
