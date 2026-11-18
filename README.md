@@ -640,8 +640,10 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   creates the GitHub Release. A tag pushed by a workflow does not start other workflows,
   so the tests that count are those of that commit on `main`.
 - **Local mode (in progress, roadmap phase 7B):** `scripts/kicad_hub.py` is the engine
-  the action is moving to. Today it runs the checks with the KiCad installed on a PC, from
-  the repository's folder: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
+  the action is moving to. On a PC, from the repository's folder,
+  `python scripts/kicad_hub.py run` does every step below with the KiCad installed there
+  and compares with `main` (`--base <branch>` or `--base none`; `--skip sourcing,…` to
+  leave steps out). Step by step: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
   `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC) and
   `python scripts/kicad_hub.py bom --base main` (one row per part, per variant too, and
   the same from `main` to compare with), then `datasheets`, `sourcing`, `package` (the
