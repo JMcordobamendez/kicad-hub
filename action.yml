@@ -605,8 +605,9 @@ runs:
         renders=()
         [ -f "$RUNNER_TEMP/kicad-hub-renders/png/renders.json" ] && renders=(--renders "$RUNNER_TEMP/kicad-hub-renders/png")
         branch=""; [ "$KIND" = branch ] && branch="$REF_NAME"
-        portal() { python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --out "$OUT" \
-          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
+        # one build's page (the engine: scripts/kicad_hub.py); publishing it stays here, GitHub only
+        portal() { python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" portal --out "$OUT" \
+          --project-dir "$PROJECT_DIR" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
           --server "$GITHUB_SERVER_URL" --title "$TITLE" --base-ref "$BASE_REF" --branch "$branch" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "${commit[@]}" "${renders[@]}" "${activity[@]}" "$@"; }
         portal --site "$site" --label "$LABEL" --kind "$KIND"
