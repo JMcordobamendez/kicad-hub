@@ -12,6 +12,8 @@ import json
 import os
 import re
 
+import drc_groups
+
 MAX_ROWS = 60  # rows per table before cutting, to keep PR comments readable
 MAX_IMAGES = 12  # before/after images in the report
 
@@ -23,6 +25,7 @@ ap.add_argument("--base-ref", default="base")
 ap.add_argument("--erc")
 ap.add_argument("--drc-fab", help="DRC JSON run with the fab profile's rules added")
 ap.add_argument("--fab-profile", default="generic")
+ap.add_argument("--fab-rules", help="the fab profile's .kicad_dru (default: fab-profiles/<profile>/rules.kicad_dru)")
 ap.add_argument("--drc")
 ap.add_argument("--required", default="Footprint,Datasheet,MPN|LCSC",
                 help="comma-separated fields; 'A|B' means A or B is enough")
@@ -120,14 +123,13 @@ if drc_fab and args.fab_profile != "generic":
     md += [f"**DRC vs {args.fab_profile} rules: {len(fab_v)} violations** "
            f"({len(new)} beyond the project's own DRC)", ""]
     if new:
-        kinds = {}
-        for v in new:
-            # "Annular width (rule 'X' min ...; actual 0.1 mm)" -> "Annular width: X"
-            m = re.match(r"(.*?) \(rule '([^']+)'", v["description"])
-            k = f"{m.group(1)}: {m.group(2)}" if m else v["description"]
-            kinds[k] = kinds.get(k, 0) + 1
+        # Grouped by violation type and fab rule name, never by parsing the text: kicad-cli
+        # writes it in the PC's language ("Annular width (rule 'X' …)" -> "Annular width: X")
+        rules = args.fab_rules or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir,
+                                               "fab-profiles", args.fab_profile, "rules.kicad_dru")
+        names = drc_groups.rule_names(open(rules, encoding="utf-8").read()) if os.path.isfile(rules) else []
         md += [table(["Fab rule violated", "Count"],
-                     [[k, str(n)] for k, n in sorted(kinds.items(), key=lambda kv: -kv[1])]), ""]
+                     [[k, str(n)] for k, n in drc_groups.group(new, names)]), ""]
 
 # --- Requirements ---------------------------------------------------------------
 if args.requirements and os.path.exists(args.requirements):

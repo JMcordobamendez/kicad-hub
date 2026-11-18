@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """kicad-hub's engine: the steps of the action as one program, for CI and for a PC.
 
+    kicad_hub.py run [--project-dir DIR] [--out DIR] [--base REF|none] [--fab-profile NAME]
+                     [--skip datasheets,sourcing,package,requirements,portal] (+ the options below)
+
+`run`: every step below in a row on a PC, comparing with main (else master), then where the
+report and the portal are. Or one at a time:
+
     kicad_hub.py checks [--project-dir DIR] [--out DIR] [--fab-profile NAME]
     kicad_hub.py bom    [--project-dir DIR] [--out DIR] [--required-fields LIST]
                         [--variants auto|none|LIST] [--base REF [--fetch]]
@@ -12,6 +18,9 @@
     kicad_hub.py datasheets [--project-dir DIR] [--out DIR] [--dirs LIST] [--check-links true|false]
     kicad_hub.py sourcing   [--project-dir DIR] [--out DIR] [--boards 1,5,10,100] [--currency USD]
                             [--choices kicad-hub-sourcing.csv]
+    kicad_hub.py report     [--project-dir DIR] [--out DIR] [--fab-profile NAME] [--base-ref NAME]
+                            [--package FILE] [--required-fields LIST] (+ CI links: --portal-url …)
+    kicad_hub.py portal     [--project-dir DIR] [--out DIR]   (CI: --site DIR and portal.py's build options)
 
 `checks`: ERC and DRC (with schematic parity) of the project, as JSON and text reports in
 <out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given.
@@ -33,6 +42,13 @@ the other commands wrote to <out>/reports/ (run it after them).
 every part (links checked, local files bundled) and the price and stock at each supplier.
 Supplier keys come from the environment or, on a PC, from a personal file outside the
 repository (see keys_file).
+
+`report`: the markdown report (PR comment, job summary) in <out>/reports/report.md from
+whatever the other commands wrote there, plus counts.json; run it last.
+
+`portal`: the design portal page (viewer, report, BOM, suppliers, downloads). On a PC, of the
+working tree, in <out>/portal/<branch>/ with the site's front page around it; in CI only the
+page, in --site, with what the action passes (publishing it is GitHub-only, in the action).
 
 The action calls it step by step while the rest of its steps move here (roadmap, phase 7B).
 Run it from the repository's folder: paths are relative to it.
@@ -565,6 +581,132 @@ def requirements(project_dir, out, req_file="kicad-hub-requirements.yaml", k=Non
         return json.load(f)
 
 
+# --- report ---------------------------------------------------------------------------------
+
+# report.py option -> the file in <out>/reports an earlier step writes; the ones not there
+# (a step not run, or not run yet on this PC) are left out and report.py skips that section
+REPORT_INPUTS = (("--base-bom", "bom-parts-base.csv"), ("--erc", "erc.json"), ("--drc", "drc.json"),
+                 ("--drc-fab", "drc-fab.json"), ("--datasheets", "datasheets.json"),
+                 ("--package-warnings", "fab-warnings.txt"), ("--variants", "variants.json"),
+                 ("--variant-sync", "variant-sync.json"), ("--requirements", "requirements.json"),
+                 ("--visual", "visual.json"), ("--sourcing", "sourcing.json"))
+# counts the action exposes as step outputs ("-" when that check did not run)
+REPORT_OUTPUTS = ("erc_errors", "drc_errors", "missing_fields", "requirements_failed")
+
+
+def report(out, name, profile="generic", package=None, options=()):
+    """<out>/reports/report.md and counts.json from the files the other steps wrote.
+
+    `package`: the fab zip's file name; None finds it in <out>/package/, "" means none.
+    `options`: more report.py options (base ref, required fields, portal and run links).
+    Returns the counts.
+    """
+    reports = f"{out}/reports"
+    args = ["--name", name, "--bom", need_bom(out), "--fab-profile", profile]
+    if profile != "generic":
+        args += ["--fab-rules", fab_rules(profile)]
+    for option, file in REPORT_INPUTS:
+        if os.path.isfile(f"{reports}/{file}"):
+            args += [option, f"{reports}/{file}"]
+    if package is None:
+        zips = sorted(glob.glob(f"{out}/package/*-fab.zip"))
+        package = os.path.basename(zips[-1]) if zips else ""
+    if package:
+        args += ["--package", package]
+    md, counts = f"{reports}/report.md", f"{reports}/counts.json"
+    _remove(md)
+    _remove(counts)
+    if run_script("report.py", *args, *options, "--out", md, "--out-json", counts) != 0 or not os.path.isfile(counts):
+        raise StepError("report.py failed: see its messages above")
+    with open(counts, encoding="utf-8") as f:
+        result = json.load(f)
+    github_output({key: "-" if result.get(key) is None else result[key] for key in REPORT_OUTPUTS})
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(md, encoding="utf-8") as f, open(summary, "a", encoding="utf-8") as s:
+            s.write(f.read())
+    return result
+
+
+# --- design portal ----------------------------------------------------------------------------
+
+PORTAL_DIR = "portal"  # <out>/portal/: the local site, one folder per branch built on this PC
+
+
+def _git_out(*args):
+    """Output of a git command, stripped; "" when git or the repository is not there."""
+    try:
+        r = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def github_repo(url):
+    """("https://github.com", "owner/name") from a remote URL (https or ssh), else ("", "")."""
+    m = re.match(r"(?:https?://(?:[^@/]+@)?|ssh://git@|git@)([^/:]+)[/:]([^/]+)/([^/]+?)(?:\.git)?/?$", url or "")
+    return (f"https://{m.group(1)}", f"{m.group(2)}/{m.group(3)}") if m else ("", "")
+
+
+def site_folder(label):
+    """A build's folder in the site, by the action's rules (`pr-*` and `releases` are taken)."""
+    dest = re.sub(r"[^A-Za-z0-9._-]", "_", label) or "local"
+    return f"branch-{dest}" if dest.startswith("pr-") or dest == "releases" else dest
+
+
+def working_tree_build(project_dir, name):
+    """What a build of the working tree on this PC is, from git and the board."""
+    head = _git_out("rev-parse", "HEAD")  # "" outside a repository or before its first commit
+    sha = head or "0" * 40
+    branch = _git_out("rev-parse", "--abbrev-ref", "HEAD") if head else ""
+    if branch == "HEAD":  # detached
+        branch = ""
+    label = branch or (head[:7] if head else "local")
+    if _git_out("status", "--porcelain", "--", project_dir):
+        label += " + local changes"
+    server, repo = github_repo(_git_out("remote", "get-url", "origin"))
+    info = {"sha": sha, "label": label, "kind": "branch", "branch": branch, "repo": repo or f"local/{name}",
+            "server": server or "https://github.com", "rev": board_revision(f"{project_dir}/{name}.kicad_pcb"),
+            "commit-date": _git_out("log", "-1", "--format=%cI") if head else "",
+            "commit-author": _git_out("log", "-1", "--format=%an") if head else "",
+            "commit-message": _git_out("log", "-1", "--format=%s") if head else "", "folder": site_folder(label.split(" ")[0])}
+    return info
+
+
+PORTAL_BUILD = ("rev", "label", "kind", "sha", "repo", "server", "run-url", "title", "base-ref", "branch",
+                "commit-date", "commit-author", "commit-message", "renders", "pr")
+
+
+def portal(project_dir, name, out, site=None, build=None, light=False, activity=False):
+    """The design portal page of this build.
+
+    With `site` (CI): only the page, in that folder; `build` holds every portal.py build
+    option, as the action knows them. Without it (a PC): the page of the working tree in
+    <out>/portal/<branch>/, and the site's front page, builds list and viewer scripts in
+    <out>/portal/, so it opens with any local web server. Returns the page's folder.
+    """
+    local = site is None
+    build = dict(working_tree_build(project_dir, name) if local else {}, **(build or {}))
+    if local:
+        root = f"{out}/{PORTAL_DIR}"
+        site = f"{root}/{build['folder']}"
+        shutil.rmtree(site, ignore_errors=True)  # no files of an earlier build of this branch
+    args = ["build", "--site", site, "--out", out, "--project-dir", project_dir, "--name", name]
+    for key in PORTAL_BUILD:
+        if build.get(key) not in (None, ""):
+            args.append(f"--{key}={build[key]}")  # =: a commit message starting with "-" is still a value
+    if light:
+        args.append("--light")
+    if activity:
+        args.append("--activity")
+    if run_script("portal.py", *args) != 0:
+        raise StepError("portal.py build failed: see its messages above")
+    if local and run_script("portal.py", "index", "--root", root, "--repo", build["repo"],
+                            "--server", build["server"]) != 0:
+        raise StepError("portal.py index failed: see its messages above")
+    return site
+
+
 def _git(*args):
     try:
         return subprocess.run(["git", *args]).returncode
@@ -607,6 +749,108 @@ def cmd_checks(args):
     return 0
 
 
+def write_variants(reports, listed):
+    """variants.json: the variants and their BOMs (and base BOMs), for the report and the portal."""
+    with open(f"{reports}/variants.json", "w", encoding="utf-8") as f:
+        json.dump([{key: v[key] for key in ("name", "description", "bom", "dir", "base_bom") if key in v}
+                   for v in listed], f, indent=2)
+        f.write("\n")
+
+
+def default_base():
+    """The branch a PC run compares with: main, else master, else none ("")."""
+    for ref in ("main", "master"):
+        if _git_out("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"):
+            return ref
+    return ""
+
+
+RUN_STEPS = ("datasheets", "sourcing", "package", "requirements", "portal")  # the ones --skip can leave out
+
+
+def cmd_run(args):
+    """Every step, in the action's order, with this computer's KiCad: what a PC needs."""
+    skip = {x.strip() for x in args.skip.split(",") if x.strip()}
+    unknown = skip - set(RUN_STEPS)
+    if unknown:
+        raise StepError(f"--skip: unknown step {', '.join(sorted(unknown))} (use {', '.join(RUN_STEPS)})")
+    folder, name, has_pcb, note = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if note:
+        print(note, flush=True)
+    if args.fab_profile != "generic":
+        fab_rules(args.fab_profile)  # a wrong profile name stops here, not after the checks
+    base = default_base() if args.base is None else args.base.strip()
+    if base.lower() == "none":
+        base = ""
+    k = make_kicad(args)
+    reports = f"{args.out}/reports"
+    lines = []
+
+    def step(title):
+        sys.stdout.flush()
+        print(f"\n== {title}", flush=True)
+
+    step(f"ERC / DRC ({k.where})")
+    clean(reports)
+    erc_drc(k, folder, name, has_pcb, reports)
+    if args.fab_profile != "generic" and has_pcb:
+        fab_drc(k, folder, name, reports, args.fab_profile, args.out, tmp_root=args.tmp or None)
+    lines += summary(reports, args.fab_profile)
+
+    step("BOM" + (f" (and {base}, to compare with)" if base else ""))
+    labels = bom_labels(args.required_fields)
+    parts, listed = boms(k, folder, name, reports, labels, wanted_variants(args.variants, f"{folder}/{name}.kicad_pro"))
+    base_parts = base_boms(k, folder, name, reports, labels, listed, base) if base else None
+    write_variants(reports, listed)
+    fitted_in = lambda path: fitted(path)[0]  # noqa: E731 - kicad-cli lists not-fitted parts too
+    lines.append(f"BOM: {fitted_in(f'{reports}/bom-parts.csv')} fitted parts"
+                 + "".join(f", {v['name']} {fitted_in(v['bom'])}" for v in listed)
+                 + (f"; {base}: {fitted_in(f'{reports}/bom-parts-base.csv') if base_parts else 0}"
+                    if base_parts is not None else ""))
+
+    if "datasheets" not in skip:
+        step("Datasheets")
+        try:
+            found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
+            lines.append(f"Datasheets: {found['ok']} found, {found['broken']} broken, "
+                         f"{found['unverified']} not checked, {found['missing']} missing")
+        except StepError as e:  # an extra: the rest still runs
+            print(f"::warning::{e}: skipped", file=sys.stderr)
+    if "sourcing" not in skip:
+        step("Cost and stock")
+        sourcing(folder, args.out, args.boards, args.currency, args.choices)
+    zip_name = ""
+    if "package" not in skip and has_pcb:
+        step("Fab package")
+        made = package(k, folder, name, args.out, args.fab_profile, args.extra_formats)
+        zip_name = made["name"]
+        lines.append(f"Fab package: {made['zip']}")
+    if "requirements" not in skip:
+        step("Requirements")
+        requirements(folder, args.out, args.requirements_file.strip(), k)
+
+    step("Report")
+    counts = report(args.out, name, args.fab_profile, zip_name,
+                    ["--base-ref", base or "base", "--required", args.required_fields])
+    shown = {key: "-" if counts.get(key) is None else counts[key] for key in REPORT_OUTPUTS}
+    lines.append(f"Parts missing fields: {shown['missing_fields']} · requirements failed: "
+                 f"{shown['requirements_failed']}")
+    site = None
+    if "portal" not in skip:
+        step("Portal")
+        site = portal(folder, name, args.out)
+
+    sys.stdout.flush()
+    print(f"\n{name} ({k.where})")
+    for line in lines:
+        print("  " + line)
+    print(f"Report: {reports}/report.md")
+    if site:
+        print(f"Portal: python -m http.server --directory {args.out}/{PORTAL_DIR} 8000, "
+              f"then http://localhost:8000/{os.path.basename(site)}/")
+    return 0
+
+
 def cmd_bom(args):
     folder, name, _, note = detect.detect(args.project_dir.strip(), ".", [args.out])
     if note:
@@ -616,10 +860,7 @@ def cmd_bom(args):
     labels = bom_labels(args.required_fields)
     parts, listed = boms(k, folder, name, reports, labels, wanted_variants(args.variants, f"{folder}/{name}.kicad_pro"))
     base_parts = base_boms(k, folder, name, reports, labels, listed, args.base, args.fetch) if args.base else None
-    with open(f"{reports}/variants.json", "w", encoding="utf-8") as f:
-        json.dump([{key: v[key] for key in ("name", "description", "bom", "dir", "base_bom") if key in v}
-                   for v in listed], f, indent=2)
-        f.write("\n")
+    write_variants(reports, listed)
     sys.stdout.flush()
     print(f"\n{name} ({k.where})")
     print(f"  BOM: {counted(f'{reports}/bom-parts.csv')}")
@@ -672,6 +913,44 @@ def cmd_sourcing(args):
     folder, _, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
     if sourcing(folder, args.out, args.boards, args.currency, args.choices):
         print(f"Suppliers: {args.out}/sourcing.html")
+    return 0
+
+
+def cmd_report(args):
+    folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if args.fab_profile != "generic":
+        fab_rules(args.fab_profile)
+    options = ["--base-ref", args.base_ref or "base", "--required", args.required_fields,
+               "--cap-voltage", args.check_capacitor_voltage, "--datasheet-optional", args.datasheet_optional_refs,
+               "--portal-url", args.portal_url, "--portal-state", args.portal_state,
+               "--pages-branch", args.pages_branch, "--pages-settings-url", args.pages_settings_url,
+               "--action-ref", args.action_ref, "--run-url", args.run_url]
+    counts = report(args.out, name, args.fab_profile, args.package, options)
+
+    def shown(key):
+        return "-" if counts.get(key) is None else str(counts[key])
+
+    print(f"\n{name}\n  ERC errors: {shown('erc_errors')} · DRC errors: {shown('drc_errors')} · "
+          f"parts missing fields: {shown('missing_fields')} · requirements failed: {shown('requirements_failed')}")
+    print(f"Report: {args.out}/reports/report.md")
+    return 0
+
+
+def cmd_portal(args):
+    folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    build = {key: getattr(args, key.replace("-", "_")) for key in PORTAL_BUILD}
+    if not args.site:
+        given = [f"--{k}" for k, v in build.items() if v is not None]
+        if given:
+            raise StepError(f"{', '.join(given)} only with --site (CI); on a PC they come from git and the board")
+    site = portal(folder, name, args.out, args.site or None,
+                  {k: v for k, v in build.items() if v is not None}, args.light, args.activity)
+    if not args.site:
+        root = f"{args.out}/{PORTAL_DIR}"
+        print(f"\n{name}\n  Portal page: {site}/index.html")
+        print(f"Open it through a local web server (a browser can't load its files from disk):\n"
+              f"  python -m http.server --directory {root} 8000\n"
+              f"  then http://localhost:8000/{os.path.basename(site)}/")
     return 0
 
 
@@ -728,6 +1007,52 @@ def main(argv=None):
     p.add_argument("--choices", default="kicad-hub-sourcing.csv",
                    help="supplier picked per part, a file relative to the project folder")
     p.set_defaults(func=cmd_sourcing)
+    r = sub.add_parser("report", help="the markdown report of everything the other steps wrote")
+    add_project(r)
+    r.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
+    r.add_argument("--base-ref", default="base", help="name of what the BOM diff compares with (the bom --base)")
+    r.add_argument("--package", default=None, help="fab zip file name (default: the one in <out>/package/)")
+    r.add_argument("--required-fields", default="Footprint,Datasheet,MPN|LCSC", help="fields every part needs")
+    r.add_argument("--check-capacitor-voltage", default="true", help="true | false")
+    r.add_argument("--datasheet-optional-refs", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
+                   help="reference prefixes that need no datasheet")
+    r.add_argument("--portal-url", default="", help="this build's page in the design portal (CI)")
+    r.add_argument("--portal-state", default="serving", choices=["serving", "disabled", "unknown"],
+                   help="whether GitHub Pages serves the portal (CI)")
+    r.add_argument("--pages-branch", default="kicad-hub-site", help="branch the portal is published to (CI)")
+    r.add_argument("--pages-settings-url", default="", help="the repository's Settings → Pages page (CI)")
+    r.add_argument("--action-ref", default="", help="ref the workflow uses for the action (CI)")
+    r.add_argument("--run-url", default="", help="link to the CI run")
+    r.set_defaults(func=cmd_report)
+    w = sub.add_parser("portal", help="the design portal page: viewer, report, BOM, suppliers, downloads")
+    add_project(w)
+    w.add_argument("--site", default="", help="CI: folder for this build's page only (default: the local "
+                                              "site in <out>/portal/, page and front page)")
+    for key in PORTAL_BUILD:
+        w.add_argument(f"--{key}", default=None, type=int if key == "pr" else str,
+                       help=argparse.SUPPRESS)  # CI only, with --site: as portal.py build takes them
+    w.add_argument("--light", action="store_true", help="CI: light snapshot for the timeline")
+    w.add_argument("--activity", action="store_true", help="CI: the site has an activity page")
+    w.set_defaults(func=cmd_portal)
+    n = sub.add_parser("run", help="every step on this computer: checks, BOMs, datasheets, prices, fab "
+                                   "package, requirements, report and portal")
+    add_common(n)
+    n.add_argument("--base", default=None, help="branch or commit to compare with (default: main, else master; "
+                                                "none: no comparison)")
+    n.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
+    n.add_argument("--skip", default="", help="steps to leave out, comma-separated: " + ", ".join(RUN_STEPS))
+    n.add_argument("--required-fields", default="Footprint,Datasheet,MPN|LCSC", help="fields every part needs")
+    n.add_argument("--variants", default="auto", help="auto (all in the project) | none | a comma-separated list")
+    n.add_argument("--dirs", default="", help="extra folders with datasheet files, comma-separated")
+    n.add_argument("--check-links", default="true", help="true | false: check that the datasheet links answer")
+    n.add_argument("--boards", default="1,5,10,100", help="batch sizes to price")
+    n.add_argument("--currency", default="USD")
+    n.add_argument("--choices", default="kicad-hub-sourcing.csv", help="supplier picked per part (project folder)")
+    n.add_argument("--extra-formats", default="", help="odb, ipc2581 (comma-separated)")
+    n.add_argument("--requirements-file", default="kicad-hub-requirements.yaml",
+                   help="requirements file, relative to the project folder")
+    n.add_argument("--tmp", default="", help="folder for temporary copies (default: the system's)")
+    n.set_defaults(func=cmd_run)
     args = ap.parse_args(argv)
     try:
         return args.func(args)

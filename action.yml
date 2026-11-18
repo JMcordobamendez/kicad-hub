@@ -469,7 +469,7 @@ runs:
       id: report
       shell: bash
       env:
-        NAME: ${{ steps.detect.outputs.name }}
+        PROJECT_DIR: ${{ steps.detect.outputs.dir }}
         OUT: ${{ inputs.output-dir }}
         REQUIRED: ${{ inputs.required-fields }}
         CAP_VOLTAGE: ${{ inputs.check-capacitor-voltage }}
@@ -483,22 +483,14 @@ runs:
         FAB_PROFILE: ${{ inputs.fab-profile }}
       run: |
         set -euo pipefail
-        r="$OUT/reports"
-        python3 "$GITHUB_ACTION_PATH/scripts/report.py" \
-          --name "$NAME" --bom "$r/bom-parts.csv" --base-bom "$r/bom-parts-base.csv" --base-ref "${BASE_REF:-base}" \
-          --erc "$r/erc.json" --drc "$r/drc.json" --drc-fab "$r/drc-fab.json" --fab-profile "$FAB_PROFILE" \
-          --required "$REQUIRED" --cap-voltage "$CAP_VOLTAGE" \
-          --datasheets "$r/datasheets.json" --datasheet-optional "$DS_OPTIONAL" \
-          --package "$PACKAGE" --package-warnings "$r/fab-warnings.txt" \
-          --variants "$r/variants.json" --variant-sync "$r/variant-sync.json" --requirements "$r/requirements.json" --visual "$r/visual.json" --sourcing "$r/sourcing.json" \
+        # The report of everything the steps above wrote in $OUT/reports, added to the job
+        # summary; its counts become this step's outputs. The engine: scripts/kicad_hub.py
+        python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" report --project-dir "$PROJECT_DIR" --out "$OUT" \
+          --fab-profile "$FAB_PROFILE" --base-ref "${BASE_REF:-base}" --package "$PACKAGE" \
+          --required-fields "$REQUIRED" --check-capacitor-voltage "$CAP_VOLTAGE" --datasheet-optional-refs "$DS_OPTIONAL" \
           --portal-url "$PORTAL_URL" --portal-state "${PORTAL_STATE:-unknown}" \
-          --pages-branch "$PAGES_BRANCH" --pages-settings-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/settings/pages" --action-ref "$ACTION_REF" \
-          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-          --out "$r/report.md" --out-json "$r/counts.json"
-        cat "$r/report.md" >> "$GITHUB_STEP_SUMMARY"
-        for k in erc_errors drc_errors missing_fields requirements_failed; do
-          echo "$k=$(jq -r ".$k // \"-\"" "$r/counts.json")" >> "$GITHUB_OUTPUT"
-        done
+          --pages-branch "$PAGES_BRANCH" --pages-settings-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/settings/pages" \
+          --action-ref "$ACTION_REF" --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
     - name: Comment on pull request
       if: github.event_name == 'pull_request' && inputs.comment == 'true'
@@ -613,8 +605,9 @@ runs:
         renders=()
         [ -f "$RUNNER_TEMP/kicad-hub-renders/png/renders.json" ] && renders=(--renders "$RUNNER_TEMP/kicad-hub-renders/png")
         branch=""; [ "$KIND" = branch ] && branch="$REF_NAME"
-        portal() { python3 "$GITHUB_ACTION_PATH/scripts/portal.py" build --out "$OUT" \
-          --project-dir "$PROJECT_DIR" --name "$NAME" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
+        # one build's page (the engine: scripts/kicad_hub.py); publishing it stays here, GitHub only
+        portal() { python3 "$GITHUB_ACTION_PATH/scripts/kicad_hub.py" portal --out "$OUT" \
+          --project-dir "$PROJECT_DIR" --rev "$REV" --sha "$SHA" --repo "$GITHUB_REPOSITORY" \
           --server "$GITHUB_SERVER_URL" --title "$TITLE" --base-ref "$BASE_REF" --branch "$branch" \
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "${commit[@]}" "${renders[@]}" "${activity[@]}" "$@"; }
         portal --site "$site" --label "$LABEL" --kind "$KIND"

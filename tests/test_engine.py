@@ -766,5 +766,275 @@ class RequirementsTest(EngineCase):
         self.assertFalse(os.path.exists(".kicad-hub/.requirements.py"))
 
 
+
+class ReportTest(EngineCase):
+    """The real report.py, on the files the other steps leave in <out>/reports."""
+
+    def setUp(self):
+        super().setUp()
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV)
+        self.put(".kicad-hub/reports/variants.json", "[]")
+        self.put(".kicad-hub/reports/erc.json", json.dumps(
+            {"sheets": [{"violations": [{"severity": "error"}, {"severity": "warning"}]}]}))
+        self.put(".kicad-hub/reports/drc.json", json.dumps(
+            {"violations": [{"severity": "error"}, {"severity": "error"}], "unconnected_items": []}))
+        self.put(".kicad-hub/reports/drc-fab.json", json.dumps({"violations": [
+            {"type": "annular_width", "severity": "error", "items": [],
+             "description": "Ancho de anular (regla 'JLC min annular ring' mínimo 0,1800 mm; real 0,1500 mm)"}],
+            "unconnected_items": []}))
+        for name in ("GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY"):
+            self.addCleanup(os.environ.pop, name, None)
+
+    def outputs(self, path):
+        return dict(line.split("=", 1) for line in self.read(path).splitlines())
+
+    def test_report_outputs_and_job_summary(self):
+        os.environ["GITHUB_OUTPUT"] = os.path.join(self.tmp.name, "out.txt")
+        os.environ["GITHUB_STEP_SUMMARY"] = os.path.join(self.tmp.name, "summary.md")
+        code, out, err = self.engine_plain("report", "--fab-profile", "jlcpcb", "--base-ref", "main")
+        self.assertEqual(code, 0, err)
+        md = self.read(".kicad-hub/reports/report.md")
+        self.assertIn("## KiCad checks: board", md)
+        self.assertIn("| Ancho de anular: JLC min annular ring | 1 |", md)   # the rule names of the profile
+        self.assertIn("### BOM changes", md)
+        self.assertEqual(self.read(os.environ["GITHUB_STEP_SUMMARY"]), md)
+        self.assertEqual(self.outputs(os.environ["GITHUB_OUTPUT"]),
+                         {"erc_errors": "1", "drc_errors": "2", "missing_fields": "4", "requirements_failed": "-"})
+        self.assertEqual(self.load(".kicad-hub/reports/counts.json")["drc_fab_new"], 1)
+        self.assertIn("ERC errors: 1 · DRC errors: 2 · parts missing fields: 4 · requirements failed: -", out)
+        self.assertIn("Report: .kicad-hub/reports/report.md", out)
+
+    def test_files_not_written_are_left_out(self):
+        for name in ("erc.json", "drc.json", "drc-fab.json", "variants.json"):
+            os.remove(f".kicad-hub/reports/{name}")
+        os.environ["GITHUB_OUTPUT"] = os.path.join(self.tmp.name, "out.txt")
+        code, out, err = self.engine_plain("report")
+        self.assertEqual(code, 0, err)
+        self.assertIn("| ERC | — | — | — |", self.read(".kicad-hub/reports/report.md"))
+        self.assertEqual(self.outputs(os.environ["GITHUB_OUTPUT"])["erc_errors"], "-")
+
+    def test_the_inputs_given_to_report_py(self):
+        seen = {}
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda name, *a, **k: seen.update(name=name, args=a) or real(name, *a, **k)
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        self.put(".kicad-hub/reports/bom-parts-base.csv", BOM_CSV)
+        self.assertEqual(self.engine_plain("report", "--fab-profile", "jlcpcb")[0], 0)
+        args = list(seen["args"])
+        given = {args[i]: args[i + 1] for i in range(0, len(args) - 1) if args[i].startswith("--")}
+        self.assertEqual(seen["name"], "report.py")
+        self.assertEqual(given["--base-bom"], ".kicad-hub/reports/bom-parts-base.csv")
+        self.assertEqual(os.path.normpath(given["--fab-rules"]),
+                         os.path.normpath(os.path.join(SCRIPTS, "..", "fab-profiles", "jlcpcb", "rules.kicad_dru")))
+        for missing in ("--datasheets", "--sourcing", "--requirements", "--visual", "--package"):
+            self.assertNotIn(missing, given)
+
+    def test_fab_package_found_or_none(self):
+        self.put(".kicad-hub/package/board-A-fab.zip", "zip")
+        self.put(".kicad-hub/reports/fab-warnings.txt", "Via drill too small\n")
+        self.assertEqual(self.engine_plain("report")[0], 0)
+        md = self.read(".kicad-hub/reports/report.md")
+        self.assertIn("`board-A-fab.zip` in the artifact", md)
+        self.assertIn("- ⚠️ Via drill too small", md)
+        self.assertEqual(self.engine_plain("report", "--package", "")[0], 0)      # CI: no package this run
+        self.assertNotIn("### Fab package", self.read(".kicad-hub/reports/report.md"))
+
+    def test_needs_the_bom_and_a_known_profile(self):
+        code, _, err = self.engine_plain("report", "--fab-profile", "nofab")
+        self.assertEqual(code, 1)
+        self.assertIn("Unknown fab-profile 'nofab'", err)
+        os.remove(".kicad-hub/reports/bom-parts.csv")
+        code, _, err = self.engine_plain("report")
+        self.assertEqual(code, 1)
+        self.assertIn("bom-parts.csv is missing: run `bom` first", err)
+
+    def test_a_failing_report_is_an_error_and_leaves_nothing_old(self):
+        self.put(".kicad-hub/reports/report.md", "old")
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda *a, **k: 1
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        code, _, err = self.engine_plain("report")
+        self.assertEqual(code, 1)
+        self.assertIn("report.py failed", err)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/report.md"))
+
+
+class PortalTest(EngineCase):
+    """The real portal.py: the local site on a PC, one page in CI."""
+
+    def setUp(self):
+        super().setUp()
+        self.put("hw/board.kicad_sch", "(kicad_sch)\n")
+        self.put("hw/board.kicad_pcb", OUTLINE.replace("(kicad_pcb", '(kicad_pcb\n  (title_block (rev "B"))'))
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV)
+        self.put(".kicad-hub/reports/report.md", "<!-- kicad-hub:board -->\n## KiCad checks: board\n")
+        self.put(".kicad-hub/reports/counts.json", json.dumps({"erc_errors": 0, "drc_errors": 1}))
+
+    git = BomTest.git
+
+    def commit(self, message="first"):
+        self.git("init", "-q")
+        self.put(".gitignore", ".kicad-hub/\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def test_repo_and_folder_names(self):
+        for url in ("https://github.com/Owner/Board.git", "git@github.com:Owner/Board.git",
+                    "ssh://git@github.com/Owner/Board", "https://user@github.com/Owner/Board/"):
+            self.assertEqual(kicad_hub.github_repo(url), ("https://github.com", "Owner/Board"), url)
+        self.assertEqual(kicad_hub.github_repo(""), ("", ""))
+        self.assertEqual(kicad_hub.site_folder("feat/new board"), "feat_new_board")
+        self.assertEqual(kicad_hub.site_folder("pr-3"), "branch-pr-3")
+        self.assertEqual(kicad_hub.site_folder("releases"), "branch-releases")
+
+    def test_local_site_of_the_working_tree(self):
+        self.commit("-first line")
+        self.git("remote", "add", "origin", "git@github.com:Owner/Board.git")
+        code, out, err = self.engine_plain("portal")
+        self.assertEqual(code, 0, err)
+        page = ".kicad-hub/portal/main"
+        build = self.load(f"{page}/build.json")
+        self.assertEqual((build["label"], build["kind"], build["branch"], build["rev"], build["name"]),
+                         ("main", "branch", "main", "B", "board"))
+        self.assertEqual(build["commit"]["message"], "-first line")
+        self.assertEqual(build["counts"], {"erc_errors": 0, "drc_errors": 1})
+        self.assertTrue(os.path.isfile(f"{page}/design/board.kicad_sch"))
+        self.assertTrue(os.path.isfile(f"{page}/bom-parts.csv"))
+        html = self.read(f"{page}/index.html")
+        self.assertIn('"repo":"Owner/Board"', html)
+        self.assertIn("## KiCad checks: board", html)                    # the report, without its marker
+        self.assertNotIn("kicad-hub:board", html)
+        self.assertTrue(os.path.isfile(".kicad-hub/portal/index.html"))  # the site around it
+        self.assertTrue(os.path.isfile(".kicad-hub/portal/assets/kicanvas.js"))
+        self.assertEqual([b["path"] for b in self.load(".kicad-hub/portal/builds.json")], ["main/"])
+        self.assertIn(f"Portal page: {page}/index.html", out)
+        self.assertIn("python -m http.server --directory .kicad-hub/portal 8000", out)
+        self.assertIn("http://localhost:8000/main/", out)
+
+    def test_local_changes_other_branch_and_no_git(self):
+        code, _, err = self.engine_plain("portal")                       # not a repository
+        self.assertEqual(code, 0, err)
+        build = self.load(".kicad-hub/portal/local/build.json")
+        self.assertEqual((build["label"], build["sha"]), ("local", "0" * 40))
+        self.assertIn('"repo":"local/board"', self.read(".kicad-hub/portal/local/index.html"))
+        self.commit()
+        self.git("checkout", "-q", "-b", "feat/rev-c")
+        self.put("hw/board.kicad_sch", "(kicad_sch changed)\n")
+        self.assertEqual(self.engine_plain("portal")[0], 0)
+        self.assertEqual(self.load(".kicad-hub/portal/feat_rev-c/build.json")["label"], "feat/rev-c + local changes")
+        self.assertEqual(sorted(b["path"] for b in self.load(".kicad-hub/portal/builds.json")),
+                         ["feat_rev-c/", "local/"])                      # earlier local builds stay listed
+
+    def test_ci_page_only_with_what_the_action_passes(self):
+        self.commit()
+        code, _, err = self.engine_plain("portal", "--site", "site", "--label", "PR #7", "--kind", "pr", "--sha", "abc",
+                                         "--repo", "o/r", "--rev", "", "--title", "Fix", "--base-ref", "main",
+                                         "--light", "--commit-message=")
+        self.assertEqual(code, 0, err)
+        build = self.load("site/build.json")
+        self.assertEqual((build["label"], build["kind"], build["sha"], build["rev"], build["title"]),
+                         ("PR #7", "pr", "abc", "", "Fix"))
+        self.assertNotIn("commit", build)                                 # nothing taken from git in CI
+        self.assertTrue(build["light"])
+        self.assertFalse(os.path.exists(".kicad-hub/portal"))             # no local site
+
+    def test_build_options_only_with_site(self):
+        code, _, err = self.engine_plain("portal", "--label", "x")
+        self.assertEqual(code, 1)
+        self.assertIn("--label only with --site", err)
+
+    def test_a_failing_portal_is_an_error(self):
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda *a, **k: 1
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        code, _, err = self.engine_plain("portal")
+        self.assertEqual(code, 1)
+        self.assertIn("portal.py build failed", err)
+
+
+class RunTest(EngineCase):
+    """kicad_hub.py run: every step in a row, as on a PC (fake kicad-cli and fabnotes.py)."""
+
+    git = BomTest.git
+
+    def setUp(self):
+        super().setUp()
+        self.put("hw/board.kicad_pro", VARIANTS)
+        self.put("hw/board.kicad_sch", "R1 10k\n")
+        self.put("hw/board.kicad_pcb", '(kicad_pcb (title_block (rev "B"))\n' + OUTLINE)
+        notes = os.path.join(self.tmp.name, "fake_fabnotes.py")
+        with open(notes, "w") as f:
+            f.write(FAKE_FABNOTES)
+        real = kicad_hub.FABNOTES
+        kicad_hub.FABNOTES = notes
+        self.addCleanup(setattr, kicad_hub, "FABNOTES", real)
+
+    def commit(self, branch="main"):
+        self.git("-c", f"init.defaultBranch={branch}", "init", "-q")
+        self.put(".gitignore", ".kicad-hub/\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "first")
+
+    def run_all(self, *extra):
+        return self.engine("run", "--kicad-python", sys.executable, "--check-links", "false", *extra)
+
+    def test_every_step_against_main(self):
+        self.commit()
+        self.put("hw/board.kicad_sch", SCH)                               # edited since the commit
+        code, out, err = self.run_all("--skip", "sourcing", "--fab-profile", "jlcpcb")
+        self.assertEqual(code, 0, err)
+        r = ".kicad-hub/reports"
+        for path in ("erc.json", "drc.json", "drc-fab.json", "bom-parts.csv", "bom-parts-base.csv",
+                     "variants.json", "datasheets.json", "report.md", "counts.json"):
+            self.assertTrue(os.path.isfile(f"{r}/{path}"), path)
+        self.assertFalse(os.path.exists(f"{r}/sourcing.json"))            # skipped
+        self.assertEqual(len(glob.glob(".kicad-hub/package/board-B-fab.zip")), 1)
+        md = self.read(f"{r}/report.md")
+        self.assertIn("### BOM changes vs `main`", md)
+        self.assertIn("`board-B-fab.zip` in the artifact", md)
+        self.assertIn("**DRC vs jlcpcb rules", md)
+        self.assertEqual(self.load(".kicad-hub/portal/main/build.json")["label"],
+                         "main + local changes")
+        for title in ("== ERC / DRC", "== BOM (and main, to compare with)", "== Datasheets", "== Fab package",
+                      "== Requirements", "== Report", "== Portal"):
+            self.assertIn(title, out)
+        self.assertNotIn("== Cost and stock", out)
+        self.assertIn("BOM: 3 fitted parts, lite 2, pro x 3; main: 1", out)
+        self.assertIn("Report: .kicad-hub/reports/report.md", out)
+        self.assertIn("Portal: python -m http.server --directory .kicad-hub/portal 8000, "
+                      "then http://localhost:8000/main/", out)
+
+    def test_no_base_and_most_steps_skipped(self):
+        self.commit()
+        code, out, err = self.run_all("--base", "none", "--skip", "datasheets,sourcing,package,requirements,portal")
+        self.assertEqual(code, 0, err)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/bom-parts-base.csv"))
+        self.assertFalse(os.path.exists(".kicad-hub/package"))
+        self.assertFalse(os.path.exists(".kicad-hub/portal"))
+        self.assertIn("### BOM changes\n", self.read(".kicad-hub/reports/report.md"))
+        self.assertNotIn("Portal:", out)
+
+    def test_default_base(self):
+        self.assertEqual(kicad_hub.default_base(), "")                    # not a repository
+        self.commit("master")
+        self.assertEqual(kicad_hub.default_base(), "master")
+        self.git("branch", "main")
+        self.assertEqual(kicad_hub.default_base(), "main")
+
+    def test_board_without_outline_has_no_package(self):
+        self.put("hw/board.kicad_pcb", "(kicad_pcb)\n")
+        code, out, err = self.run_all("--base", "none", "--skip", "sourcing,portal")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("== Fab package", out)
+        self.assertIn("DRC: skipped (no board outline yet)", out)
+
+    def test_wrong_options_stop_before_any_check(self):
+        for extra, message in ((("--skip", "bom"), "--skip: unknown step bom"),
+                               (("--fab-profile", "nofab"), "Unknown fab-profile 'nofab'")):
+            code, _, err = self.run_all(*extra)
+            self.assertEqual(code, 1)
+            self.assertIn(message, err)
+            self.assertFalse(os.path.exists(".kicad-hub/reports/erc.json"))
+
 if __name__ == "__main__":
     unittest.main()

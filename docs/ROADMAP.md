@@ -86,10 +86,11 @@ settings, manual section for GitHub Desktop), comparing the commits of a pull re
 the UTF-8 locale fix and the fixes from the first real use (one of the owner's boards
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
-from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-the per-part BOMs, datasheets, prices, the fab package and the requirements run from
-`scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
-then the KiCad plugin (C) and versions without the terminal (D).
+from phase A; the engine (B): every step from ERC/DRC to the report and the portal page
+runs from `scripts/kicad_hub.py`, and `kicad_hub.py run` does them all on a PC (only the
+first piece has been tried with the real KiCad there: `run` is next to try on the owner's
+PC); left in B: before/after images without PIL, KiBot optional and `serve`. Then the KiCad
+plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
@@ -420,6 +421,52 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       numbers, text, lists), and anything else YAML allows is refused with its line
       number, never guessed. Tested against PyYAML on the example's and the template's
       files, and with `import yaml` made to fail
+- [x] **Sixth piece: `kicad_hub.py report`** (2026-11-17): the markdown report (the PR
+      comment and the job summary) from whatever the other steps left in
+      `<out>/reports`; a file a step did not write (not run, or no board yet) is left
+      out and its section skipped, as before. It finds the fab zip in `<out>/package/`,
+      passes the profile's rules file for the fab DRC table (see "Language of local
+      reports"), adds the report to the job summary and sets the step outputs the strict
+      mode reads, without `jq`. The action's "Report" step is one call. On a PC:
+      `report --base-ref main` after `bom --base main`; `run` will pass it by itself
+- [x] **Seventh piece: `kicad_hub.py portal`** (2026-11-17): the design portal page. On a
+      PC it builds the working tree's page in `<out>/portal/<branch>/` (label, commit, board
+      revision and the GitHub repository from git and the board; "+ local changes" when the
+      project has uncommitted edits) and the site around it (front page, builds list, viewer
+      scripts), so it opens with `python -m http.server --directory .kicad-hub/portal`;
+      pages of other branches built earlier stay listed. In CI the action's three page
+      builds (the build, the history snapshot, the PR commit snapshot) call it with `--site`
+      and everything they passed before; nothing is guessed from git there. Publishing to
+      the site branch stays in the action (GitHub only). Checked in Chromium on the example
+      board: viewer (schematic and PCB) and front page work from the local server. Limits:
+      without a GitHub `origin` the "on GitHub" and commit links point to `local/<board>`;
+      the page has no KiBot outputs (schematic PDF, BOM HTML, iBOM) until KiBot is optional
+- [x] **Language of local reports** (2026-11-17): on a PC `kicad-cli` writes its messages
+      in the system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI
+      in English. The report grouped the fab DRC violations by reading English text
+      (`(rule '…'`), which a Spanish KiCad writes as `(regla '…'`. Now
+      `scripts/drc_groups.py` groups them by the violation's `type` (the same in every
+      language) and by the fab rule's name, found quoted in the text: the names come
+      from the profile's `.kicad_dru` and KiCad never translates them. The row shows the
+      title as `kicad-cli` wrote it, so a local report reads "Ancho de anular: JLC min
+      annular ring". Violations of no fab rule (e.g. a netclass clearance) are now one row
+      per type instead of one per measured value. Tests in `tests/test_drc_groups.py` use
+      the strings of KiCad 10's Spanish translation (`translation/pofiles/es.po`). No other
+      script reads `kicad-cli`'s text: the rest uses the JSON's `severity` and counts
+- [x] `kicad-hub run`: the rest of the sequence that was bash inside `action.yml`
+      moved to `scripts/kicad_hub.py`, one step per pull request so CI stayed green, in
+      the action's order (pieces above). **`kicad_hub.py run`** (2026-11-17) does them all
+      on a PC: ERC/DRC (+ fab DRC), BOMs compared with `main` (else `master`; `--base`
+      to choose, `none` for no comparison), datasheets, prices, fab package,
+      requirements, report and portal, each step titled in the terminal, then a summary
+      with where the report and the portal are. `--skip` leaves out datasheets, sourcing,
+      package, requirements or portal (e.g. no network). The action keeps calling the
+      steps one by one: it has GitHub-only steps between them. The visual diff, the page
+      renders and the KiBot outputs stay bash in the action until the two items below (no
+      PIL or `rsvg-convert` locally; KiBot optional). **`run` itself not run with the real
+      KiCad yet**; each of its steps up to `requirements` was, in the second run below
+      (no fab notes dialog; 65 s for the fab package). To try on the owner's PC: `run`,
+      `report` and `portal`
 - [x] **Second run on the owner's PC** (2026-11-17, KiCad 10.0.5 and its own Python,
       Windows git): all 73 tests pass on Windows (2 skipped: a Linux-only one, and the
       comparison with PyYAML, which KiCad's Python lacks). `checks`, `bom --base HEAD`,
@@ -430,22 +477,14 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       the "font not found" message came out as a line of text, no dialog. The base
       worktree was removed and no temporary file was left. Only finding, fixed: the
       `bom` summary counted not-fitted rows ("59 parts" for 48 fitted)
-- [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
-      system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
-      English. The report groups the fab DRC violations by reading English text
-      (`(rule '…'`), so it has to group by violation type instead, or `kicad-cli` be
-      made to answer in English, before the report runs locally
-- [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
-      moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Left: report and portal; then one `run` command that does
-      them all and compares against `main` by default
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders
 - [ ] KiBot optional (see decisions): schematic PDF from `kicad-cli sch export pdf`, BOM
       HTML from our own script, iBOM only where its generator is available
 - [ ] `kicad-hub serve`: a small local server for the portal (it can't load its JSON and
-      KiCad files from `file://`); `--quick` for ERC/DRC and BOM only
+      KiCad files from `file://`; until then `python -m http.server`, see the seventh
+      piece); `--quick` for ERC/DRC and BOM only
 - Not in local mode (GitHub only): the PR comment, pinned comments, the activity page's
   PRs and reviews, publishing the portal, releases
 

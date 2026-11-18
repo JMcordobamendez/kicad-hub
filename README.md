@@ -597,7 +597,8 @@ fab-profiles/               optional per-fab DRC rules and assembly column layou
 scripts/                    kicad_hub.py (the engine: steps shared by the action and local mode),
                             kicad.py (runs kicad-cli, installed or in Docker),
                             detect.py (finds the KiCad project), yaml_subset.py (reads the
-                            requirements file where there is no PyYAML), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
+                            requirements file where there is no PyYAML), fab_assembly.py, report.py, drc_groups.py
+                            (groups fab DRC violations in any language), requirements.py, datasheets.py, fabnotes.py,
                             variant_cpl.py, variant_sync.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
@@ -639,12 +640,19 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   creates the GitHub Release. A tag pushed by a workflow does not start other workflows,
   so the tests that count are those of that commit on `main`.
 - **Local mode (in progress, roadmap phase 7B):** `scripts/kicad_hub.py` is the engine
-  the action is moving to. Today it runs the checks with the KiCad installed on a PC, from
-  the repository's folder: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
+  the action is moving to. On a PC, from the repository's folder,
+  `python scripts/kicad_hub.py run` does every step below with the KiCad installed there
+  and compares with `main` (`--base <branch>` or `--base none`; `--skip sourcing,…` to
+  leave steps out). Step by step: `python scripts/kicad_hub.py checks` (ERC and DRC reports in
   `.kicad-hub/reports/`; `--fab-profile jlcpcb` adds the fab DRC) and
   `python scripts/kicad_hub.py bom --base main` (one row per part, per variant too, and
   the same from `main` to compare with), then `datasheets`, `sourcing`, `package` (the
-  fab zip in `.kicad-hub/package/`) and `requirements` on those BOMs.
+  fab zip in `.kicad-hub/package/`) and `requirements` on those BOMs, and last
+  `report --base-ref main` (`.kicad-hub/reports/report.md`, the same report as the PR
+  comment, from whatever of the above was run) and `portal` (the design portal of the
+  working tree in `.kicad-hub/portal/`, one page per branch built; open it with
+  `python -m http.server --directory .kicad-hub/portal 8000`, since a browser can't load
+  its files straight from disk).
   Supplier keys on a PC go in a personal file outside the repository
   (`%APPDATA%\kicad-hub\keys.env` on Windows, `~/.config/kicad-hub/keys.env` elsewhere),
   one `NAME=value` per line with the names of the [secrets](#supplier-api-keys). It finds `kicad-cli` by
