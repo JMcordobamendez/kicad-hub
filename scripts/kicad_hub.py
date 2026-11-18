@@ -54,6 +54,7 @@ The action calls it step by step while the rest of its steps move here (roadmap,
 Run it from the repository's folder: paths are relative to it.
 """
 import argparse
+import csv
 import glob
 import hashlib
 import json
@@ -212,6 +213,19 @@ def export_bom(k, sch, out, labels, variant=None):
         what = f"variant {variant} of {sch}" if variant else sch
         raise StepError(f"kicad-cli ({k.where}) did not write the BOM of {what}: see its messages above")
     return bom_virtual.drop_virtual(out)
+
+
+def fitted(path):
+    """(fitted parts, all parts) of a per-part BOM: rows marked DNP are not fitted."""
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        rows = [r for r in csv.DictReader(f) if r.get("Reference")]
+    return sum(1 for r in rows if (r.get("DNP") or "").strip() in ("", "~")), len(rows)
+
+
+def counted(path):
+    """'48 fitted parts (11 more not fitted)' for the terminal."""
+    n, total = fitted(path)
+    return f"{n} fitted parts" + (f" ({total - n} more not fitted)" if total > n else "")
 
 
 def project_variants(pro):
@@ -788,8 +802,11 @@ def cmd_run(args):
     parts, listed = boms(k, folder, name, reports, labels, wanted_variants(args.variants, f"{folder}/{name}.kicad_pro"))
     base_parts = base_boms(k, folder, name, reports, labels, listed, base) if base else None
     write_variants(reports, listed)
-    lines.append(f"BOM: {parts} parts" + "".join(f", {v['name']} {v['parts']}" for v in listed)
-                 + (f"; {base}: {base_parts}" if base_parts is not None else ""))
+    fitted_in = lambda path: fitted(path)[0]  # noqa: E731 - kicad-cli lists not-fitted parts too
+    lines.append(f"BOM: {fitted_in(f'{reports}/bom-parts.csv')} fitted parts"
+                 + "".join(f", {v['name']} {fitted_in(v['bom'])}" for v in listed)
+                 + (f"; {base}: {fitted_in(f'{reports}/bom-parts-base.csv') if base_parts else 0}"
+                    if base_parts is not None else ""))
 
     if "datasheets" not in skip:
         step("Datasheets")
@@ -846,11 +863,12 @@ def cmd_bom(args):
     write_variants(reports, listed)
     sys.stdout.flush()
     print(f"\n{name} ({k.where})")
-    print(f"  BOM: {parts} parts")
+    print(f"  BOM: {counted(f'{reports}/bom-parts.csv')}")
     for v in listed:
-        print(f"  Variant {v['name']}: {v['parts']} parts")
+        print(f"  Variant {v['name']}: {counted(v['bom'])}")
     if base_parts is not None:
-        print(f"  {args.base}: {base_parts} parts (to compare with)")
+        base = f"{reports}/bom-parts-base.csv"
+        print(f"  {args.base}: {counted(base) if base_parts else '0 parts (the board is new)'} (to compare with)")
     print(f"BOMs: {reports}/bom-parts*.csv")
     return 0
 

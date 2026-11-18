@@ -413,8 +413,7 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       none). The action's longest step, 80 lines of bash, is one call; the engine sets
       its outputs. `fabnotes.py` runs with a Python that has `pcbnew`: the image's in CI,
       on a PC the one beside `kicad-cli` (found by itself, or `--kicad-python`).
-      **Not tried on a PC yet**: the README warned that `fabnotes.py` may open a "font
-      not found" dialog on Windows that blocks until closed; to check on the owner's PC
+      Tried on the owner's PC: no dialog (see the second run below)
 - [x] **Fifth piece: `kicad_hub.py requirements`** (2026-11-17): the requirements check
       from the engine. In CI it still runs inside the image, with PyYAML. On a PC,
       where KiCad's Python has no PyYAML, `requirements.py` reads the file with
@@ -464,8 +463,20 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       package, requirements or portal (e.g. no network). The action keeps calling the
       steps one by one: it has GitHub-only steps between them. The visual diff, the page
       renders and the KiBot outputs stay bash in the action until the two items below (no
-      PIL or `rsvg-convert` locally; KiBot optional). **Not run with the real KiCad yet**:
-      to try on the owner's PC (the fab notes dialog, see the fourth piece, and the time)
+      PIL or `rsvg-convert` locally; KiBot optional). **`run` itself not run with the real
+      KiCad yet**; each of its steps up to `requirements` was, in the second run below
+      (no fab notes dialog; 65 s for the fab package). To try on the owner's PC: `run`,
+      `report` and `portal`
+- [x] **Second run on the owner's PC** (2026-11-17, KiCad 10.0.5 and its own Python,
+      Windows git): all 73 tests pass on Windows (2 skipped: a Linux-only one, and the
+      comparison with PyYAML, which KiCad's Python lacks). `checks`, `bom --base HEAD`,
+      `datasheets`, `sourcing`, `package --fab-profile jlcpcb` and `requirements` all
+      ended by themselves, with the same results as CI on the example board (ERC 5/13,
+      DRC 237/46, 408 jlcpcb violations, 48 and 43 fitted parts, 6 datasheet links,
+      6 of 7 requirements, the same fab warning). **`package` did not hang**: 65 s, and
+      the "font not found" message came out as a line of text, no dialog. The base
+      worktree was removed and no temporary file was left. Only finding, fixed: the
+      `bom` summary counted not-fitted rows ("59 parts" for 48 fitted)
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders

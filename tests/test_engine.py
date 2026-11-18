@@ -336,8 +336,15 @@ class BomTest(EngineCase):
                          "Reference,Value,Footprint,Datasheet,${DNP},MPN,Manufacturer,LCSC,Voltage,Mouser")
         self.assertEqual(args[args.index("--group-by") + 1], "")
         self.assertEqual(args[args.index("--ref-range-delimiter") + 1], "")
-        self.assertIn("BOM: 3 parts", out)
-        self.assertIn("Variant lite: 2 parts", out)
+        self.assertIn("BOM: 3 fitted parts\n", out)
+        self.assertIn("Variant lite: 2 fitted parts\n", out)
+
+    def test_summary_counts_fitted_parts(self):
+        # kicad-cli writes not-fitted parts too, with DNP set: the summary must not count them
+        r = ".kicad-hub/reports"
+        self.put(f"{r}/x.csv", "Reference,Value,DNP\nR1,1k,\nTP1,TP,DNP\nTP2,TP,DNP\nC1,1u,~\n")
+        self.assertEqual(kicad_hub.fitted(f"{r}/x.csv"), (2, 4))
+        self.assertEqual(kicad_hub.counted(f"{r}/x.csv"), "2 fitted parts (2 more not fitted)")
 
     def test_variants_none_or_a_list(self):
         self.assertEqual(self.bom("--variants", "none")[0], 0)
@@ -384,7 +391,7 @@ class BomTest(EngineCase):
         self.assertEqual(variants["lite"]["base_bom"], f"{r}/bom-parts-variant-lite-base.csv")
         self.assertNotIn("base_bom", variants["pro x"])           # that variant did not exist then
         self.assertFalse(os.path.exists(kicad_hub.BASE_DIR))      # the worktree is gone
-        self.assertIn("HEAD: 2 parts", out)
+        self.assertIn("HEAD: 2 fitted parts (to compare with)", out)
 
     def test_base_where_the_board_did_not_exist(self):
         self.git("init", "-q")
@@ -992,7 +999,7 @@ class RunTest(EngineCase):
                       "== Requirements", "== Report", "== Portal"):
             self.assertIn(title, out)
         self.assertNotIn("== Cost and stock", out)
-        self.assertIn("BOM: 3 parts, lite 2, pro x 3; main: 1", out)
+        self.assertIn("BOM: 3 fitted parts, lite 2, pro x 3; main: 1", out)
         self.assertIn("Report: .kicad-hub/reports/report.md", out)
         self.assertIn("Portal: python -m http.server --directory .kicad-hub/portal 8000, "
                       "then http://localhost:8000/main/", out)

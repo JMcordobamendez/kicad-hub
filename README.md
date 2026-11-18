@@ -662,8 +662,9 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   them (no KiCad needed); CI runs them in the `unit` job.
 - The Python scripts can be run locally against files exported with a local
   `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` needs
-  KiCad's own Python (`pcbnew`); on Windows it may open a "font not found" dialog
-  that blocks until closed — that doesn't happen in CI.
+  KiCad's own Python (`pcbnew`). Run from a terminal with KiCad 10.0.5 on Windows, a
+  missing font is only a line of text ("Font 'Ubuntu Sans' not found; substituting…");
+  some older setups showed it as a dialog that waits until it is closed.
 
 ## Report notes
 
