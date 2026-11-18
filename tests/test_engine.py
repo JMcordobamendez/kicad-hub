@@ -759,5 +759,97 @@ class RequirementsTest(EngineCase):
         self.assertFalse(os.path.exists(".kicad-hub/.requirements.py"))
 
 
+
+class ReportTest(EngineCase):
+    """The real report.py, on the files the other steps leave in <out>/reports."""
+
+    def setUp(self):
+        super().setUp()
+        self.put(".kicad-hub/reports/bom-parts.csv", BOM_CSV)
+        self.put(".kicad-hub/reports/variants.json", "[]")
+        self.put(".kicad-hub/reports/erc.json", json.dumps(
+            {"sheets": [{"violations": [{"severity": "error"}, {"severity": "warning"}]}]}))
+        self.put(".kicad-hub/reports/drc.json", json.dumps(
+            {"violations": [{"severity": "error"}, {"severity": "error"}], "unconnected_items": []}))
+        self.put(".kicad-hub/reports/drc-fab.json", json.dumps({"violations": [
+            {"type": "annular_width", "severity": "error", "items": [],
+             "description": "Ancho de anular (regla 'JLC min annular ring' mínimo 0,1800 mm; real 0,1500 mm)"}],
+            "unconnected_items": []}))
+        for name in ("GITHUB_OUTPUT", "GITHUB_STEP_SUMMARY"):
+            self.addCleanup(os.environ.pop, name, None)
+
+    def outputs(self, path):
+        return dict(line.split("=", 1) for line in self.read(path).splitlines())
+
+    def test_report_outputs_and_job_summary(self):
+        os.environ["GITHUB_OUTPUT"] = os.path.join(self.tmp.name, "out.txt")
+        os.environ["GITHUB_STEP_SUMMARY"] = os.path.join(self.tmp.name, "summary.md")
+        code, out, err = self.engine_plain("report", "--fab-profile", "jlcpcb", "--base-ref", "main")
+        self.assertEqual(code, 0, err)
+        md = self.read(".kicad-hub/reports/report.md")
+        self.assertIn("## KiCad checks: board", md)
+        self.assertIn("| Ancho de anular: JLC min annular ring | 1 |", md)   # the rule names of the profile
+        self.assertIn("### BOM changes", md)
+        self.assertEqual(self.read(os.environ["GITHUB_STEP_SUMMARY"]), md)
+        self.assertEqual(self.outputs(os.environ["GITHUB_OUTPUT"]),
+                         {"erc_errors": "1", "drc_errors": "2", "missing_fields": "4", "requirements_failed": "-"})
+        self.assertEqual(self.load(".kicad-hub/reports/counts.json")["drc_fab_new"], 1)
+        self.assertIn("ERC errors: 1 · DRC errors: 2 · parts missing fields: 4 · requirements failed: -", out)
+        self.assertIn("Report: .kicad-hub/reports/report.md", out)
+
+    def test_files_not_written_are_left_out(self):
+        for name in ("erc.json", "drc.json", "drc-fab.json", "variants.json"):
+            os.remove(f".kicad-hub/reports/{name}")
+        os.environ["GITHUB_OUTPUT"] = os.path.join(self.tmp.name, "out.txt")
+        code, out, err = self.engine_plain("report")
+        self.assertEqual(code, 0, err)
+        self.assertIn("| ERC | — | — | — |", self.read(".kicad-hub/reports/report.md"))
+        self.assertEqual(self.outputs(os.environ["GITHUB_OUTPUT"])["erc_errors"], "-")
+
+    def test_the_inputs_given_to_report_py(self):
+        seen = {}
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda name, *a, **k: seen.update(name=name, args=a) or real(name, *a, **k)
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        self.put(".kicad-hub/reports/bom-parts-base.csv", BOM_CSV)
+        self.assertEqual(self.engine_plain("report", "--fab-profile", "jlcpcb")[0], 0)
+        args = list(seen["args"])
+        given = {args[i]: args[i + 1] for i in range(0, len(args) - 1) if args[i].startswith("--")}
+        self.assertEqual(seen["name"], "report.py")
+        self.assertEqual(given["--base-bom"], ".kicad-hub/reports/bom-parts-base.csv")
+        self.assertEqual(os.path.normpath(given["--fab-rules"]),
+                         os.path.normpath(os.path.join(SCRIPTS, "..", "fab-profiles", "jlcpcb", "rules.kicad_dru")))
+        for missing in ("--datasheets", "--sourcing", "--requirements", "--visual", "--package"):
+            self.assertNotIn(missing, given)
+
+    def test_fab_package_found_or_none(self):
+        self.put(".kicad-hub/package/board-A-fab.zip", "zip")
+        self.put(".kicad-hub/reports/fab-warnings.txt", "Via drill too small\n")
+        self.assertEqual(self.engine_plain("report")[0], 0)
+        md = self.read(".kicad-hub/reports/report.md")
+        self.assertIn("`board-A-fab.zip` in the artifact", md)
+        self.assertIn("- ⚠️ Via drill too small", md)
+        self.assertEqual(self.engine_plain("report", "--package", "")[0], 0)      # CI: no package this run
+        self.assertNotIn("### Fab package", self.read(".kicad-hub/reports/report.md"))
+
+    def test_needs_the_bom_and_a_known_profile(self):
+        code, _, err = self.engine_plain("report", "--fab-profile", "nofab")
+        self.assertEqual(code, 1)
+        self.assertIn("Unknown fab-profile 'nofab'", err)
+        os.remove(".kicad-hub/reports/bom-parts.csv")
+        code, _, err = self.engine_plain("report")
+        self.assertEqual(code, 1)
+        self.assertIn("bom-parts.csv is missing: run `bom` first", err)
+
+    def test_a_failing_report_is_an_error_and_leaves_nothing_old(self):
+        self.put(".kicad-hub/reports/report.md", "old")
+        real = kicad_hub.run_script
+        kicad_hub.run_script = lambda *a, **k: 1
+        self.addCleanup(setattr, kicad_hub, "run_script", real)
+        code, _, err = self.engine_plain("report")
+        self.assertEqual(code, 1)
+        self.assertIn("report.py failed", err)
+        self.assertFalse(os.path.exists(".kicad-hub/reports/report.md"))
+
 if __name__ == "__main__":
     unittest.main()

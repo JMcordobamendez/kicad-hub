@@ -12,6 +12,8 @@
     kicad_hub.py datasheets [--project-dir DIR] [--out DIR] [--dirs LIST] [--check-links true|false]
     kicad_hub.py sourcing   [--project-dir DIR] [--out DIR] [--boards 1,5,10,100] [--currency USD]
                             [--choices kicad-hub-sourcing.csv]
+    kicad_hub.py report     [--project-dir DIR] [--out DIR] [--fab-profile NAME] [--base-ref NAME]
+                            [--package FILE] [--required-fields LIST] (+ CI links: --portal-url …)
 
 `checks`: ERC and DRC (with schematic parity) of the project, as JSON and text reports in
 <out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given.
@@ -33,6 +35,9 @@ the other commands wrote to <out>/reports/ (run it after them).
 every part (links checked, local files bundled) and the price and stock at each supplier.
 Supplier keys come from the environment or, on a PC, from a personal file outside the
 repository (see keys_file).
+
+`report`: the markdown report (PR comment, job summary) in <out>/reports/report.md from
+whatever the other commands wrote there, plus counts.json; run it last.
 
 The action calls it step by step while the rest of its steps move here (roadmap, phase 7B).
 Run it from the repository's folder: paths are relative to it.
@@ -551,6 +556,53 @@ def requirements(project_dir, out, req_file="kicad-hub-requirements.yaml", k=Non
         return json.load(f)
 
 
+# --- report ---------------------------------------------------------------------------------
+
+# report.py option -> the file in <out>/reports an earlier step writes; the ones not there
+# (a step not run, or not run yet on this PC) are left out and report.py skips that section
+REPORT_INPUTS = (("--base-bom", "bom-parts-base.csv"), ("--erc", "erc.json"), ("--drc", "drc.json"),
+                 ("--drc-fab", "drc-fab.json"), ("--datasheets", "datasheets.json"),
+                 ("--package-warnings", "fab-warnings.txt"), ("--variants", "variants.json"),
+                 ("--variant-sync", "variant-sync.json"), ("--requirements", "requirements.json"),
+                 ("--visual", "visual.json"), ("--sourcing", "sourcing.json"))
+# counts the action exposes as step outputs ("-" when that check did not run)
+REPORT_OUTPUTS = ("erc_errors", "drc_errors", "missing_fields", "requirements_failed")
+
+
+def report(out, name, profile="generic", package=None, options=()):
+    """<out>/reports/report.md and counts.json from the files the other steps wrote.
+
+    `package`: the fab zip's file name; None finds it in <out>/package/, "" means none.
+    `options`: more report.py options (base ref, required fields, portal and run links).
+    Returns the counts.
+    """
+    reports = f"{out}/reports"
+    args = ["--name", name, "--bom", need_bom(out), "--fab-profile", profile]
+    if profile != "generic":
+        args += ["--fab-rules", fab_rules(profile)]
+    for option, file in REPORT_INPUTS:
+        if os.path.isfile(f"{reports}/{file}"):
+            args += [option, f"{reports}/{file}"]
+    if package is None:
+        zips = sorted(glob.glob(f"{out}/package/*-fab.zip"))
+        package = os.path.basename(zips[-1]) if zips else ""
+    if package:
+        args += ["--package", package]
+    md, counts = f"{reports}/report.md", f"{reports}/counts.json"
+    _remove(md)
+    _remove(counts)
+    if run_script("report.py", *args, *options, "--out", md, "--out-json", counts) != 0 or not os.path.isfile(counts):
+        raise StepError("report.py failed: see its messages above")
+    with open(counts, encoding="utf-8") as f:
+        result = json.load(f)
+    github_output({key: "-" if result.get(key) is None else result[key] for key in REPORT_OUTPUTS})
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(md, encoding="utf-8") as f, open(summary, "a", encoding="utf-8") as s:
+            s.write(f.read())
+    return result
+
+
 def _git(*args):
     try:
         return subprocess.run(["git", *args]).returncode
@@ -660,6 +712,26 @@ def cmd_sourcing(args):
     return 0
 
 
+def cmd_report(args):
+    folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
+    if args.fab_profile != "generic":
+        fab_rules(args.fab_profile)
+    options = ["--base-ref", args.base_ref or "base", "--required", args.required_fields,
+               "--cap-voltage", args.check_capacitor_voltage, "--datasheet-optional", args.datasheet_optional_refs,
+               "--portal-url", args.portal_url, "--portal-state", args.portal_state,
+               "--pages-branch", args.pages_branch, "--pages-settings-url", args.pages_settings_url,
+               "--action-ref", args.action_ref, "--run-url", args.run_url]
+    counts = report(args.out, name, args.fab_profile, args.package, options)
+
+    def shown(key):
+        return "-" if counts.get(key) is None else str(counts[key])
+
+    print(f"\n{name}\n  ERC errors: {shown('erc_errors')} · DRC errors: {shown('drc_errors')} · "
+          f"parts missing fields: {shown('missing_fields')} · requirements failed: {shown('requirements_failed')}")
+    print(f"Report: {args.out}/reports/report.md")
+    return 0
+
+
 def add_project(c):
     c.add_argument("--project-dir", default="", help="folder with the .kicad_pro (default: the only one in the repository)")
     c.add_argument("--out", default=".kicad-hub", help="output folder (reports go to <out>/reports)")
@@ -713,6 +785,23 @@ def main(argv=None):
     p.add_argument("--choices", default="kicad-hub-sourcing.csv",
                    help="supplier picked per part, a file relative to the project folder")
     p.set_defaults(func=cmd_sourcing)
+    r = sub.add_parser("report", help="the markdown report of everything the other steps wrote")
+    add_project(r)
+    r.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
+    r.add_argument("--base-ref", default="base", help="name of what the BOM diff compares with (the bom --base)")
+    r.add_argument("--package", default=None, help="fab zip file name (default: the one in <out>/package/)")
+    r.add_argument("--required-fields", default="Footprint,Datasheet,MPN|LCSC", help="fields every part needs")
+    r.add_argument("--check-capacitor-voltage", default="true", help="true | false")
+    r.add_argument("--datasheet-optional-refs", default="R,C,TP,H,MH,FID,JP,NT,LOGO",
+                   help="reference prefixes that need no datasheet")
+    r.add_argument("--portal-url", default="", help="this build's page in the design portal (CI)")
+    r.add_argument("--portal-state", default="serving", choices=["serving", "disabled", "unknown"],
+                   help="whether GitHub Pages serves the portal (CI)")
+    r.add_argument("--pages-branch", default="kicad-hub-site", help="branch the portal is published to (CI)")
+    r.add_argument("--pages-settings-url", default="", help="the repository's Settings → Pages page (CI)")
+    r.add_argument("--action-ref", default="", help="ref the workflow uses for the action (CI)")
+    r.add_argument("--run-url", default="", help="link to the CI run")
+    r.set_defaults(func=cmd_report)
     args = ap.parse_args(argv)
     try:
         return args.func(args)

@@ -87,8 +87,8 @@ the UTF-8 locale fix and the fixes from the first real use (one of the owner's b
 runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
 so someone with no software background can start quickly: the template repository left
 from phase A; the engine (B) has started (the spike on the owner's PC is done; ERC/DRC
-the per-part BOMs, datasheets, prices, the fab package and the requirements run from
-`scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
+the per-part BOMs, datasheets, prices, the fab package, the requirements and the report
+run from `scripts/kicad_hub.py`; the first piece was tried with the real KiCad there);
 then the KiCad plugin (C) and versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -421,6 +421,14 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       numbers, text, lists), and anything else YAML allows is refused with its line
       number, never guessed. Tested against PyYAML on the example's and the template's
       files, and with `import yaml` made to fail
+- [x] **Sixth piece: `kicad_hub.py report`** (2026-11-17): the markdown report (the PR
+      comment and the job summary) from whatever the other steps left in
+      `<out>/reports`; a file a step did not write (not run, or no board yet) is left
+      out and its section skipped, as before. It finds the fab zip in `<out>/package/`,
+      passes the profile's rules file for the fab DRC table (see "Language of local
+      reports"), adds the report to the job summary and sets the step outputs the strict
+      mode reads, without `jq`. The action's "Report" step is one call. On a PC:
+      `report --base-ref main` after `bom --base main`; `run` will pass it by itself
 - [x] **Language of local reports** (2026-11-17): on a PC `kicad-cli` writes its messages
       in the system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI
       in English. The report grouped the fab DRC violations by reading English text
@@ -435,8 +443,8 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       script reads `kicad-cli`'s text: the rest uses the JSON's `severity` and counts
 - [ ] `kicad-hub run`: the rest of the sequence that today is bash inside `action.yml`
       moves to `scripts/kicad_hub.py`, one step per pull request so CI stays green, in
-      the action's order. Left: report and portal; then one `run` command that does
-      them all and compares against `main` by default
+      the action's order. Left: the portal; then one `run` command that does them all
+      and compares against `main` by default
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders
