@@ -597,7 +597,8 @@ fab-profiles/               optional per-fab DRC rules and assembly column layou
 scripts/                    kicad_hub.py (the engine: steps shared by the action and local mode),
                             kicad.py (runs kicad-cli, installed or in Docker),
                             detect.py (finds the KiCad project), yaml_subset.py (reads the
-                            requirements file where there is no PyYAML), fab_assembly.py, report.py, requirements.py, datasheets.py, fabnotes.py,
+                            requirements file where there is no PyYAML), fab_assembly.py, report.py, drc_groups.py
+                            (groups fab DRC violations in any language), requirements.py, datasheets.py, fabnotes.py,
                             variant_cpl.py, variant_sync.py, visual_diff.py, renders.py (page renders for the
                             compare page), sourcing.py (+ sourcing.html, the comparison page),
                             portal.py (+ portal.html, the design portal; compare.html and
