@@ -412,8 +412,7 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       none). The action's longest step, 80 lines of bash, is one call; the engine sets
       its outputs. `fabnotes.py` runs with a Python that has `pcbnew`: the image's in CI,
       on a PC the one beside `kicad-cli` (found by itself, or `--kicad-python`).
-      **Not tried on a PC yet**: the README warned that `fabnotes.py` may open a "font
-      not found" dialog on Windows that blocks until closed; to check on the owner's PC
+      Tried on the owner's PC: no dialog (see the second run below)
 - [x] **Fifth piece: `kicad_hub.py requirements`** (2026-11-17): the requirements check
       from the engine. In CI it still runs inside the image, with PyYAML. On a PC,
       where KiCad's Python has no PyYAML, `requirements.py` reads the file with
@@ -421,6 +420,16 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       numbers, text, lists), and anything else YAML allows is refused with its line
       number, never guessed. Tested against PyYAML on the example's and the template's
       files, and with `import yaml` made to fail
+- [x] **Second run on the owner's PC** (2026-11-17, KiCad 10.0.5 and its own Python,
+      Windows git): all 73 tests pass on Windows (2 skipped: a Linux-only one, and the
+      comparison with PyYAML, which KiCad's Python lacks). `checks`, `bom --base HEAD`,
+      `datasheets`, `sourcing`, `package --fab-profile jlcpcb` and `requirements` all
+      ended by themselves, with the same results as CI on the example board (ERC 5/13,
+      DRC 237/46, 408 jlcpcb violations, 48 and 43 fitted parts, 6 datasheet links,
+      6 of 7 requirements, the same fab warning). **`package` did not hang**: 65 s, and
+      the "font not found" message came out as a line of text, no dialog. The base
+      worktree was removed and no temporary file was left. Only finding, fixed: the
+      `bom` summary counted not-fitted rows ("59 parts" for 48 fitted)
 - [ ] **Language of local reports**: on a PC `kicad-cli` writes its messages in the
       system's language (Spanish there, with a decimal comma: `0,0500 mm`), in CI in
       English. The report groups the fab DRC violations by reading English text
