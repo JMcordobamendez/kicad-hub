@@ -73,6 +73,7 @@ import kicad
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAB_PROFILES = os.path.join(HERE, "..", "fab-profiles")
 FABNOTES = os.path.join(HERE, "fabnotes.py")
+FABNOTES_TIMEOUT = 300  # seconds; it takes under a minute on a large board
 
 
 class StepError(Exception):
@@ -411,9 +412,13 @@ def package(k, project_dir, name, out, profile="generic", extra="", rev="", fabn
     shutil.copy(fabnotes or FABNOTES, notes)
     try:
         with open(warnings_txt, "w", encoding="utf-8") as f:
-            code = k.python(notes, pcb, rev, readme, f"{reports}/board.json", profile, stdout=f)
+            code = k.python(notes, pcb, rev, readme, f"{reports}/board.json", profile, stdout=f,
+                            timeout=FABNOTES_TIMEOUT)
     finally:
         _remove(notes)
+    if code == kicad.TIMED_OUT:
+        raise StepError(f"Reading the fab notes from the board took more than {FABNOTES_TIMEOUT} s and was "
+                        "stopped. If a KiCad message window was open, it was waiting for OK: please report it")
     if code != 0 or not os.path.isfile(readme):
         raise StepError(f"The fab notes could not be read from the board ({k.where}): see the messages above")
     with open(readme, "a", encoding="utf-8") as f:
@@ -504,6 +509,14 @@ def datasheets(project_dir, out, dirs="", check_links=True):
     with open(result, encoding="utf-8") as f:
         status = [e.get("status") for e in json.load(f).values()]
     return {name: status.count(name) for name in ("ok", "broken", "unverified", "missing")}
+
+
+def datasheet_line(found):
+    """The terminal line for the datasheet step, counted as the report counts them: a link
+    that could not be checked is still a datasheet."""
+    have = found["ok"] + found["unverified"]
+    return (f"Datasheets: {have} found" + (f" ({found['unverified']} link not checked)" if found["unverified"] else "")
+            + f", {found['broken']} broken, {found['missing']} missing")
 
 
 def keys_file(env=None):
@@ -812,8 +825,7 @@ def cmd_run(args):
         step("Datasheets")
         try:
             found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
-            lines.append(f"Datasheets: {found['ok']} found, {found['broken']} broken, "
-                         f"{found['unverified']} not checked, {found['missing']} missing")
+            lines.append(datasheet_line(found))
         except StepError as e:  # an extra: the rest still runs
             print(f"::warning::{e}: skipped", file=sys.stderr)
     if "sourcing" not in skip:
@@ -903,8 +915,7 @@ def cmd_requirements(args):
 def cmd_datasheets(args):
     folder, name, _, _ = detect.detect(args.project_dir.strip(), ".", [args.out])
     found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
-    print(f"\n{name}\n  Datasheets: {found['ok']} found, {found['broken']} broken, "
-          f"{found['unverified']} not checked, {found['missing']} missing")
+    print(f"\n{name}\n  {datasheet_line(found)}")
     print(f"Datasheets: {args.out}/datasheets/index.html")
     return 0
 

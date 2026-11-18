@@ -452,7 +452,7 @@ class DatasheetsAndSourcingTest(EngineCase):
                          {"R1": "missing", "U1": "ok", "U2": "ok", "C1": "unverified"})   # C2 is not fitted
         self.assertTrue(os.path.isfile(".kicad-hub/datasheets/CN3722.pdf"))                # bundled
         self.assertTrue(os.path.isfile(".kicad-hub/datasheets/index.html"))
-        self.assertIn("Datasheets: 2 found, 0 broken, 1 not checked, 1 missing", out)
+        self.assertIn("Datasheets: 3 found (1 link not checked), 0 broken, 1 missing", out)
 
     def test_datasheets_extra_folder(self):
         self.put("vendor/pdf/RC0603-series.pdf", "pdf")
@@ -622,6 +622,21 @@ class PackageTest(EngineCase):
         code, _, err = self.package()
         self.assertEqual(code, 1)
         self.assertIn("kicad-cli pcb export drill failed", err)
+        self.assertEqual(glob.glob(".kicad-hub/package/*.zip"), [])
+
+    def test_fab_notes_that_hang_are_stopped(self):
+        # a KiCad message window waiting for OK left the step hanging on Windows (2026-11-18)
+        hanging = os.path.join(self.tmp.name, "hanging_fabnotes.py")
+        with open(hanging, "w") as f:
+            f.write("import time\ntime.sleep(60)\n")
+        kicad_hub.FABNOTES = hanging
+        real = kicad_hub.FABNOTES_TIMEOUT
+        kicad_hub.FABNOTES_TIMEOUT = 2
+        self.addCleanup(setattr, kicad_hub, "FABNOTES_TIMEOUT", real)
+        code, _, err = self.package()
+        self.assertEqual(code, 1)
+        self.assertIn("took more than 2 s and was stopped", err)
+        self.assertFalse(os.path.exists(".kicad-hub/.fabnotes.py"))       # its copy is gone too
         self.assertEqual(glob.glob(".kicad-hub/package/*.zip"), [])
 
     def test_board_without_outline_has_no_package(self):
