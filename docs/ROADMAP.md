@@ -483,11 +483,19 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       takes 40 s, 29 s with `--skip sourcing,datasheets`. **It hung once**: `fabnotes.py`
       showed the "Font 'Ubuntu Sans' not found" message in a modal Windows window ("Message",
       OK button) and waited, until the 600 s limit; it happened in 2 of 4 runs, the second
-      run before had none. Fixed, awaiting a run on the PC: `fabnotes.py` sends wxWidgets'
-      log to stderr before and after importing `pcbnew`, and the engine stops it after
-      300 s with an error that says why, so a step can no longer hang. Also from that run:
-      the datasheet line now counts a link that could not be checked as found, as the
-      report does ("6 found (1 link not checked)" instead of "5 found ... 1 not checked")
+      run before had none. Fixed (#62): `fabnotes.py` sends wxWidgets' log to stderr
+      before and after importing `pcbnew`, and the engine stops it after 300 s with an
+      error that says why, so a step can no longer hang. Also from that run: the
+      datasheet line now counts a link that could not be checked as found, as the report
+      does ("6 found (1 link not checked)" instead of "5 found ... 1 not checked")
+- [x] **Fourth run on the owner's PC: the fix works** (2026-11-18, the commit of #62,
+      KiCad 10.0.5 open on the PC as before): 101 tests pass on Windows; five `package`
+      runs (5-6 s each) and one full `run` (35 s) with no "Message" window at all, watched
+      by a script that only logged windows; the font message of `fabnotes.py` came out as
+      a line of text. With KiCad's Python, `wx.Log.SetActiveTarget(wx.LogStderr())` is
+      accepted and `import pcbnew` keeps it. No file or process left behind. Not explained:
+      the first test run took about 21 minutes while `unittest` reported 31.7 s; repeated,
+      it took 35 s
 - [ ] From the third run, small: the cost is not in `run`'s final summary; every portal
       page has the same `<title>` ("KiCad design"), so browser tabs can't be told apart
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
