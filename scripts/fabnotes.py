@@ -12,8 +12,27 @@ import os
 import re
 import sys
 
-import pcbnew
+_log_target = None
 
+
+def quiet_wx_log():
+    """Send wxWidgets' log messages (e.g. "Font 'Ubuntu Sans' not found; substituting...")
+    to stderr. Loading a board on Windows sometimes shows them in a modal "Message" window
+    that waits for someone to press OK, which left the fab package step hanging (seen with
+    KiCad 10.0.5, 2026-11-18). Where wxPython is missing (CI image) there is nothing to do."""
+    global _log_target
+    try:
+        import wx
+        _log_target = _log_target or wx.LogStderr()
+        wx.Log.SetActiveTarget(_log_target)
+    except Exception:  # no wxPython, or one that can't do this: keep KiCad's default
+        pass
+
+
+quiet_wx_log()
+import pcbnew  # noqa: E402 - after the log target is set, in case importing it logs already
+
+quiet_wx_log()  # again: importing pcbnew may install KiCad's own application and log target
 pcb_path, rev, out = sys.argv[1:4]
 profile = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else "generic"
 b = pcbnew.LoadBoard(pcb_path)

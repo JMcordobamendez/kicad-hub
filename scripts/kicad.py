@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 EXE = "kicad-cli.exe" if os.name == "nt" else "kicad-cli"
+TIMED_OUT = 124  # exit code of a run stopped by its time limit, as `timeout` gives
 
 
 class KiCadNotFound(Exception):
@@ -120,14 +121,19 @@ class KiCad:
         """Run kicad-cli; its exit code (its output goes to ours). Never raises on failure."""
         return self._start(self.command(args, workdir), workdir)
 
-    def python(self, *args, workdir=None, stdout=None):
-        """Run a script with KiCad's Python; its exit code. `stdout`: an open file to write to."""
-        return self._start(self.python_command(args, workdir), workdir, stdout)
+    def python(self, *args, workdir=None, stdout=None, timeout=None):
+        """Run a script with KiCad's Python; its exit code. `stdout`: an open file to write to.
+        After `timeout` seconds the script is stopped and the code is TIMED_OUT."""
+        return self._start(self.python_command(args, workdir), workdir, stdout, timeout)
 
-    def _start(self, command, workdir=None, stdout=None):
+    def _start(self, command, workdir=None, stdout=None, timeout=None):
         try:
             return subprocess.run(command, cwd=None if self.image else (workdir or self.workdir),
-                                  env=None if self.image else local_env(), stdout=stdout).returncode
+                                  env=None if self.image else local_env(), stdout=stdout,
+                                  timeout=timeout).returncode
+        except subprocess.TimeoutExpired:  # subprocess.run has already killed it
+            print(f"::error::{os.path.basename(command[0])} stopped after {timeout} s", file=sys.stderr)
+            return TIMED_OUT
         except OSError as e:
             print(f"::error::Could not start {command[0]}: {e}", file=sys.stderr)
             return 127

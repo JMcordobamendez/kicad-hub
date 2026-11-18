@@ -463,10 +463,8 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       package, requirements or portal (e.g. no network). The action keeps calling the
       steps one by one: it has GitHub-only steps between them. The visual diff, the page
       renders and the KiBot outputs stay bash in the action until the two items below (no
-      PIL or `rsvg-convert` locally; KiBot optional). **`run` itself not run with the real
-      KiCad yet**; each of its steps up to `requirements` was, in the second run below
-      (no fab notes dialog; 65 s for the fab package). To try on the owner's PC: `run`,
-      `report` and `portal`
+      PIL or `rsvg-convert` locally; KiBot optional). Tried on the owner's PC in the third
+      run below
 - [x] **Second run on the owner's PC** (2026-11-17, KiCad 10.0.5 and its own Python,
       Windows git): all 73 tests pass on Windows (2 skipped: a Linux-only one, and the
       comparison with PyYAML, which KiCad's Python lacks). `checks`, `bom --base HEAD`,
@@ -477,6 +475,21 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
       the "font not found" message came out as a line of text, no dialog. The base
       worktree was removed and no temporary file was left. Only finding, fixed: the
       `bom` summary counted not-fitted rows ("59 parts" for 48 fitted)
+- [x] **Third run on the owner's PC: `run`, `report`, `portal`** (2026-11-18, KiCad
+      10.0.5): 100 tests pass on Windows; `run` gives the same numbers as CI, the fab DRC
+      rows read in Spanish with the same counts ("Ancho de anular: JLC min annular ring 35"),
+      the report says "No BOM changes" against `main`, and the local portal serves its
+      pages, design files and viewer (all HTTP 200 from `python -m http.server`). `run`
+      takes 40 s, 29 s with `--skip sourcing,datasheets`. **It hung once**: `fabnotes.py`
+      showed the "Font 'Ubuntu Sans' not found" message in a modal Windows window ("Message",
+      OK button) and waited, until the 600 s limit; it happened in 2 of 4 runs, the second
+      run before had none. Fixed, awaiting a run on the PC: `fabnotes.py` sends wxWidgets'
+      log to stderr before and after importing `pcbnew`, and the engine stops it after
+      300 s with an error that says why, so a step can no longer hang. Also from that run:
+      the datasheet line now counts a link that could not be checked as found, as the
+      report does ("6 found (1 link not checked)" instead of "5 found ... 1 not checked")
+- [ ] From the third run, small: the cost is not in `run`'s final summary; every portal
+      page has the same `<title>` ("KiCad design"), so browser tabs can't be told apart
 - [ ] Before/after images and page renders **without PIL, numpy or `rsvg-convert` in
       local mode** (see decisions): the browser compares the SVGs that `kicad-cli`
       exports. CI keeps its PNG renders
