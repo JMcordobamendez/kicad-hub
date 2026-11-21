@@ -1,0 +1,22 @@
+{
+  "$schema": "https://go.kicad.org/api/schemas/v1",
+  "identifier": "com.github.jmcordobamendez.kicad-hub",
+  "name": "kicad-hub",
+  "description": "Design review of the open board: ERC/DRC, BOM, prices, fab package and a design portal in the browser",
+  "runtime": {
+    "type": "python",
+    "min_version": "3.9"
+  },
+  "actions": [
+    {
+      "identifier": "run",
+      "name": "kicad-hub: check this board",
+      "description": "Run every kicad-hub check on this project and open the design portal in the browser",
+      "show-button": true,
+      "scopes": ["pcb"],
+      "entrypoint": "kicad_hub_action.py",
+      "icons-light": ["icon.png"],
+      "icons-dark": ["icon.png"]
+    }
+  ]
+}
