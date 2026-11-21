@@ -1,7 +1,12 @@
-#!/usr/bin/env python3
 """Fabrication notes (README.txt) for the fab package, read from the board itself.
 
-Runs with KiCad's Python (pcbnew), so the numbers don't depend on the UI language.
+Reads the .kicad_pcb and .kicad_pro files with plain Python (scripts/board_file.py): no
+KiCad and no pcbnew are needed, so it runs with any Python 3 (KiCad's own, the runner's,
+a system one). It used to load the board with pcbnew, which needs KiCad's bundled Python
+(KiCad 11 is expected to drop it) and on Windows could open a "font not found" window
+that waited for OK. The numbers are the same: they were checked against pcbnew on the
+example board.
+
 Usage: fabnotes.py <board.kicad_pcb> <revision> <output README.txt> [board.json] [fab profile]
 The optional JSON has the same measurements for later steps (requirements.py);
 pass "" to skip it. The fab profile (default generic) is described in README.txt.
@@ -12,41 +17,38 @@ import os
 import re
 import sys
 
-_log_target = None
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from board_file import Board  # noqa: E402
+
+# KiCad's defaults (BOARD_DESIGN_SETTINGS) for a rule the project file doesn't set
+DEFAULT_RULES = {"min_track_width": 0.0, "min_clearance": 0.0, "min_through_hole_diameter": 0.3,
+                 "min_hole_to_hole": 0.25}
 
 
-def quiet_wx_log():
-    """Send wxWidgets' log messages (e.g. "Font 'Ubuntu Sans' not found; substituting...")
-    to stderr. Loading a board on Windows sometimes shows them in a modal "Message" window
-    that waits for someone to press OK, which left the fab package step hanging (seen with
-    KiCad 10.0.5, 2026-11-18). Where wxPython is missing (CI image) there is nothing to do."""
-    global _log_target
+def project_rules(pcb_path):
+    """The board's minimum design rules, from the .kicad_pro next to the board (mm)."""
+    rules = dict(DEFAULT_RULES)
     try:
-        import wx
-        _log_target = _log_target or wx.LogStderr()
-        wx.Log.SetActiveTarget(_log_target)
-    except Exception:  # no wxPython, or one that can't do this: keep KiCad's default
-        pass
+        with open(os.path.splitext(pcb_path)[0] + ".kicad_pro", encoding="utf-8") as f:
+            saved = json.load(f).get("board", {}).get("design_settings", {}).get("rules", {})
+    except (OSError, ValueError, AttributeError):
+        return rules
+    rules.update({k: float(v) for k, v in saved.items() if k in rules and isinstance(v, (int, float))})
+    return rules
 
 
-quiet_wx_log()
-import pcbnew  # noqa: E402 - after the log target is set, in case importing it logs already
-
-quiet_wx_log()  # again: importing pcbnew may install KiCad's own application and log target
 pcb_path, rev, out = sys.argv[1:4]
 profile = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else "generic"
-b = pcbnew.LoadBoard(pcb_path)
-mm = pcbnew.ToMM
-ds = b.GetDesignSettings()
-tb = b.GetTitleBlock()
-
-bbox = b.GetBoardEdgesBoundingBox()
-tracks = [t for t in b.GetTracks() if t.Type() == pcbnew.PCB_TRACE_T]
-vias = [t for t in b.GetTracks() if t.Type() == pcbnew.PCB_VIA_T]
-pads = [p for f in b.GetFootprints() for p in f.Pads()]
-pth = [p for p in pads if p.GetAttribute() == pcbnew.PAD_ATTRIB_PTH]
-npth = [p for p in pads if p.GetAttribute() == pcbnew.PAD_ATTRIB_NPTH]
-pad_holes = [mm(min(p.GetDrillSize().x, p.GetDrillSize().y)) for p in pth]
+with open(pcb_path, encoding="utf-8") as f:
+    text = f.read()
+b = Board.load(pcb_path)
+rules = project_rules(pcb_path)
+size = b.outline_size() or (0.0, 0.0)
+vias = b.vias()
+pads = b.pads()
+pth = [d for kind, d in pads if kind == "thru_hole"]
+npth = [d for kind, d in pads if kind == "np_thru_hole"]
+pad_holes = [d for d in pth if d]
 
 
 def fmt(v, unit="mm"):
@@ -58,17 +60,8 @@ def smallest(values):
     return min(values) if values else None
 
 
-# The stackup isn't exposed to Python: read it from the (stable) s-expression file
-text = open(pcb_path, encoding="utf-8").read()
-start = text.find("(stackup")
-stack = ""
-if start != -1:
-    depth = 0
-    for i in range(start, len(text)):
-        depth += {"(": 1, ")": -1}.get(text[i], 0)
-        if depth == 0:
-            stack = text[start:i + 1]
-            break
+# The stackup, read from the file's own text
+stack = Board.stackup_text(text)
 
 
 def opt(key, default=None):
@@ -85,33 +78,31 @@ for m in re.finditer(r'\(layer "([^"]+)"\s*\(type "(copper|core|prepreg)"\)(.*?)
     extra = "" if kind == "copper" else f"  {kind}  {mat.group(1) if mat else ''}  Er {er.group(1) if er else '?'}"
     layers.append(f"  {name:<14} {float(th.group(1)) if th else 0:.4f} mm{extra}")
 
-smd = sum(1 for f in b.GetFootprints() if f.GetAttributes() & pcbnew.FP_SMD)
-tht = sum(1 for f in b.GetFootprints() if f.GetAttributes() & pcbnew.FP_THROUGH_HOLE)
-bottom = sum(1 for f in b.GetFootprints() if f.IsFlipped() and f.GetAttributes() & (pcbnew.FP_SMD | pcbnew.FP_THROUGH_HOLE))
+smd, tht, bottom = b.footprint_counts()
 
-min_track = smallest(mm(t.GetWidth()) for t in tracks)
-min_via_drill = smallest(mm(v.GetDrillValue()) for v in vias)
+min_track = smallest(b.track_widths())
+min_via_drill = smallest(d for d, _ in vias)
 min_hole = smallest(pad_holes)
 warnings = []
-if min_track is not None and min_track < mm(ds.m_TrackMinWidth):
-    warnings.append(f"Track width {fmt(min_track)} is below the project minimum {fmt(mm(ds.m_TrackMinWidth))}")
+if min_track is not None and min_track < rules["min_track_width"]:
+    warnings.append(f"Track width {fmt(min_track)} is below the project minimum {fmt(rules['min_track_width'])}")
 for what, v in (("Via drill", min_via_drill), ("Plated pad hole", min_hole)):
-    if v is not None and v < mm(ds.m_MinThroughDrill):
-        warnings.append(f"{what} {fmt(v)} is below the project minimum drill {fmt(mm(ds.m_MinThroughDrill))}")
+    if v is not None and v < rules["min_through_hole_diameter"]:
+        warnings.append(f"{what} {fmt(v)} is below the project minimum drill {fmt(rules['min_through_hole_diameter'])}")
 warn_txt = ("\n!! CHECK BEFORE ORDERING\n" + "\n".join("  - " + w for w in warnings) + "\n") if warnings else ""
 
 lines = f"""FABRICATION NOTES
 =================
 
-Board        {tb.GetTitle() or os.path.splitext(os.path.basename(pcb_path))[0]}
+Board        {b.title_block('title') or os.path.splitext(os.path.basename(pcb_path))[0]}
 Revision     {rev}
-Company      {tb.GetCompany() or '-'}
+Company      {b.title_block('company') or '-'}
 Generated    {datetime.date.today().isoformat()} by kicad-hub from the KiCad project
 {warn_txt}
 BOARD
-  Size              {fmt(mm(bbox.GetWidth()))} x {fmt(mm(bbox.GetHeight()))}
-  Copper layers     {b.GetCopperLayerCount()}
-  Thickness         {fmt(mm(ds.GetBoardThickness()))}
+  Size              {fmt(size[0])} x {fmt(size[1])}
+  Copper layers     {b.copper_layers}
+  Thickness         {fmt(b.thickness)}
   Surface finish    {opt('copper_finish', 'not specified')}
   Impedance control {opt('dielectric_constraints', 'no')}
   Edge plating      {opt('edge_plating', 'no')}
@@ -123,15 +114,15 @@ STACKUP
 SMALLEST FEATURES USED ON THE BOARD
   Track width       {fmt(min_track)}
   Via drill         {fmt(min_via_drill)}
-  Via diameter      {fmt(smallest(mm(v.GetWidth(pcbnew.F_Cu)) for v in vias))}
+  Via diameter      {fmt(smallest(s for _, s in vias))}
   Plated pad hole   {fmt(min_hole)}
   Vias / PTH / NPTH {len(vias)} / {len(pth)} / {len(npth)}
 
 DESIGN RULES (project minimums)
-  Track width       {fmt(mm(ds.m_TrackMinWidth))}
-  Clearance         {fmt(mm(ds.m_MinClearance))}
-  Through drill     {fmt(mm(ds.m_MinThroughDrill))}
-  Hole to hole      {fmt(mm(ds.m_HoleToHoleMin))}
+  Track width       {fmt(rules['min_track_width'])}
+  Clearance         {fmt(rules['min_clearance'])}
+  Through drill     {fmt(rules['min_through_hole_diameter'])}
+  Hole to hole      {fmt(rules['min_hole_to_hole'])}
 
 ASSEMBLY
   SMD parts         {smd}
@@ -157,8 +148,8 @@ with open(out, "w", encoding="utf-8", newline="\n") as f:
 if len(sys.argv) > 4 and sys.argv[4]:
     drills = [d for d in (min_via_drill, min_hole) if d is not None]
     with open(sys.argv[4], "w", encoding="utf-8") as f:
-        json.dump({"size_mm": [round(mm(bbox.GetWidth()), 3), round(mm(bbox.GetHeight()), 3)],
-                   "copper_layers": b.GetCopperLayerCount(), "min_track": min_track,
+        json.dump({"size_mm": [round(size[0], 3), round(size[1], 3)],
+                   "copper_layers": b.copper_layers, "min_track": min_track,
                    "min_via_drill": min_via_drill, "min_pad_hole": min_hole,
                    "min_drill": min(drills) if drills else None}, f)
 for w in warnings:
