@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --card: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --brand: #e8622c; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e; --merged: #8250df;
+    --bar: #1c2128; --bar-fg: #e6edf3; --bar-muted: #9198a1; --hl: #fff4c2; --ca: #0969da; --cb: #8250df;
+    --l0: #0969da; --l1: #e8622c; --l2: #1a7f37; --l3: #8250df; --l4: #bf3989; --l5: #0a8a8a; --l6: #9a6700; --l7: #cf222e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --card: #151b23; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #1c2128;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --merged: #a371f7; --bar: #010409; --hl: #3a3210;
+      --ca: #4493f8; --cb: #a371f7;
+      --l0: #4493f8; --l1: #f0883e; --l2: #3fb950; --l3: #a371f7; --l4: #db61a2; --l5: #39c5cf; --l6: #d29922; --l7: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
+  a { color: var(--accent); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* top bar, same as compare.html */
+  .bar { background: var(--bar); color: var(--bar-fg); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 20px; }
+  .logo { width: 30px; height: 30px; border-radius: 7px; background: var(--brand); color: #fff; font-weight: 700;
+          display: grid; place-items: center; font-size: 13px; flex: none; text-decoration: none; }
+  .crumb { min-width: 0; font-size: 17px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .crumb a { color: var(--bar-fg); text-decoration: none; }
+  .crumb .sep { color: var(--bar-muted); font-weight: 400; }
+  .bar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--bar-muted); font-size: 13px; }
+  .bar .right a { color: var(--bar-muted); }
+
+  main { flex: 1; padding: 16px 20px; min-width: 0; }
+  .wrap { max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .pad { padding: 12px 16px; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--fg); padding: 4px 12px; border-radius: 6px; cursor: pointer;
+         font: inherit; font-size: 13px; text-decoration: none; display: inline-block; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.go { background: var(--good); border-color: var(--good); color: #fff; font-weight: 600; }
+  .btn[disabled], .btn.off { opacity: .5; cursor: default; pointer-events: none; }
+  select, input[type=date] { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 13px; max-width: 100%; }
+
+  .tools { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .tools label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+  .tools .show { font-weight: 700; margin-right: -6px; }
+  .tools .sep { width: 1px; height: 20px; background: var(--line); }
+  .notes { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .notes div + div { margin-top: 2px; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 14px; align-items: start; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } main { padding: 12px 16px; } }
+  .scroll { overflow: auto; max-height: min(78vh, 900px); }
+
+  /* selection bar: A and B, and the way to the compare page */
+  .selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+            background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+  .selbar .slot { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+  .selbar .slot .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34ch; }
+  .selbar .push { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .selbar .msg { flex-basis: 100%; font-size: 12.5px; color: var(--warn); }
+  .ab { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 700; flex: none; }
+  .ab.a { background: var(--ca); } .ab.b { background: var(--cb); }
+
+  /* graph table */
+  .tbl { min-width: 800px; --gw: 80px; }
+  .row { display: grid; grid-template-columns: var(--gw) minmax(0, 1fr) 150px 124px 92px 84px; height: 28px; line-height: 28px;
+         align-items: center; border-bottom: 1px solid transparent; cursor: pointer; }
+  .row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+  .row.head { position: sticky; top: 0; z-index: 3; background: var(--soft); border-bottom: 1px solid var(--line); cursor: default;
+              font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .row.head > span:first-child { padding-left: 12px; }
+  .body { position: relative; }
+  .body > svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 1; }
+  .body > svg .dot, .body > svg .evi { pointer-events: all; cursor: pointer; }
+  .row:not(.head):hover { background: var(--soft); }
+  .row.hl { background: var(--hl); }
+  .row.sel { box-shadow: inset 3px 0 0 var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .row.pa { background: color-mix(in srgb, var(--ca) 14%, transparent); outline: 2px solid var(--ca); outline-offset: -2px; border-radius: 6px; }
+  .row.pb { background: color-mix(in srgb, var(--cb) 14%, transparent); outline: 2px solid var(--cb); outline-offset: -2px; border-radius: 6px; }
+  .row.nosnap > .sub, .row.nosnap > .sh { color: var(--muted); opacity: .6; }
+  .row.nosnap .ref { opacity: .7; }
+  .row .au { display: flex; align-items: center; gap: 6px; }
+  .row .au span { overflow: hidden; text-overflow: ellipsis; }
+  .row .dt, .row .sh { color: var(--muted); font-size: 12.5px; }
+  .row .sh { display: flex; align-items: center; gap: 5px; }
+  .row .sn { font-size: 12px; color: var(--good); }
+  .row .sn:empty::before { display: none; }
+  .row .sn::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--good); margin-right: 5px; }
+  .row.ev .sub { font-size: 13px; }
+  .row.ev.t-pr .sub { color: var(--merged); } .row.ev.t-comments .sub { color: var(--warn); }
+  .row.ev.t-issues .sub { color: var(--good); } .row.ev.t-rel .sub { color: var(--accent); }
+  .row.ev.t-bad .sub { color: var(--bad); }
+  .ref { display: inline-flex; align-items: center; gap: 4px; height: 20px; line-height: 18px; padding: 0 7px 0 3px; margin-right: 5px; border-radius: 10px;
+         border: 1.5px solid var(--c, var(--line)); font-size: 12px; font-weight: 600; vertical-align: middle; background: var(--card); }
+  .ref.nopic { padding-left: 7px; }
+  .ref.def { background: var(--c); color: #fff; }
+  .ref.tag { border-radius: 4px; }
+  .dot { stroke: var(--card); stroke-width: 2; }
+  .dot.merge { fill: var(--card); stroke: var(--c); stroke-width: 2.5; }
+  .dot.hl { stroke: var(--fg); stroke-width: 3; }
+  .dot.pa { stroke: var(--ca); stroke-width: 4; } .dot.pb { stroke: var(--cb); stroke-width: 4; }
+  .dot.nosnap { opacity: .4; }
+  .av { width: 20px; height: 20px; border-radius: 50%; flex: none; object-fit: cover; }
+  span.av { display: inline-grid; place-items: center; color: #fff; font-size: 9.5px; font-weight: 700; line-height: 1; }
+  .ref .av { width: 16px; height: 16px; font-size: 8px; }
+  #tip { position: fixed; z-index: 20; background: #1c2128; color: #e6edf3; border-radius: 6px; padding: 6px 10px; font-size: 12px; max-width: 340px; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  #tip b { display: block; font-size: 12.5px; }
+
+  /* side panel of the selected commit */
+  .panel { padding: 0; max-height: min(86vh, 1000px); overflow: auto; position: sticky; top: 8px; }
+  .panel section { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .panel section:last-child { border-bottom: 0; }
+  .panel h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .pc-top { display: flex; align-items: center; gap: 8px; }
+  .pc-subj { font-size: 17px; font-weight: 700; margin: 6px 0 2px; overflow-wrap: anywhere; }
+  .pc-body { white-space: pre-wrap; font: inherit; font-size: 13px; color: var(--muted); margin: 4px 0; overflow-wrap: anywhere; }
+  .st { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 9px; border-radius: 10px; color: #fff; background: var(--good); }
+  .st.merged, .st.closed.pr { background: var(--merged); } .st.closed { background: var(--bad); } .st.open.pr { background: var(--merged); }
+  .md { overflow-wrap: anywhere; font-size: 13px; }
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md p { margin: .4em 0; } .md img { max-width: 100%; } .md pre { overflow: auto; background: var(--soft); padding: 6px 8px; border-radius: 6px; }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; } .md th, .md td { border: 1px solid var(--line); padding: 2px 6px; }
+  .clamp { max-height: 6.6em; overflow: hidden; }
+  button.lnk { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 12.5px; padding: 0; }
+  .sumline { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .cm { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+  .cm:first-of-type { border-top: 0; }
+  .cm .ic { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--muted); margin-top: 2px; }
+  .cm .ic.th { border-color: var(--warn); } .cm .ic.pin { border-color: var(--accent); } .cm .ic.rv { border-color: var(--merged); }
+  .cm .hd { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .cm .hd b { overflow-wrap: anywhere; } .cm .hd .who { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .cm .here { font-size: 11px; font-weight: 700; color: var(--accent); margin-left: 6px; }
+  .is { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 10px; padding: 6px 0; }
+  .is .ic { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--good); margin-top: 3px; position: relative; }
+  .is .ic::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--good); }
+  .is .ic.closed { border-color: var(--merged); } .is .ic.closed::after { background: var(--merged); }
+  .is .quote { margin: 4px 0 0; padding: 6px 9px; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; overflow-wrap: anywhere; }
+  .is details { margin-top: 4px; font-size: 13px; } .is summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .empty { padding: 18px 16px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12.5px; }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 20px; }
+</style>
+</head>
+<body>
+<header id="head"></header>
+<main><div class="wrap" id="wrap"><div class="card pad muted">Loading…</div></div></main>
+<div id="tip" hidden></div>
+<footer>Made with <a href="https://github.com/JMcordobamendez/kicad-hub">kicad-hub</a> · not affiliated with the KiCad project</footer>
+<script>
+const D = {"repo":"JMcordobamendez/kicad-hub","server":"https://github.com","activity":true};
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const $ = id => document.getElementById(id);
+const repoUrl = `${D.server}/${D.repo}`;
+const repoName = D.repo.split("/")[1];
+
+$("head").innerHTML = `<div class="bar"><a class="logo" href="./" title="All builds">kh</a>` +
+  `<div class="crumb"><a href="./">${esc(repoName)}</a><span class="sep">/</span><span>Activity</span></div>` +
+  `<div class="right"><a href="./#history">History</a><a href="compare.html">Compare versions</a><a href="${repoUrl}">${esc(D.repo)} on GitHub</a></div></div>`;
+document.title = `Activity · ${repoName}`;
+
+/* ---------- small helpers ---------- */
+const PAL = 8, LW = 16, H = 28;                       // lane colours, lane width, row height
+const s10 = sha => (sha || "").slice(0, 10);
+const utc = t => { const d = new Date(t); return isNaN(d) ? "" : d.toISOString().slice(0, 16).replace("T", " "); };
+const short = (t, n) => { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+let A = null, builds = [], users = {};
+const bySha = new Map();
+// only GitHub's own avatar host is ever used as an image source
+function avatarUrl(name) {
+  try { const u = new URL(users[name] || ""); return u.protocol === "https:" && u.hostname === "avatars.githubusercontent.com" ? u.href : ""; } catch (e) { return ""; }
+}
+function initials(name) {
+  const w = String(name || "?").replace(/\[bot\]$/, "").split(/[\s._-]+/).filter(Boolean);
+  return ((w[0] || "?")[0] + (w.length > 1 ? w[1][0] : "")).toUpperCase();
+}
+function avatar(name, size = 20, noPic = false) {
+  const url = noPic ? "" : avatarUrl(name), sz = `width:${size}px;height:${size}px`;
+  if (url) return `<img class="av" src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-n="${esc(name)}" data-sz="${size}" style="${sz}">`;
+  let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `<span class="av" aria-hidden="true" style="${sz};background:hsl(${h},45%,38%)">${esc(initials(name))}</span>`;
+}
+// a picture that fails to load becomes initials
+document.addEventListener("error", e => {
+  const im = e.target;
+  if (im.tagName === "IMG" && im.classList.contains("av")) im.outerHTML = avatar(im.dataset.n, +im.dataset.sz || 20, true);
+}, true);
+const who = c => c.login || c.author;                  // GitHub login if known, else the git author name
+const rankKind = {release: 0, history: 1, branch: 2, pr: 3, commit: 4};
+// the portal page of a commit, if one was published: a full page before a light snapshot
+const builtPath = sha => {
+  const b = builds.filter(b => b.sha === sha).sort((x, y) => (rankKind[x.kind] ?? 9) - (rankKind[y.kind] ?? 9))[0];
+  return b ? {path: b.path, kind: b.kind, label: b.kind === "history" || b.kind === "commit" ? "snapshot " + sha.slice(0, 7) : b.label} : null;
+};
+const prHref = n => { const b = builds.find(b => b.path === `pr-${n}/`); return b ? b.path : `${repoUrl}/pull/${n}`; };
+const issueOf = n => A.issues.find(i => i.number === n);
+const cmpHref = (a, b) => `compare.html?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+const getJson = u => fetch(u, {cache: "no-store"}).then(r => r.ok ? r.json() : null).catch(() => null);
+
+/* ---------- GitHub text (markdown) ---------- */
+// marked and DOMPurify are the portal's vendored copies, loaded when the panel first needs them
+let mdP = null;
+const loadMd = () => mdP ??= Promise.all(["marked.min.js", "purify.min.js"].map(f => new Promise(ok => {
+  const s = document.createElement("script"); s.src = "assets/" + f; s.onload = s.onerror = ok; document.head.appendChild(s);
+})));
+function md(text) {
+  const t = String(text || "");
+  if (!(window.marked && window.DOMPurify)) return `<p>${esc(short(t, 600))}</p>`;
+  // pictures from private repositories wouldn't load: they become links
+  const src = t.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, (m, alt, url) => `[${alt || "image"}](${url})`);
+  const html = DOMPurify.sanitize(marked.parse(src), {FORBID_TAGS: ["img", "style", "form", "input", "iframe"]});
+  const box = document.createElement("div"); box.innerHTML = html;
+  box.querySelectorAll("a").forEach(a => { a.target = "_blank"; a.rel = "noopener noreferrer"; });
+  return box.innerHTML;
+}
+let DET = null, detP = null, mdTried = false;
+const loadDetails = () => detP ??= getJson("activity-details.json").then(d => (DET = d || {}, DET));
+
+/* ---------- filters ---------- */
+const GROUPS = [["main", "main"], ["pr", "pull requests"], ["prc", "PR commits"], ["comments", "comments"], ["issues", "issues"], ["rel", "releases"]];
+const F = {branch: "", author: "", from: "", to: "", show: new Set(GROUPS.map(g => g[0]))};
+const sel = {c: null, e: null, a: null, b: null};   // selected commit (full sha) / event id; the compare pair (full shas)
+let hover = null, noteMsg = "";
+
+function reach(tips) {          // every commit reachable from the given shas
+  const seen = new Set(), stack = [...tips];
+  while (stack.length) {
+    const s = stack.pop();
+    if (seen.has(s) || !bySha.has(s)) continue;
+    seen.add(s);
+    for (const p of bySha.get(s).parents) stack.push(p);
+  }
+  return seen;
+}
+const branchTip = name => (A.branches.find(b => b.name === name) || {}).tip;
+let onMain = new Set();
+function shownSet() {
+  let ok = null;
+  const narrow = s => { ok = ok ? new Set([...ok].filter(x => s.has(x))) : s; };
+  if (F.branch) narrow(reach([branchTip(F.branch)].filter(Boolean)));
+  const from = F.from ? Date.parse(F.from + "T00:00:00Z") : 0, to = F.to ? Date.parse(F.to + "T00:00:00Z") + 864e5 : Infinity;
+  const out = new Set();
+  for (const c of A.commits) {
+    if (ok && !ok.has(c.sha)) continue;
+    if (F.author && who(c) !== F.author) continue;
+    const t = Date.parse(c.date);
+    if (t < from || t >= to) continue;
+    if (!F.show.has(onMain.has(c.sha) ? "main" : "prc")) continue;
+    out.add(c.sha);
+  }
+  return out;
+}
+
+/* ---------- lanes ---------- */
+/* Newest first, children before parents. A commit with no child opens a column; otherwise it takes
+   the leftmost column that was heading to it; a merge's other parents reuse a column already
+   heading to them or take the first free one. Each parent link is an edge: straight in its
+   column, bending into it right after the child and out of it right before the parent. */
+function layout(rows, defaultTip) {
+  const slots = [], pend = new Map(), edges = [];
+  let next = 0, maxCol = 0;
+  const free = () => { let i = 0; while (slots[i]) i++; return i; };
+  if (defaultTip && rows.some(r => r.sha === defaultTip)) slots[0] = {sha: defaultTip, color: next++};   // main keeps the first column
+  const pos = [];
+  rows.forEach((r, i) => {
+    const heading = [];
+    slots.forEach((s, j) => { if (s && s.sha === r.sha) heading.push(j); });
+    let k, color;
+    if (heading.length) { k = heading[0]; color = slots[k].color; } else { k = free(); color = next++; }
+    for (const e of pend.get(r.sha) || []) { e.r2 = i; e.c2 = k; }
+    pend.delete(r.sha);
+    heading.forEach(j => { slots[j] = null; });
+    pos.push({col: k, color});
+    maxCol = Math.max(maxCol, k);
+    r.vp.forEach((p, n) => {
+      let edge;
+      if (n === 0) { slots[k] = {sha: p, color}; edge = {r1: i, c1: k, rc: k, color}; }
+      else {
+        let j = slots.findIndex(s => s && s.sha === p);
+        if (j < 0) { j = free(); slots[j] = {sha: p, color: next++}; }
+        edge = {r1: i, c1: k, rc: j, color: slots[j].color};
+      }
+      maxCol = Math.max(maxCol, edge.rc);
+      if (!pend.has(p)) pend.set(p, []);
+      pend.get(p).push(edge);
+      edges.push(edge);
+    });
+  });
+  for (const e of edges) if (e.r2 == null) { e.r2 = rows.length; e.c2 = e.rc; e.open = true; }   // parent beyond the shown commits
+  return {pos, edges, maxCol};
+}
+const X = c => 12 + c * LW + LW / 2, Y = r => r * H + H / 2;
+function edgePath(e) {
+  const x1 = X(e.c1), y1 = Y(e.r1), x2 = X(e.c2), y2 = e.open ? e.r2 * H : Y(e.r2), xr = X(e.rc);
+  if (x1 === x2 && xr === x1) return `M${x1} ${y1}V${y2}`;
+  if (e.r2 - e.r1 === 1 && !e.open) { const m = (y1 + y2) / 2; return `M${x1} ${y1}C${x1} ${m} ${x2} ${m} ${x2} ${y2}`; }
+  let d = `M${x1} ${y1}`;
+  if (xr !== x1) { const m = y1 + H / 2; d += `C${x1} ${m} ${xr} ${m} ${xr} ${y1 + H}`; }
+  if (xr !== x2) { const yb = y2 - H, m = yb + H / 2; d += `L${xr} ${yb}C${xr} ${m} ${x2} ${m} ${x2} ${y2}`; }
+  else d += `L${xr} ${y2}`;
+  return d;
+}
+
+/* ---------- events ---------- */
+let rowEls = new Map(), evEls = new Map(), evBy = new Map(), prById = new Map(), items = [];
+const isRelease = tag => A.releaseTags.has(tag) || (!A.github && /^v?\d/.test(tag));
+const prRel = p => [s10(p.head_sha), s10(p.merge_sha), ...(p.commits || [])].filter(Boolean);
+const relOf = e => e.rel && e.rel.length ? e.rel : e.pr && prById.has(e.pr) ? prRel(prById.get(e.pr)) : [];
+const evGroup = e => ({pr_opened: "pr", merged: "pr", closed: "pr", comment: "comments", review: "comments", review_comment: "comments",
+  issue_opened: "issues", issue_comment: "issues", issue_closed: "issues", release: "rel"}[e.type]);   // pushes are not rows: they're in the panel
+
+function evLabel(e) {
+  const pr = prById.get(e.pr), prl = e.pr ? `PR #${e.pr}${pr ? " " + pr.title : ""}` : "", is = issueOf(e.issue);
+  const isl = e.issue ? `#${e.issue}${is ? " " + is.title : ""}` : "", q = e.text ? ` · “${short(e.text, 90)}”` : "";
+  switch (e.type) {
+    case "pr_opened": return {cls: "t-pr", t: `${pr && pr.draft ? "Draft pull request" : "Pull request"} opened · ${prl}`};
+    case "merged": return {cls: "t-pr", t: `Pull request merged · ${prl}`};
+    case "closed": return {cls: "t-bad", t: `Pull request closed · ${prl}`};
+    case "review": {
+      const s = {approved: "approved", changes_requested: "requested changes on", commented: "reviewed", dismissed: "dismissed a review of"}[e.state] || e.state;
+      return {cls: e.state === "changes_requested" ? "t-bad" : "t-comments", t: `Review ${s} PR #${e.pr}${q}`};
+    }
+    case "review_comment": return {cls: "t-comments", t: `Review comment on PR #${e.pr}${e.path ? " (" + e.path.split("/").pop() + ")" : ""}${q}`};
+    case "comment": return {cls: "t-comments", t: `${e.pin ? "Pinned comment on " + e.pin + " ·" : "Comment on"} PR #${e.pr}${q}`};
+    case "issue_opened": return {cls: "t-issues", t: `Issue opened · ${isl}`};
+    case "issue_comment": return {cls: "t-issues", t: `Comment on issue #${e.issue}${q}`};
+    case "issue_closed": return {cls: "t-issues", t: `Issue closed · ${isl}`};
+    case "release": return {cls: "t-rel", t: `★ Release ${e.tag}${e.prerelease ? " (pre-release)" : ""}`};
+  }
+  return {cls: "", t: e.type};
+}
+const evLink = e => e.issue ? (issueOf(e.issue) || {}).url || `${repoUrl}/issues/${e.issue}` : e.pr ? prHref(e.pr) : e.tag ? `${repoUrl}/releases/tag/${encodeURIComponent(e.tag)}` : "";
+const evRef = e => e.issue ? "#" + e.issue : e.pr ? "#" + e.pr : "";
+
+function visibleEvents() {
+  const from = F.from ? Date.parse(F.from + "T00:00:00Z") : 0, to = F.to ? Date.parse(F.to + "T00:00:00Z") + 864e5 : Infinity;
+  const S = new Set(items.filter(r => r.c).map(r => s10(r.sha)));
+  return A.events.filter(e => {
+    const g = evGroup(e);
+    if (!g || !F.show.has(g)) return false;
+    const t = Date.parse(e.at);
+    if (t < from || t >= to) return false;
+    if (F.author && e.who !== F.author) return false;
+    if (F.branch) {
+      const pr = prById.get(e.pr);
+      return relOf(e).some(s => S.has(s)) || (pr && pr.head === F.branch);
+    }
+    return true;
+  });
+}
+
+/* ---------- render ---------- */
+function chipsFor(c, color) {
+  const out = [];
+  for (const n of c.branches || []) {
+    const b = A.branches.find(x => x.name === n) || {};
+    const how = {pr: "author of its pull request", commit: "author of its first commit", push: "first push recorded"}[b.how];
+    const pic = b.creator ? avatar(b.creator, 16) : "";
+    out.push(`<span class="ref ${b.default ? "def" : ""} ${pic ? "" : "nopic"}" style="--c:var(--l${color % PAL})" title="${esc(n)}${b.creator ? " · created by " + esc(b.creator) + " (" + how + ")" : ""}">${pic}${esc(n)}</span>`);
+  }
+  for (const n of c.tags || [])
+    out.push(`<span class="ref tag nopic" style="--c:var(--l${color % PAL})" title="${isRelease(n) ? "release " : "tag "}${esc(n)}">${isRelease(n) ? "&#9733; " : ""}${esc(n)}</span>`);
+  return out.join("");
+}
+// why a commit has no snapshot
+function noSnapWhy(sha) {
+  const s = s10(sha), c = bySha.get(sha);
+  if (A.prs.some(p => prRel(p).includes(s) && !p.fork && c && !onMain.has(sha)))
+    return "Only the head commit of each push to a pull request gets a snapshot (the newest 20 per PR, input pr-commits): this one was inside a push, is older, or was pushed before snapshots were turned on";
+  if (onMain.has(sha)) return "Only the last commits of main keep a snapshot (input history): this one is older, or was pushed before snapshots were turned on";
+  return "Branches without a pull request are not published: only main, releases and pull requests are";
+}
+const abOf = sha => sha === sel.a ? "a" : sha === sel.b ? "b" : "";
+
+function render() {
+  const S = shownSet();
+  // nearest shown ancestors, through the commits that are filtered out
+  const memo = new Map();
+  const vis = sha => {
+    if (S.has(sha)) return [sha];
+    if (memo.has(sha)) return memo.get(sha);
+    memo.set(sha, []);
+    const out = [];
+    for (const p of (bySha.get(sha) || {parents: []}).parents) for (const v of vis(p)) if (!out.includes(v)) out.push(v);
+    memo.set(sha, out);
+    return out;
+  };
+  const commits = A.commits.filter(c => S.has(c.sha)).map(c => ({c, sha: c.sha, vp: [...new Set(c.parents.flatMap(vis))]}));
+  const L = layout(commits, A.default_branch ? branchTip(A.default_branch) : null);
+  // events between the commits, by time: an event goes above the first commit older than it
+  items = commits.slice();
+  const evs = visibleEvents();   // (reads `items` for the branch filter: only the commits are in it at this point)
+  const oldest = commits.length ? Date.parse(commits[commits.length - 1].c.date) : 0;
+  const evSorted = evs.filter(e => Date.parse(e.at) >= oldest).sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
+  items = []; const disp = [];
+  let k = 0;
+  commits.forEach((r, i) => {
+    const t = Date.parse(r.c.date);
+    while (k < evSorted.length && Date.parse(evSorted[k].at) >= t) items.push({e: evSorted[k++]});
+    disp[i] = items.length; items.push(r);
+  });
+  while (k < evSorted.length) items.push({e: evSorted[k++]});    // newer than every commit shown, or the filtered rest
+  // the events after the loop belong at the end only if no commit is shown
+  const total = items.length;
+  for (const e of L.edges) { e.r1 = disp[e.r1]; e.r2 = e.open ? total : disp[e.r2]; }
+  const lane = new Map();
+  commits.forEach((r, i) => lane.set(s10(r.sha), L.pos[i]));
+  const gw = Math.max(48, 24 + (L.maxCol + 1) * LW);
+  $("count").textContent = `${commits.length} of ${A.commits.length} commits · ${items.length - commits.length} events`;
+
+  let svg = `<svg width="${gw}" height="${total * H}" aria-hidden="true">`;
+  for (const e of L.edges) svg += `<path d="${edgePath(e)}" fill="none" stroke="var(--l${e.color % PAL})" stroke-width="2" stroke-linecap="round"${e.open ? ' stroke-dasharray="3 4"' : ""}/>`;
+  let rows = "";
+  items.forEach((it, i) => {
+    const y = Y(i);
+    if (it.e) {
+      const e = it.e, lab = evLabel(e), g = evGroup(e), rel = relOf(e).find(s => lane.has(s));
+      const col = rel ? lane.get(rel).col : 0, x = X(col), link = evLink(e);
+      svg += eventIcon(e, x, y);
+      rows += `<div class="row ev t-${lab.cls === "t-bad" ? "bad" : g}" tabindex="0" data-e="${e.id}" role="button">` +
+        `<span class="g"></span><span class="sub" title="${esc(lab.t)}">${esc(lab.t)}</span>` +
+        `<span class="au">${e.who ? avatar(e.who, 18) + `<span>${esc(e.who)}</span>` : ""}</span>` +
+        `<span class="dt" title="${esc(e.at)}">${esc(utc(e.at))}</span>` +
+        `<span class="sh">${link && evRef(e) ? `<a class="mono" href="${esc(link)}">${esc(evRef(e))}</a>` : ""}</span><span></span></div>`;
+      return;
+    }
+    const c = it.c, ci = commits.indexOf(it), p = L.pos[ci], x = X(p.col), col = `var(--l${p.color % PAL})`;
+    const merge = c.parents.length > 1, rel = (c.tags || []).some(isRelease), snap = builtPath(c.sha), a = who(c);
+    const cls = `${snap ? "" : "nosnap"} ${abOf(c.sha) ? "p" + abOf(c.sha) : ""}`;
+    const tip = snap ? `Click to use as ${sel.a && !sel.b ? "B" : "A"}` : "No snapshot for this commit";
+    svg += (rel ? `<path class="dot ${cls}" data-s="${s10(c.sha)}" d="M${x} ${y - 7}L${x + 7} ${y}L${x} ${y + 7}L${x - 7} ${y}Z" fill="${col}"><title>${esc(tip)}</title></path>`
+      : `<circle class="dot ${merge ? "merge" : ""} ${cls}" data-s="${s10(c.sha)}" cx="${x}" cy="${y}" r="${merge ? 4.5 : 5}" ${merge ? `style="--c:${col}"` : `fill="${col}"`}><title>${esc(tip)}</title></circle>`);
+    rows += `<div class="row ${cls}" tabindex="0" data-s="${s10(c.sha)}" role="button" aria-label="${esc(c.subject)}${snap ? "" : " (no snapshot)"}">` +
+      `<span class="g"></span><span class="sub" title="${esc(c.subject)}">${chipsFor(c, p.color)}${esc(c.subject)}</span>` +
+      `<span class="au" title="${esc(a)}">${avatar(a, 18)}<span>${esc(a)}</span></span>` +
+      `<span class="dt" title="${esc(c.date)}">${esc(utc(c.date))}</span>` +
+      `<span class="sh" data-ab>${abOf(c.sha) ? `<span class="ab ${abOf(c.sha)}">${abOf(c.sha).toUpperCase()}</span>` : ""}<a class="mono" href="${esc(snap ? snap.path : repoUrl + "/commit/" + c.sha)}">${esc(c.sha.slice(0, 7))}</a></span>` +
+      `<span class="sn">${snap ? "snapshot" : ""}</span></div>`;
+  });
+  svg += "</svg>";
+  $("tbl").style.setProperty("--gw", gw + "px");
+  $("body").innerHTML = items.length ? svg + rows : `<div class="empty">Nothing matches the filters.</div>`;
+  rowEls = new Map(); evEls = new Map();
+  $("body").querySelectorAll(".row[data-s]").forEach(el => rowEls.set(el.dataset.s, {row: el}));
+  $("body").querySelectorAll(".row[data-e]").forEach(el => evEls.set(+el.dataset.e, el));
+  $("body").querySelectorAll(".dot").forEach(el => { (rowEls.get(el.dataset.s) || {}).dot = el; });
+  evBy = new Map();
+  for (const e of A.events) for (const s of relOf(e)) { if (!evBy.has(s)) evBy.set(s, []); evBy.get(s).push(e.id); }
+  paint(); panel(); selbar();
+}
+// an icon per kind of event, on the lane of the commit it is about
+function eventIcon(e, x, y) {
+  const g = evGroup(e), d = `data-e="${e.id}"`;
+  const ring = (c, fill) => `<circle class="evi" ${d} cx="${x}" cy="${y}" r="6.5" fill="${fill || "var(--card)"}" stroke="${c}" stroke-width="2.5"/>`;
+  if (g === "comments") return `<rect class="evi" ${d} x="${x - 7}" y="${y - 6}" width="14" height="12" rx="3" fill="var(--card)" stroke="var(--warn)" stroke-width="2"/>` +
+    `<path d="M${x - 3.5} ${y}h.1M${x} ${y}h.1M${x + 3.5} ${y}h.1" stroke="var(--warn)" stroke-width="2" stroke-linecap="round" pointer-events="none"/>`;
+  if (g === "issues") return ring("var(--good)") + `<circle cx="${x}" cy="${y}" r="2.2" fill="var(--good)" pointer-events="none"/>`;
+  if (g === "rel") return `<path class="evi" ${d} d="M${x} ${y - 8}L${x + 8} ${y}L${x} ${y + 8}L${x - 8} ${y}Z" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/>`;
+  if (e.type === "merged") return ring("var(--merged)", "var(--merged)");
+  if (e.type === "closed") return ring("var(--bad)");
+  return ring("var(--merged)") + `<path d="M${x - 2.5} ${y + 1.5}L${x} ${y - 2}L${x + 2.5} ${y + 1.5}" fill="none" stroke="var(--merged)" stroke-width="1.6" stroke-linecap="round" pointer-events="none"/>`;
+}
+
+/* hover or focus highlights what is related; the selection stays highlighted otherwise */
+let lit = [];
+function paint() {
+  lit.forEach(el => el.classList.remove("hl"));
+  lit = [];
+  document.querySelectorAll(".sel").forEach(el => { el.classList.remove("sel"); el.removeAttribute("aria-current"); });
+  const src = hover || selSource();
+  if (src) {
+    for (const s of src.cs) { const o = rowEls.get(s); if (o) { lit.push(o.row); if (o.dot) lit.push(o.dot); } }
+    for (const id of src.es) { const el = evEls.get(id); if (el) lit.push(el); }
+    lit.forEach(el => el.classList.add("hl"));
+  }
+  if (sel.c) { const o = rowEls.get(s10(sel.c)); if (o) { o.row.classList.add("sel"); o.row.setAttribute("aria-current", "true"); } }
+  if (sel.e != null) { const el = evEls.get(sel.e); if (el) el.classList.add("sel"); }
+}
+const fromCommit = sha => ({cs: [s10(sha)], es: evBy.get(s10(sha)) || []});
+const fromEvent = id => { const e = A.events.find(x => x.id === id); return {cs: e ? relOf(e) : [], es: [id]}; };
+const selSource = () => sel.e != null ? fromEvent(sel.e) : sel.c ? fromCommit(sel.c) : null;
+
+/* ---------- picking A and B ---------- */
+function repaintPicks() {   // after A/B changed: only the marks, not the whole graph
+  rowEls.forEach((o, s) => {
+    const sha = A.bySha10.get(s), ab = abOf(sha);
+    for (const el of [o.row, o.dot]) if (el) { el.classList.toggle("pa", ab === "a"); el.classList.toggle("pb", ab === "b"); }
+    const sh = o.row.querySelector("[data-ab]");
+    if (sh) { const old = sh.querySelector(".ab"); if (old) old.remove(); if (ab) sh.insertAdjacentHTML("afterbegin", `<span class="ab ${ab}">${ab.toUpperCase()}</span>`); }
+  });
+  selbar(); panel(); syncQuery();
+}
+function setSlot(slot, sha) {
+  const snap = builtPath(sha);
+  if (!snap) { noteMsg = `${sha.slice(0, 7)}: ${noSnapWhy(sha)}.`; selbar(); return false; }
+  noteMsg = "";
+  const other = slot === "a" ? "b" : "a";
+  if (sel[other] === sha) sel[other] = null;
+  sel[slot] = sha;
+  return true;
+}
+// a click on a commit: A first, B second, a third click starts over; clicking A or B again lets it go
+function pickCommit(sha) {
+  if (!builtPath(sha)) { noteMsg = `${sha.slice(0, 7)}: ${noSnapWhy(sha)}.`; selbar(); return; }
+  noteMsg = "";
+  if (sel.a === sha) sel.a = null;
+  else if (sel.b === sha) sel.b = null;
+  else if (!sel.a) sel.a = sha;
+  else if (!sel.b) sel.b = sha;
+  else { sel.a = sha; sel.b = null; }
+  repaintPicks();
+}
+function selbar() {
+  const slot = (l, sha) => {
+    const c = sha && bySha.get(sha);
+    return `<span class="slot"><span class="ab ${l}">${l.toUpperCase()}</span>` + (c
+      ? `<span class="t" title="${esc(c.subject)}"><span class="mono">${esc(sha.slice(0, 7))}</span> · ${esc(c.subject)}</span>`
+      : `<span class="muted">${l === "a" ? "click a commit" : "click another"}</span>`) + `</span>`;
+  };
+  const pa = sel.a && builtPath(sel.a), pb = sel.b && builtPath(sel.b);
+  const same = pa && pb && pa.path === pb.path;
+  const ready = pa && pb && !same;
+  $("selbar").innerHTML = `${slot("a", sel.a)}${slot("b", sel.b)}<span class="push">` +
+    (ready ? `<a class="btn go" href="${esc(cmpHref(pa.path, pb.path))}">Compare A &#8596; B</a>` : `<span class="btn go off" role="link" aria-disabled="true">Compare A &#8596; B</span>`) +
+    `<button class="btn" id="clear" ${sel.a || sel.b ? "" : "disabled"}>Clear</button></span>` +
+    (noteMsg || same ? `<div class="msg" role="status">${esc(noteMsg || "A and B are the same build.")}</div>` : "");
+  $("clear").onclick = () => { sel.a = sel.b = null; noteMsg = ""; repaintPicks(); };
+}
+
+/* ---------- side panel ---------- */
+// what the panel is about: the selected commit, or the pull request / issue of a selected event
+function context() {
+  const c = sel.c && bySha.get(sel.c), e = sel.e != null ? A.events.find(x => x.id === sel.e) : null;
+  let prs = [], issues = [];
+  if (c) {
+    const s = s10(c.sha);
+    prs = A.prs.filter(p => prRel(p).includes(s));
+    issues = [...new Set([...(c.issues || []), ...prs.flatMap(p => p.issues || [])])];
+  } else if (e) {
+    if (e.pr && prById.has(e.pr)) prs = [prById.get(e.pr)];
+    if (e.issue) issues = [e.issue];
+  }
+  return {c, e, prs, issues};
+}
+const commentsOf = (p, s) => {   // what people wrote on a PR, oldest first; ones about this very commit are marked
+  const d = DET && DET.prs && DET.prs[String(p.number)];
+  if (!d) return null;
+  const items = [];
+  for (const t of d.threads || []) items.push({k: "th", at: t.at, who: t.who, title: (t.path || "").split("/").pop() || "Review comment", text: t.text, url: t.url, here: t.sha && t.sha === s});
+  for (const r of d.reviews || []) if (r.text || r.state !== "commented") items.push({k: "rv", at: r.at, who: r.who, title: {approved: "Approved", changes_requested: "Changes requested", dismissed: "Review dismissed", commented: "Review"}[r.state] || "Review", text: r.text, url: r.url, here: r.sha && r.sha === s});
+  for (const t of d.pins || []) items.push({k: "pin", at: t.at, who: t.who, title: `Pinned on the board · ${t.ref || "point"}`, text: t.text, url: t.url, pin: t, here: t.sha && t.sha === s});
+  for (const t of d.comments || []) items.push({k: "cv", at: t.at, who: t.who, title: "Conversation", text: t.text, url: t.url});
+  return items.sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
+};
+const pinLink = (p, pin) => { const q = new URLSearchParams({at: pin.x + "," + pin.y}); if (pin.ref) q.set("ref", pin.ref); if (pin.layer) q.set("layer", pin.layer); if (pin.sheet) q.set("sheet", pin.sheet); return `${prHref(p.number)}?${q}#${pin.page}`; };
+
+function panel() {
+  const box = $("panel"), cx = context(), c = cx.c;
+  if (!c && !cx.prs.length && !cx.issues.length) {
+    box.innerHTML = `<section><h3>Selected commit</h3><p class="muted">Click a commit in the graph: it becomes <span class="ab a">A</span> then <span class="ab b">B</span> for comparing, and ` +
+      `its message, pull request, comments and related issues show here.</p>` +
+      `<div class="legend"><span><span class="ab a">A</span> before</span><span><span class="ab b">B</span> after</span><span class="muted">green dot: has a snapshot to compare</span></div></section>`;
+    return;
+  }
+  const s = c && s10(c.sha), snap = c && builtPath(c.sha), par = c && c.parents[0] ? builtPath(c.parents[0]) : null;
+  const ab = c ? abOf(c.sha) : "";
+  let html = "";
+  if (c) {
+    const branch = (c.branches || []).join(", ") || (cx.prs[0] && cx.prs[0].head) || "";
+    const pushes = (evBy.get(s) || []).map(id => A.events.find(x => x.id === id)).filter(e => e && e.type === "push");
+    html += `<section><h3>Selected commit</h3><div class="pc-top">${ab ? `<span class="ab ${ab}">${ab.toUpperCase()}</span>` : ""}<span class="mono">${esc(c.sha.slice(0, 7))}</span>` +
+      `${c.parents.length > 1 ? `<span class="muted">· merge</span>` : ""}</div><div class="pc-subj">${esc(c.subject)}</div>` +
+      `${DET && DET.commits && DET.commits[s] ? `<pre class="pc-body">${esc(DET.commits[s])}</pre>` : ""}` +
+      `<div class="muted">${avatar(who(c), 16)} ${esc(who(c))}${c.committer && c.committer !== c.author ? " (committed by " + esc(c.committer) + ")" : ""} · ${esc(utc(c.date))} UTC${branch ? " · branch " + esc(branch) : ""}</div>` +
+      (pushes.length ? `<div class="muted">pushed by ${pushes.map(e => esc(e.who)).join(", ")} (${esc(utc(pushes[0].at))} UTC)</div>` : "") +
+      (snap ? "" : `<p class="muted" style="margin:8px 0 0">${esc(noSnapWhy(c.sha))}.</p>`) + `</section>`;
+  }
+  const loading = DET == null;
+  for (const p of cx.prs.slice(0, 3)) {
+    const st = p.state === "MERGED" || p.merged ? "merged" : p.state === "CLOSED" ? "closed" : "open";
+    const snaps = builds.filter(b => b.kind === "commit" && b.pr === p.number), full = builds.find(b => b.path === `pr-${p.number}/`);
+    const cc = (full || snaps[snaps.length - 1] || {}).counts || {};
+    const d = DET && DET.prs && DET.prs[String(p.number)];
+    const stat = [`${(p.commits || []).length} commit${(p.commits || []).length === 1 ? "" : "s"}`, `${snaps.length} snapshot${snaps.length === 1 ? "" : "s"}`,
+      cc.drc_errors != null ? `DRC ${cc.drc_errors} error${cc.drc_errors === 1 ? "" : "s"}` : "", cc.erc_errors != null ? `ERC ${cc.erc_errors}` : ""].filter(Boolean).join(" · ");
+    html += `<section><h3>Pull request</h3><div><span class="st ${st} pr">#${p.number} ${st}</span> <a href="${esc(prHref(p.number))}"><b>${esc(p.title)}</b></a></div>` +
+      (d && d.body ? `<div class="md clamp" data-more>${md(d.body)}</div><button class="lnk" data-expand>Show more</button>` : loading ? `<p class="muted">Loading…</p>` : "") +
+      `<div class="sumline">${esc(stat)}${snaps.length > 1 ? ` · <a href="${esc(prHref(p.number))}#commits">compare its commits</a>` : ""}</div></section>`;
+    const list = commentsOf(p, s);
+    if (list && list.length) {
+      html += `<section><h3>Comments (${list.length})</h3>` + list.map(it =>
+        `<div class="cm"><span class="ic ${it.k === "cv" ? "" : it.k}"></span><div><div class="hd"><b>${it.url ? `<a href="${esc(it.pin ? pinLink(p, it.pin) : it.url)}">${esc(it.title)}</a>` : esc(it.title)}` +
+        `${it.here ? `<span class="here">on this commit</span>` : ""}</b><span class="who">${it.who ? "@" + esc(it.who) : ""}</span></div>` +
+        `<div class="md clamp">${md(it.text)}</div><div class="muted" style="font-size:12px">${esc(utc(it.at))} UTC</div></div></div>`).join("") + `</section>`;
+    }
+  }
+  if (cx.issues.length) {
+    html += `<section><h3>Related issues</h3>` + cx.issues.map(n => {
+      const is = issueOf(n), d = DET && DET.issues && DET.issues[String(n)];
+      if (!is) return `<div class="is"><span class="ic"></span><a href="${repoUrl}/issues/${n}">#${n}</a></div>`;
+      const by = [...(is.prs || []).map(x => "PR #" + x), ...(is.commits || []).map(x => x.slice(0, 7))].slice(0, 3).join(", ");
+      const last = d && d.comments && d.comments[d.comments.length - 1];
+      return `<div class="is"><span class="ic ${is.state === "CLOSED" ? "closed" : ""}"></span><div><a href="${esc(is.url)}"><b>#${n} ${esc(is.title)}</b></a>` +
+        `<div class="muted" style="font-size:12.5px">${is.state === "CLOSED" ? "closed" : "open"}${by ? " · mentioned by " + esc(by) : ""} · ${is.comments} comment${is.comments === 1 ? "" : "s"}</div>` +
+        (last ? `<div class="quote">“${esc(short(last.text, 160))}”<div class="muted" style="font-size:12px">${last.who ? "@" + esc(last.who) + " · " : ""}${esc(utc(last.at))}</div></div>` : "") +
+        (d ? `<details><summary>${d.body ? "Description and " : ""}${is.comments} comment${is.comments === 1 ? "" : "s"}</summary>` +
+          (d.body ? `<div class="md">${md(d.body)}</div>` : "") +
+          (d.comments || []).map(cm => `<div class="cm"><span class="ic"></span><div><div class="hd"><b>${cm.who ? "@" + esc(cm.who) : ""}</b><span class="who">${esc(utc(cm.at))}</span></div><div class="md">${md(cm.text)}</div></div></div>`).join("") + `</details>` : "") +
+        `</div></div>`;
+    }).join("") + `</section>`;
+  }
+  if (c) {
+    const acts = [];
+    if (snap) acts.push(`<a class="btn pri" href="${esc(snap.path)}">Open this version</a>`);
+    acts.push(`<button class="btn" data-set="${ab === "a" ? "b" : "a"}" ${snap ? "" : "disabled"}>Set as ${ab === "a" ? "B" : "A"}</button>`);
+    if (snap && par) acts.push(`<a class="btn" href="${esc(cmpHref(par.path, snap.path))}">Compare with parent</a>`);
+    acts.push(`<a class="btn" href="${esc(repoUrl)}/commit/${esc(c.sha)}" rel="noopener">View on GitHub &#8599;</a>`);
+    html += `<section><div class="acts">${acts.join("")}</div></section>`;
+  }
+  box.innerHTML = html;
+  if (!DET) Promise.all([loadDetails(), loadMd()]).then(() => { mdTried = true; if (context().c === c) panel(); });
+  else if (!mdTried && !(window.marked && window.DOMPurify)) loadMd().then(() => { mdTried = true; panel(); });
+}
+
+/* ---------- events ---------- */
+function wire() {
+  const body = $("body"), tip = $("tip");
+  const rowOf = t => t.closest && t.closest(".row[data-s], .row[data-e]");
+  const over = e => {
+    const r = rowOf(e.target), d = e.target.closest && e.target.closest(".dot, .evi");
+    const key = r || d;
+    let next = null;
+    if (key && key.dataset.s) next = fromCommit(A.bySha10.get(key.dataset.s));
+    else if (key && key.dataset.e) next = fromEvent(+key.dataset.e);
+    if (next || hover) { hover = next; paint(); }
+    const ns = key && key.dataset.s && !builtPath(A.bySha10.get(key.dataset.s)) ? A.bySha10.get(key.dataset.s) : null;
+    if (ns) {
+      tip.hidden = false;
+      tip.innerHTML = `<b>No snapshot for this commit</b>${esc(noSnapWhy(ns))}`;
+      const rect = (r || key).getBoundingClientRect();
+      tip.style.left = Math.max(8, Math.min(innerWidth - 350, e.clientX - 40)) + "px";
+      tip.style.top = Math.max(8, rect.top - tip.offsetHeight - 6) + "px";
+    } else tip.hidden = true;
+  };
+  body.addEventListener("mouseover", over);
+  body.addEventListener("focusin", over);
+  body.addEventListener("mouseleave", () => { hover = null; tip.hidden = true; paint(); });
+  body.addEventListener("focusout", e => { if (!body.contains(e.relatedTarget)) { hover = null; tip.hidden = true; paint(); } });
+  body.addEventListener("click", e => {
+    if (e.target.closest("a")) return;
+    const d = e.target.closest(".dot, .evi"), r = rowOf(e.target), key = d || r;
+    if (!key) return;
+    if (key.dataset.s) {
+      const sha = A.bySha10.get(key.dataset.s);
+      sel.c = sha; sel.e = null;
+      pickCommit(sha); paint();
+    } else {
+      const ev = A.events.find(x => x.id === +key.dataset.e);
+      const first = ev && relOf(ev).map(s => A.bySha10.get(s)).find(s => s && rowEls.has(s10(s)));
+      sel.c = first || null; sel.e = ev ? ev.id : null;
+      paint(); panel();
+    }
+  });
+  body.addEventListener("keydown", e => {
+    const r = rowOf(e.target);
+    if (!r) return;
+    if (e.key === "Enter" || e.key === " ") { if (!e.target.closest("a")) { e.preventDefault(); r.click(); } }
+    else if ((e.key === "a" || e.key === "b") && r.dataset.s) {
+      const sha = A.bySha10.get(r.dataset.s);
+      sel.c = sha; sel.e = null;
+      if (setSlot(e.key, sha)) repaintPicks();
+      paint();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = e.key === "ArrowDown" ? r.nextElementSibling : r.previousElementSibling;
+      if (n && n.tabIndex === 0) n.focus();
+    }
+  });
+  $("panel").addEventListener("click", e => {
+    const set = e.target.closest("[data-set]");
+    if (set && sel.c && setSlot(set.dataset.set, sel.c)) { repaintPicks(); return; }
+    const more = e.target.closest("[data-expand]");
+    if (more) { const box = more.previousElementSibling; box.classList.toggle("clamp"); more.textContent = box.classList.contains("clamp") ? "Show more" : "Show less"; }
+  });
+}
+
+/* ---------- page ---------- */
+function syncQuery() {
+  const q = new URLSearchParams();
+  for (const k of ["branch", "author", "from", "to"]) if (F[k]) q.set(k, F[k]);
+  if (F.show.size < GROUPS.length) q.set("show", [...F.show].join(","));
+  if (sel.a) q.set("a", sel.a.slice(0, 7));
+  if (sel.b) q.set("b", sel.b.slice(0, 7));
+  history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : ""));
+}
+function build() {
+  const names = A.branches.slice().sort((a, b) => (b.default - a.default) || (Date.parse(bySha.get(b.tip).date) - Date.parse(bySha.get(a.tip).date))).map(b => b.name);
+  const authors = [...new Set(A.commits.map(who).concat(A.events.map(e => e.who).filter(Boolean)))].sort((a, b) => a.localeCompare(b));
+  const note = [];
+  note.push(`Graph of the last ${A.commits.length} commits${A.truncated ? ` (older ones are not shown; input <code>activity</code> sets the number)` : ""} of ${A.branches.length} branches, with what happened between them.`);
+  note.push(A.github ? `Pull requests, reviews, comments, issues and releases come from GitHub (the last ${A.prs.length} pull requests, the ${A.issues.length} issue${A.issues.length === 1 ? "" : "s"} they and the commits mention), refreshed on every publish: ${esc(utc(A.generated))} UTC.`
+    : `GitHub data (pull requests, reviews, comments, issues) is not available${A.github_note ? ": " + esc(A.github_note) : ""}: this is the git history alone.`);
+  if (A.github && A.github_note) note.push(`Incomplete: ${esc(A.github_note)}`);
+  note.push(A.pushes_since ? `Who pushed is recorded since <b>${esc(utc(A.pushes_since).slice(0, 10))}</b>, when this page was set up: earlier pushes are not known.`
+    : `Who pushed is recorded from the next push on: GitHub doesn't keep it, so earlier pushes are not known.`);
+  note.push(`No e-mail addresses are published: the GitHub login is shown when known, else the author's name.`);
+  $("wrap").innerHTML = `<div class="card pad"><div class="tools"><span class="show">Show</span>` +
+    GROUPS.map(([k, l]) => `<label><input type="checkbox" data-g="${k}"> ${l}</label>`).join("") + `<span class="sep"></span>` +
+    `<label>Branch <select id="f-branch"><option value="">All branches</option>${names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select></label>` +
+    `<label>Author <select id="f-author"><option value="">Everyone</option>${authors.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select></label>` +
+    `<label>From <input type="date" id="f-from"></label><label>To <input type="date" id="f-to"></label>` +
+    `<button class="btn" id="f-reset">Reset</button><span class="muted" id="count"></span></div>` +
+    `<div class="notes">${note.map(n => `<div>${n}</div>`).join("")}</div></div>` +
+    `<div class="cols"><div class="card"><div class="selbar" id="selbar"></div><div class="scroll" id="scroll"><div class="tbl" id="tbl">` +
+    `<div class="row head"><span>Graph</span><span>Commit / event</span><span>Author</span><span>Date (UTC)</span><span>Sha</span><span>Snapshot</span></div>` +
+    `<div class="body" id="body"></div></div></div></div>` +
+    `<div class="card panel" id="panel" aria-live="polite"></div></div>`;
+  const q = new URLSearchParams(location.search);
+  F.branch = names.includes(q.get("branch")) ? q.get("branch") : "";
+  F.author = authors.includes(q.get("author")) ? q.get("author") : "";
+  F.from = /^\d{4}-\d{2}-\d{2}$/.test(q.get("from") || "") ? q.get("from") : "";
+  F.to = /^\d{4}-\d{2}-\d{2}$/.test(q.get("to") || "") ? q.get("to") : "";
+  if (q.get("show")) F.show = new Set(q.get("show").split(",").filter(k => GROUPS.some(g => g[0] === k)));
+  const full = p => p && A.commits.find(c => c.sha.startsWith(p) && builtPath(c.sha));
+  sel.a = (full(q.get("a")) || {}).sha || null; sel.b = (full(q.get("b")) || {}).sha || null;
+  if (sel.a === sel.b) sel.b = null;
+  const set = () => {
+    $("f-branch").value = F.branch; $("f-author").value = F.author; $("f-from").value = F.from; $("f-to").value = F.to;
+    document.querySelectorAll("[data-g]").forEach(i => { i.checked = F.show.has(i.dataset.g); });
+  };
+  set();
+  const change = () => {
+    F.branch = $("f-branch").value; F.author = $("f-author").value; F.from = $("f-from").value; F.to = $("f-to").value;
+    F.show = new Set([...document.querySelectorAll("[data-g]")].filter(i => i.checked).map(i => i.dataset.g));
+    syncQuery(); render();
+  };
+  ["f-branch", "f-author", "f-from", "f-to"].forEach(id => $(id).addEventListener("change", change));
+  document.querySelectorAll("[data-g]").forEach(i => i.addEventListener("change", change));
+  $("f-reset").onclick = () => { Object.assign(F, {branch: "", author: "", from: "", to: "", show: new Set(GROUPS.map(g => g[0]))}); set(); syncQuery(); render(); };
+  wire();
+  render();
+}
+
+function start(data, list) {
+  if (!data || !Array.isArray(data.commits)) {
+    $("wrap").innerHTML = `<div class="card pad"><b>No activity data yet.</b><p class="muted">It is collected on every publish when the action's <code>activity</code> input is above 0, ` +
+      `so it appears after the next run. <a href="./">Back to the builds</a>.</p></div>`;
+    return;
+  }
+  A = data; builds = list || []; users = A.users || {};
+  A.commits.forEach(c => bySha.set(c.sha, c));
+  A.bySha10 = new Map(A.commits.map(c => [s10(c.sha), c.sha]));
+  A.prs = A.prs || []; A.events = A.events || []; A.branches = A.branches || []; A.issues = A.issues || [];
+  A.prs.forEach(p => prById.set(p.number, p));
+  A.events.forEach((e, i) => { if (e.id == null) e.id = i; });
+  A.releaseTags = new Set(A.events.filter(e => e.type === "release").map(e => e.tag));
+  onMain = A.default_branch && branchTip(A.default_branch) ? reach([branchTip(A.default_branch)]) : new Set(A.commits.map(c => c.sha));
+  build();
+}
+Promise.all([getJson("activity.json"), getJson("builds.json")]).then(([a, b]) => start(a, b));
+</script>
+</body>
+</html>
