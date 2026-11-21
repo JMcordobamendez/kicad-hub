@@ -597,6 +597,7 @@ action.yml                  the action
 fab-profiles/               optional per-fab DRC rules and assembly column layouts
 scripts/                    kicad_hub.py (the engine: steps shared by the action and local mode),
                             kicad.py (runs kicad-cli, installed or in Docker),
+                            board_file.py (reads a .kicad_pcb without KiCad),
                             detect.py (finds the KiCad project), yaml_subset.py (reads the
                             requirements file where there is no PyYAML), fab_assembly.py, report.py, drc_groups.py
                             (groups fab DRC violations in any language), requirements.py, datasheets.py, fabnotes.py,
@@ -662,10 +663,9 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
 - `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have
   them (no KiCad needed); CI runs them in the `unit` job.
 - The Python scripts can be run locally against files exported with a local
-  `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` needs
-  KiCad's own Python (`pcbnew`). On Windows, loading a board can show a missing font
-  ("Font 'Ubuntu Sans' not found; substituting…") in a window that waits for OK; it
-  sends those messages to the terminal instead, and the engine stops it after 300 s.
+  `kicad-cli` (see the arguments at the top of each script). `fabnotes.py` reads the
+  board and project files with plain Python (`board_file.py`), so it needs neither
+  KiCad nor `pcbnew`.
 
 ## Report notes
 

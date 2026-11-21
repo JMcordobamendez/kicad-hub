@@ -534,7 +534,8 @@ class SupplierKeysTest(unittest.TestCase):
 
 
 
-# Stands in for fabnotes.py, which needs KiCad's pcbnew: same arguments, same outputs.
+# Stands in for fabnotes.py on the tiny fake boards of these tests: same arguments, same
+# outputs. The real one is tested on the example board in tests/test_board_file.py.
 FAKE_FABNOTES = r'''import sys
 pcb, rev, readme, board_json, profile = sys.argv[1:6]
 open(readme, "w").write("FAB NOTES rev " + rev + " profile " + profile + "\n")
@@ -558,7 +559,7 @@ class PackageTest(EngineCase):
         self.assertEqual(self.engine("bom", "--variants", "lite")[0], 0)
 
     def package(self, *extra):
-        return self.engine("package", "--kicad-python", sys.executable, *extra)
+        return self.engine("package", *extra)
 
     def files(self, folder):
         return sorted(os.path.relpath(os.path.join(d, f), folder).replace(os.sep, "/")
@@ -636,7 +637,6 @@ class PackageTest(EngineCase):
         code, _, err = self.package()
         self.assertEqual(code, 1)
         self.assertIn("took more than 2 s and was stopped", err)
-        self.assertFalse(os.path.exists(".kicad-hub/.fabnotes.py"))       # its copy is gone too
         self.assertEqual(glob.glob(".kicad-hub/package/*.zip"), [])
 
     def test_board_without_outline_has_no_package(self):
@@ -656,37 +656,14 @@ class PackageTest(EngineCase):
         self.assertIn("run `bom` first", err)
 
 
-class FindPythonTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-
-    def touch(self, *parts):
-        path = os.path.join(self.tmp.name, *parts)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        open(path, "w").close()
-        return path
-
-    def test_the_running_python_when_it_has_pcbnew(self):
-        self.assertEqual(kicad.find_python("/x/kicad-cli", python="/kicad/python", has_pcbnew=True), "/kicad/python")
-
-    def test_the_python_beside_kicad_cli(self):
-        cli = self.touch("Kicad10", "bin", "kicad-cli.exe")
-        python = self.touch("Kicad10", "bin", "python.exe")
-        self.assertEqual(kicad.find_python(cli, python="/usr/bin/python3", has_pcbnew=False), python)
-
-    def test_the_system_python_last(self):
-        cli = self.touch("usr", "bin", "kicad-cli")
-        found = kicad.find_python(cli, python="/venv/python", which=lambda n: "/usr/bin/" + n, has_pcbnew=False)
-        self.assertEqual(found, "/usr/bin/python3")
-        self.assertIsNone(kicad.find_python(cli, python="/venv/python", which=lambda n: None, has_pcbnew=False))
-
-    def test_commands(self):
-        k = kicad.KiCad(cli="/opt/kicad-cli", python="/opt/python")
-        self.assertEqual(k.python_command(["notes.py", "b.kicad_pcb"]), ["/opt/python", "notes.py", "b.kicad_pcb"])
+class PythonCommandTest(unittest.TestCase):
+    def test_in_the_image(self):
         d = kicad.KiCad(image="img:1").python_command(["out/.notes.py", "b.kicad_pcb"], workdir="/work")
         self.assertEqual(d[-4:], ["img:1", "python3", "out/.notes.py", "b.kicad_pcb"])
 
+    def test_not_on_a_pc(self):
+        with self.assertRaises(ValueError):
+            kicad.KiCad(cli="/opt/kicad-cli").python_command(["x.py"])
 
 
 REQUIREMENTS = """# what this board must meet
@@ -704,7 +681,6 @@ REQUIREMENTS = """# what this board must meet
   refs: 'U\\d+'
   fields: [Footprint]
 """
-
 
 class RequirementsTest(EngineCase):
     """The real requirements.py, with PyYAML when this Python has it and without."""
@@ -991,7 +967,7 @@ class RunTest(EngineCase):
         self.git("commit", "-q", "-m", "first")
 
     def run_all(self, *extra):
-        return self.engine("run", "--kicad-python", sys.executable, "--check-links", "false", *extra)
+        return self.engine("run", "--check-links", "false", *extra)
 
     def test_every_step_against_main(self):
         self.commit()

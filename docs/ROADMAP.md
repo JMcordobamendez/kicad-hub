@@ -507,13 +507,36 @@ others: GitHub, as today, with a setup of three steps. Both run the same code.
   PRs and reviews, publishing the portal, releases
 
 ### C — KiCad plugin (medium, after B)
-- [ ] A thin plugin: a button runs the engine and opens the local portal. KiCad already
-      ships `kicad-cli` and a Python with `pcbnew` (`fabnotes.py` needs it anyway)
+Research of 2026-11-21 (KiCad docs and the 10.0.5 source): KiCad's older plugin interface
+(SWIG, `pcbnew.ActionPlugin`) is deprecated since 9.0 and already gone from the nightly
+builds; it stops working in KiCad 11. The IPC API plugins (`plugin.json`, kicad-python) are
+the current way: each action runs as its own process (KiCad doesn't freeze during a run),
+and it can ask KiCad for the open project's folder and the path of `kicad-cli`. In 10.0
+their buttons are in the PCB editor (the schematic editor's API can't tell the project's
+folder); the user has to tick Preferences → Plugins → "Enable KiCad API" (off by default);
+on install KiCad makes a Python environment for the plugin and pip-installs kicad-python
+from PyPI (needs network once; broken environments reported on Windows). A KiCad
+developer wrote that KiCad 11 will not ship Python any more.
+
+- [x] **Fab notes without `pcbnew`** (2026-11-21): `scripts/board_file.py` reads the
+      `.kicad_pcb` (a documented s-expression format) with plain Python, and `fabnotes.py`
+      takes the design rules from the `.kicad_pro`. Same numbers as pcbnew on the example
+      board (size from the Edge.Cuts outline with its strokes, layers, thickness, tracks,
+      vias, pads, assembly counts), checked by `tests/test_board_file.py`. The engine runs
+      it with its own Python, so no step needs KiCad's Python or `pcbnew` any more, the
+      Windows "font not found" window can't happen there, and `--kicad-python` is gone.
+      `kicad-cli pcb export stats` was not used: its JSON keys and numbers come out in
+      the PC's language ("58,52 mm")
+- [ ] **A thin IPC API plugin**, PCB editor: a "kicad-hub" button asks KiCad for the
+      project folder and `kicad-cli`, starts `kicad_hub.py run` as its own process and
+      opens the portal in the browser (with a local web server)
 - [ ] "Prepare for GitHub" button: writes the workflow and the template files into the
       project folder
-- [ ] Distribution: a ZIP for *Install from File* first, then a request to KiCad's
-      official plugin repository (how long that takes is not known)
-- To choose when it starts: KiCad's older plugin interface or the newer one
+- [ ] Distribution: a ZIP built on each release, for *Install from File*; then a merge
+      request to gitlab.com/kicad/addons/metadata. The price lookups count as "commercial
+      services" there: write to plugins@kicad.org before submitting (the owner)
+- [ ] Before KiCad 11: where the engine's Python comes from when KiCad ships none
+      (the plugin's own environment, made by KiCad, is the likely answer)
 
 ### D — Versions and review without the terminal (medium to large, after B and C)
 - [ ] Five actions, in plain words, in the plugin or the local portal: **Save version**
@@ -717,10 +740,15 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
 
 ## Decisions so far
 - **Local mode depends only on what a stock KiCad ships** (2026-11-17, from the spike):
-  `kicad-cli` and KiCad's own Python with `pcbnew` and the standard library. No PIL,
-  numpy, `rsvg-convert` or Docker (the owner's PC has no Docker at all), and nothing
-  installed with pip behind the user's back. Whatever needs more (pixel comparison of
-  renders) is done in the browser or stays a CI-only extra.
+  `kicad-cli` and a Python with the standard library (KiCad's own today; no `pcbnew`
+  needed since 2026-11-21). No PIL, numpy, `rsvg-convert` or Docker (the owner's PC has
+  no Docker at all), and nothing installed with pip by kicad-hub. Whatever needs more
+  (pixel comparison of renders) is done in the browser or stays a CI-only extra.
+- **The KiCad plugin uses the IPC API** (owner, 2026-11-21): the older interface stops
+  working in KiCad 11. The owner accepts that **KiCad itself** makes the plugin's Python
+  environment and pip-installs kicad-python from PyPI when the plugin is installed: it
+  is KiCad's own, visible mechanism for every plugin of this kind, not kicad-hub
+  installing things behind the user's back. Buttons in the PCB editor first.
 - **Releases with a button** (2026-11-17): `.github/workflows/release.yml`, run by hand
   with the version, tags the head of `main`, moves the major tag and creates the GitHub
   Release from `docs/releases/vX.Y.Z.md`. No terminal needed (it came up when v1.4.0 had

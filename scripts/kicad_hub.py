@@ -73,7 +73,7 @@ import kicad
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAB_PROFILES = os.path.join(HERE, "..", "fab-profiles")
 FABNOTES = os.path.join(HERE, "fabnotes.py")
-FABNOTES_TIMEOUT = 300  # seconds; it takes under a minute on a large board
+FABNOTES_TIMEOUT = 300  # seconds; plain Python reading the board file, a few seconds on a large board
 
 
 class StepError(Exception):
@@ -406,21 +406,17 @@ def package(k, project_dir, name, out, profile="generic", extra="", rev="", fabn
         elif fmt:
             print(f"::warning::Unknown extra format '{fmt}' (use {', '.join(EXTRA_FORMATS)})", file=sys.stderr)
 
-    # Fab notes from the board, with KiCad's Python (pcbnew). It runs from a copy in the
-    # output folder, which the Docker image can see.
-    readme, notes, warnings_txt = f"{pkg}/README.txt", f"{out}/.fabnotes.py", f"{reports}/fab-warnings.txt"
-    shutil.copy(fabnotes or FABNOTES, notes)
-    try:
-        with open(warnings_txt, "w", encoding="utf-8") as f:
-            code = k.python(notes, pcb, rev, readme, f"{reports}/board.json", profile, stdout=f,
-                            timeout=FABNOTES_TIMEOUT)
-    finally:
-        _remove(notes)
-    if code == kicad.TIMED_OUT:
-        raise StepError(f"Reading the fab notes from the board took more than {FABNOTES_TIMEOUT} s and was "
-                        "stopped. If a KiCad message window was open, it was waiting for OK: please report it")
+    # Fab notes read from the board and project files, with plain Python (no KiCad needed)
+    readme, warnings_txt = f"{pkg}/README.txt", f"{reports}/fab-warnings.txt"
+    with open(warnings_txt, "w", encoding="utf-8") as f:
+        try:
+            code = subprocess.run([sys.executable, fabnotes or FABNOTES, pcb, rev, readme, f"{reports}/board.json",
+                                   profile], stdout=f, timeout=FABNOTES_TIMEOUT).returncode
+        except subprocess.TimeoutExpired:  # subprocess.run has already stopped it
+            raise StepError(f"Reading the fab notes from the board took more than {FABNOTES_TIMEOUT} s and was "
+                            "stopped: please report it") from None
     if code != 0 or not os.path.isfile(readme):
-        raise StepError(f"The fab notes could not be read from the board ({k.where}): see the messages above")
+        raise StepError("The fab notes could not be read from the board: see the messages above")
     with open(readme, "a", encoding="utf-8") as f:
         if variant_lines:
             f.write("\nVARIANTS (same bare board, different assembly)\n  default: assembly/\n" + "".join(variant_lines))
@@ -738,7 +734,7 @@ def _remove(path):
 def make_kicad(args):
     if args.image:
         return kicad.KiCad(image=args.image, home=args.kicad_home)
-    return kicad.KiCad(cli=kicad.find_cli(args.kicad_cli), python=args.kicad_python)
+    return kicad.KiCad(cli=kicad.find_cli(args.kicad_cli))
 
 
 def cmd_checks(args):
@@ -973,7 +969,6 @@ def add_project(c):
 def add_common(c):
     add_project(c)
     c.add_argument("--kicad-cli", default="", help="path of the local kicad-cli (default: found automatically)")
-    c.add_argument("--kicad-python", default="", help="a Python that has KiCad's pcbnew (default: found automatically)")
     c.add_argument("--image", default="", help="run kicad-cli in this Docker image instead of the local KiCad")
     c.add_argument("--kicad-home", default="", help="with --image: folder mounted as KiCad's HOME (library tables)")
 

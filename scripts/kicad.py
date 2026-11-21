@@ -9,7 +9,6 @@ Paths given to kicad-cli are relative to the work folder (the repository, by def
 which is the current directory in both cases.
 """
 import glob
-import importlib.util
 import os
 import shutil
 import subprocess
@@ -54,26 +53,6 @@ def find_cli(explicit="", env=None, which=shutil.which, python=None):
                         "(or the KICAD_CLI variable), e.g. C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe")
 
 
-def find_python(cli, python=None, which=shutil.which, has_pcbnew=None):
-    """A Python that can `import pcbnew`, for the KiCad whose kicad-cli is `cli`; None if unknown.
-
-    The running one when it already can (KiCad's own Python, or a Linux system Python),
-    else the one KiCad ships beside kicad-cli (Windows) or in its application bundle
-    (macOS), else the system `python3` (Linux packages put pcbnew there).
-    """
-    python = sys.executable if python is None else python
-    if has_pcbnew is None:
-        has_pcbnew = importlib.util.find_spec("pcbnew") is not None
-    if has_pcbnew and python:
-        return python
-    folder = os.path.dirname(os.path.abspath(cli))
-    for candidate in (os.path.join(folder, "python.exe"),
-                      os.path.join(folder, "..", "Frameworks", "Python.framework", "Versions", "Current", "bin", "python3")):
-        if os.path.isfile(candidate):
-            return os.path.normpath(candidate)
-    return which("python3")
-
-
 def _version_key(path):
     """.../KiCad/10.0/bin/kicad-cli.exe -> (10, 0), so 10.0 sorts after 9.0."""
     name = os.path.basename(os.path.dirname(os.path.dirname(path)))
@@ -83,11 +62,10 @@ def _version_key(path):
 class KiCad:
     """kicad-cli from a Docker image (image=...) or from this computer (cli=...)."""
 
-    def __init__(self, cli="", image="", home="", workdir=".", python=""):
+    def __init__(self, cli="", image="", home="", workdir="."):
         if bool(cli) == bool(image):
             raise ValueError("give either cli (local) or image (Docker)")
         self.cli, self.image, self.home, self.workdir = cli, image, home, workdir
-        self._python = python  # local only: a Python with pcbnew ("" = find it when needed)
 
     @property
     def where(self):
@@ -100,13 +78,11 @@ class KiCad:
         return self._docker(workdir) + ["kicad-cli", *args]
 
     def python_command(self, args, workdir=None):
-        """The command line that runs `python <args>` with KiCad's Python (it has pcbnew)."""
-        if self.image:
-            return self._docker(workdir) + ["python3", *args]
-        python = self._python or find_python(self.cli)
-        if not python:
-            raise KiCadNotFound("No Python with KiCad's pcbnew module was found next to " + self.cli)
-        return [python, *args]
+        """The command line that runs `python3 <args>` inside the Docker image (CI: it has
+        PyYAML). On a PC every script runs with the Python that runs the engine."""
+        if not self.image:
+            raise ValueError("python_command is for the Docker image; on a PC use sys.executable")
+        return self._docker(workdir) + ["python3", *args]
 
     def _docker(self, workdir=None):
         work = os.path.abspath(workdir or self.workdir)
