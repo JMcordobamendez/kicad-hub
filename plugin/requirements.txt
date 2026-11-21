@@ -1,0 +1,4 @@
+# Installed by KiCad into this plugin's own Python environment when the plugin is
+# installed (KiCad's standard mechanism for IPC API plugins; needs network once).
+# The engine itself uses only the standard library.
+kicad-python>=0.5

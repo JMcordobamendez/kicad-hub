@@ -992,8 +992,11 @@ class RunTest(EngineCase):
         self.assertNotIn("== Cost and stock", out)
         self.assertIn("BOM: 3 fitted parts, lite 2, pro x 3; main: 1", out)
         self.assertIn("Report: .kicad-hub/reports/report.md", out)
-        self.assertIn("Portal: python -m http.server --directory .kicad-hub/portal 8000, "
-                      "then http://localhost:8000/main/", out)
+        self.assertIn("Portal: python scripts/kicad_hub.py serve (or python -m http.server --directory "
+                      ".kicad-hub/portal 8000), then http://localhost:8000/main/", out)
+        done = self.load(".kicad-hub/run.json")          # what the KiCad plugin reads when it ends
+        self.assertEqual((done["name"], done["page"], done["report"]), ("board", "main/", ".kicad-hub/reports/report.md"))
+        self.assertIn("BOM: 3 fitted parts, lite 2, pro x 3; main: 1", done["summary"])
 
     def test_no_base_and_most_steps_skipped(self):
         self.commit()
@@ -1026,6 +1029,46 @@ class RunTest(EngineCase):
             self.assertEqual(code, 1)
             self.assertIn(message, err)
             self.assertFalse(os.path.exists(".kicad-hub/reports/erc.json"))
+
+
+class ServeTest(unittest.TestCase):
+    """kicad_hub.py serve: the local web server for the portal."""
+
+    def test_serves_the_portal_and_stops_when_idle(self):
+        import threading
+        import time
+        import urllib.request
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.join(tmp, "portal")
+            os.makedirs(os.path.join(root, "main"))
+            with open(os.path.join(root, "main", "index.html"), "w") as f:
+                f.write("<title>page</title>")
+            ready = os.path.join(tmp, "server.json")
+            done = []
+            out = io.StringIO()
+
+            def run():
+                with contextlib.redirect_stdout(out):
+                    done.append(kicad_hub.serve(root, port=0, idle=1.5, ready_file=ready))
+
+            t = threading.Thread(target=run, daemon=True)
+            t.start()
+            for _ in range(100):
+                if os.path.exists(ready):
+                    break
+                time.sleep(0.05)
+            with open(ready, encoding="utf-8") as f:
+                info = json.load(f)
+            self.assertEqual(info["pid"], os.getpid())
+            self.assertEqual(info["root"], os.path.abspath(root))
+            with urllib.request.urlopen(f"http://127.0.0.1:{info['port']}/main/") as r:
+                self.assertEqual(r.status, 200)
+                self.assertEqual(r.headers["Cache-Control"], "no-store")
+                self.assertIn(b"<title>page</title>", r.read())
+            t.join(timeout=15)
+            self.assertFalse(t.is_alive(), "the server did not stop after being idle")
+            self.assertEqual(done, [0])
+
 
 if __name__ == "__main__":
     unittest.main()

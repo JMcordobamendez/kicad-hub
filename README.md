@@ -48,6 +48,23 @@ the three steps are done on github.com.
 Starting a new board, or the project is not on GitHub yet? The [manual](docs/manual.md)
 goes step by step, with or [without the command line](docs/manual.md#9-without-the-command-line-github-desktop).
 
+### In KiCad, without GitHub (plugin, preview)
+
+The same checks run on your PC from a button in KiCad's PCB editor, with nothing else to
+install. **Preview:** not yet tried in a real KiCad (see the [roadmap](docs/ROADMAP.md)).
+
+1. Download `kicad-hub-plugin-<version>.zip` from the
+   [latest release](https://github.com/JMcordobamendez/kicad-hub/releases/latest).
+2. In KiCad 10: *Preferences → Plugins* → tick **Enable KiCad API**.
+3. *Plugin and Content Manager → Install from File…*, choose the ZIP, *Apply Pending
+   Changes*. KiCad then prepares the plugin's Python and downloads `kicad-python` (it needs
+   the network this once).
+4. Open a board in the PCB editor and press the **kicad-hub** button (the green check in
+   the toolbar). The browser opens on a progress page and then on the design portal of the
+   board: ERC/DRC, BOM, prices, fab package, requirements and the report. Everything is
+   written to `.kicad-hub/` in the project's repository (or folder), which is kept out of
+   git; the portal is served from this computer only (127.0.0.1).
+
 ## What works today
 
 On every push and pull request of a KiCad project, the action:
@@ -612,10 +629,12 @@ scripts/                    kicad_hub.py (the engine: steps shared by the action
 kibot/default.kibot.yaml    KiBot outputs (schematic PDF, BOMs, iBOM)
 template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
+plugin/                     the KiCad plugin (IPC API): plugin.json, the button's script, icons;
+                            scripts/build_plugin.py makes its ZIP, attached to every release
 tests/                      unit tests of the scripts (python3 -m unittest discover -s tests)
 .github/workflows/test.yml  runs the unit tests and the action on the example board on every push/PR/tag
 .github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
-.github/workflows/release.yml  publishes a version: tag, moving major tag, GitHub Release (run by hand)
+.github/workflows/release.yml  publishes a version: tag, moving major tag, GitHub Release with the plugin ZIP (run by hand)
 docs/                       manual, roadmap, screenshots and release notes (docs/releases/)
 ```
 
