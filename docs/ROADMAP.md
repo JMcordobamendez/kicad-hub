@@ -68,8 +68,8 @@ flowchart LR
   subgraph P7["7 · Plug and play"]
     direction TB
     a1["A · Short GitHub setup<br/>no options, Quickstart, GitHub Desktop"]:::done
-    a2["B · One engine<br/>(kicad-hub run, local mode)"]:::doing
-    a3["C · KiCad plugin"]:::todo
+    a2["B · One engine<br/>(kicad-hub run, local mode)"]:::done
+    a3["C · KiCad plugin"]:::doing
     a4["D · Versions and review<br/>without the terminal"]:::todo
   end
 
@@ -80,22 +80,19 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** v1.4.0 released (2026-11-17, `v1` moved to it): everything in v1.3.0 plus the
-short GitHub setup (phase 7A: `project-dir` optional, Quickstart, link to the Pages
-settings, manual section for GitHub Desktop), comparing the commits of a pull request,
-the UTF-8 locale fix and the fixes from the first real use (one of the owner's boards
-runs on it). The viewer is frozen (see decisions). Next: **plug and play** (phase 7),
-so someone with no software background can start quickly: the template repository left
-from phase A; the engine (B): every step from ERC/DRC to the report and the portal page
-runs from `scripts/kicad_hub.py`, and `kicad_hub.py run` does them all on a PC (only the
-first piece has been tried with the real KiCad there: `run` is next to try on the owner's
-PC); left in B: before/after images without PIL, KiBot optional and `serve`. Then the KiCad
-plugin (C) and versions without the terminal (D).
+**Now:** v1.5.0 released (2026-11-21, `v1` moved to it): everything in v1.4.0 plus the
+local mode (phase 7B): one engine, `scripts/kicad_hub.py`, that the action calls step by
+step and `kicad_hub.py run` runs whole on a PC with the KiCad installed there, tried on the
+owner's Windows PC with the same results as CI; the fab DRC table in any language; the
+fab notes no longer hang on Windows. Next: the KiCad plugin (phase 7C), starting with
+the choice between KiCad's two plugin interfaces. Left in B: before/after images without
+PIL, KiBot optional, small things (the cost in `run`'s summary, page titles). Left in A:
+the template repository. Then versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
 
-*Last update: 2026-11-17. Update the classes (`:::done`, `:::doing`, `:::todo`)
+*Last update: 2026-11-21. Update the classes (`:::done`, `:::doing`, `:::todo`)
 whenever a task changes state.*
 
 ## Phase 1 — Project template (~1 day)
