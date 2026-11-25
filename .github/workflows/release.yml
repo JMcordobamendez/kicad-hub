@@ -47,12 +47,16 @@ jobs:
           git tag -fa "$major" -m "$major -> $VERSION"
           git push --force origin "refs/tags/$major"
 
+          # the KiCad plugin of this version, attached to the release (Install from File)
+          python3 scripts/build_plugin.py --version "${VERSION#v}" --out "$RUNNER_TEMP/dist"
+          plugin_zip="$RUNNER_TEMP/dist/kicad-hub-plugin-${VERSION#v}.zip"
+
           notes="docs/releases/$VERSION.md"
           if [ -f "$notes" ]; then
             title=$(sed -n '1s/^# *//p' "$notes")
             tail -n +2 "$notes" > "$RUNNER_TEMP/notes.md"
-            gh release create "$VERSION" --verify-tag --title "${title:-$VERSION}" --notes-file "$RUNNER_TEMP/notes.md"
+            gh release create "$VERSION" --verify-tag --title "${title:-$VERSION}" --notes-file "$RUNNER_TEMP/notes.md" "$plugin_zip"
           else
-            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes
+            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes "$plugin_zip"
           fi
           echo "Published $VERSION ($major moved to it) at ${GITHUB_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY"

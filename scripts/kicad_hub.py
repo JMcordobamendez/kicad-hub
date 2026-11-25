@@ -854,9 +854,69 @@ def cmd_run(args):
         print("  " + line)
     print(f"Report: {reports}/report.md")
     if site:
-        print(f"Portal: python -m http.server --directory {args.out}/{PORTAL_DIR} 8000, "
-              f"then http://localhost:8000/{os.path.basename(site)}/")
+        print(f"Portal: python scripts/kicad_hub.py serve (or python -m http.server --directory "
+              f"{args.out}/{PORTAL_DIR} 8000), then http://localhost:8000/{os.path.basename(site)}/")
+    write_json(f"{args.out}/run.json", {"name": name, "summary": lines, "report": f"{reports}/report.md",
+                                        "page": f"{os.path.basename(site)}/" if site else None})
     return 0
+
+
+def write_json(path, data):
+    """Write a JSON file in one go (a reader never sees half of it)."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+# --- a local web server for the portal --------------------------------------------------------
+
+def serve(root, port=8000, idle=3600, ready_file=None, quiet=True):
+    """Serve `root` on 127.0.0.1 (this computer only) until `idle` seconds pass with no
+    request. The portal can't be opened from disk: the browser won't let it load its files.
+    `ready_file` gets {"port", "pid", "root"} once it listens (port 0 = any free port)."""
+    import http.server
+    import threading
+    import time
+
+    last = [time.monotonic()]
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k):
+            super().__init__(*a, directory=root, **k)
+
+        def log_request(self, *a):
+            last[0] = time.monotonic()
+            if not quiet:
+                super().log_request(*a)
+
+        def end_headers(self):  # the portal and the progress page change while being looked at
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+
+    os.makedirs(root, exist_ok=True)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    port = server.server_address[1]
+    if ready_file:
+        write_json(ready_file, {"port": port, "pid": os.getpid(), "root": os.path.abspath(root)})
+    print(f"Serving {root} at http://127.0.0.1:{port}/ (stops after {idle} s without requests)", flush=True)
+
+    def watch():
+        while time.monotonic() - last[0] < idle:
+            time.sleep(min(5, idle))
+        server.shutdown()
+
+    threading.Thread(target=watch, daemon=True).start()
+    try:
+        server.serve_forever(poll_interval=0.5)
+    finally:
+        server.server_close()
+    return 0
+
+
+def cmd_serve(args):
+    return serve(f"{args.out}/{PORTAL_DIR}", args.port, args.idle, args.ready_file or None, quiet=False)
 
 
 def cmd_bom(args):
@@ -1059,6 +1119,12 @@ def main(argv=None):
                    help="requirements file, relative to the project folder")
     n.add_argument("--tmp", default="", help="folder for temporary copies (default: the system's)")
     n.set_defaults(func=cmd_run)
+    v = sub.add_parser("serve", help="serve the local portal on this computer (127.0.0.1 only)")
+    v.add_argument("--out", default=".kicad-hub", help="the output folder `run` wrote (the portal is <out>/portal)")
+    v.add_argument("--port", type=int, default=8000, help="port; 0 = any free one")
+    v.add_argument("--idle", type=float, default=3600, help="stop after this many seconds without a request")
+    v.add_argument("--ready-file", default="", help="write {port, pid, root} here once listening")
+    v.set_defaults(func=cmd_serve)
     args = ap.parse_args(argv)
     try:
         return args.func(args)

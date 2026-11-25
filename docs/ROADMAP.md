@@ -527,12 +527,24 @@ developer wrote that KiCad 11 will not ship Python any more.
       Windows "font not found" window can't happen there, and `--kicad-python` is gone.
       `kicad-cli pcb export stats` was not used: its JSON keys and numbers come out in
       the PC's language ("58,52 mm")
-- [ ] **A thin IPC API plugin**, PCB editor: a "kicad-hub" button asks KiCad for the
-      project folder and `kicad-cli`, starts `kicad_hub.py run` as its own process and
-      opens the portal in the browser (with a local web server)
+- [x] **A thin IPC API plugin**, PCB editor (2026-11-21, `plugin/`): a "kicad-hub" button
+      asks KiCad (kicad-python) for the open board's project folder and `kicad-cli`, runs
+      `kicad_hub.py run` at the top of the project's git repository (else in the project
+      folder) and shows a progress page in the browser that turns into the design portal at
+      the end, or shows the end of the log on an error. The portal is served by
+      `kicad_hub.py serve` (new): 127.0.0.1 only, any free port, reused by the next press,
+      stops after an hour without requests. `.kicad-hub/` is kept out of git through
+      `.git/info/exclude` (local, never committed) unless `.gitignore` already has it.
+      Child processes start with no console window on Windows. `run` writes
+      `.kicad-hub/run.json` (where the portal page is) for the plugin. The ZIP for the
+      Plugin and Content Manager is made by `scripts/build_plugin.py` (`metadata.json`
+      with `"runtime": "ipc"`, the plugin, the engine) and attached to every release.
+      Tests with a stand-in for KiCad's API (`tests/test_plugin.py`).
+      **Not tried in a real KiCad yet**: next, on the owner's PC (installing from the ZIP,
+      the environment KiCad makes, the button, the browser, the console windows)
 - [ ] "Prepare for GitHub" button: writes the workflow and the template files into the
       project folder
-- [ ] Distribution: a ZIP built on each release, for *Install from File*; then a merge
+- [ ] Distribution: the ZIP is built on each release (done, see above); then a merge
       request to gitlab.com/kicad/addons/metadata. The price lookups count as "commercial
       services" there: write to plugins@kicad.org before submitting (the owner)
 - [ ] Before KiCad 11: where the engine's Python comes from when KiCad ships none
