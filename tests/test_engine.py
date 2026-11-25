@@ -60,6 +60,10 @@ if a[:2] == ["pcb", "export"]:
 fmt = a[a.index("--format") + 1]
 if fmt == "report":
     open(out, "w").write("report of " + target + "\n")
+elif os.environ.get("FAKE_ERC") and a[:2] == ["sch", "erc"]:
+    open(out, "w").write(open(os.environ["FAKE_ERC"]).read())
+elif os.environ.get("FAKE_DRC") and a[:2] == ["pcb", "drc"]:
+    open(out, "w").write(open(os.environ["FAKE_DRC"]).read())
 elif a[:2] == ["sch", "erc"]:
     json.dump({"sheets": [{"violations": [{"severity": "error"}, {"severity": "warning"}, {"severity": "warning"}]}]},
               open(out, "w"))
@@ -172,7 +176,7 @@ class EngineCase(unittest.TestCase):
         self.old = os.getcwd()
         os.chdir(self.repo)
         self.addCleanup(os.chdir, self.old)
-        for name in ("FAKE_FAIL", "FAKE_FAIL_VARIANT", "FAKE_FAIL_EXPORT", "GITHUB_OUTPUT"):
+        for name in ("FAKE_FAIL", "FAKE_FAIL_VARIANT", "FAKE_FAIL_EXPORT", "FAKE_ERC", "FAKE_DRC", "GITHUB_OUTPUT"):
             self.addCleanup(os.environ.pop, name, None)
 
     def put(self, path, text=""):
@@ -452,7 +456,7 @@ class DatasheetsAndSourcingTest(EngineCase):
                          {"R1": "missing", "U1": "ok", "U2": "ok", "C1": "unverified"})   # C2 is not fitted
         self.assertTrue(os.path.isfile(".kicad-hub/datasheets/CN3722.pdf"))                # bundled
         self.assertTrue(os.path.isfile(".kicad-hub/datasheets/index.html"))
-        self.assertIn("Datasheets: 3 found (1 link not checked), 0 broken, 1 missing", out)
+        self.assertIn("Datasheets: 3 found, 0 broken, 1 missing; 1 link not checked", out)
 
     def test_datasheets_extra_folder(self):
         self.put("vendor/pdf/RC0603-series.pdf", "pdf")

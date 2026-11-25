@@ -134,6 +134,10 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(os.path.realpath(action.work_folder(project)), os.path.realpath(self.tmp.name))
         self.assertEqual(action.work_folder(project, git=None), os.path.normpath(project))
 
+    def test_engine_runs_in_utf8_mode(self):
+        env = action.engine_env({"PATH": "/bin", "PYTHONUTF8": "0"})
+        self.assertEqual((env["PATH"], env["PYTHONUTF8"], env["PYTHONIOENCODING"]), ("/bin", "1", "utf-8"))
+
     def test_outputs_kept_out_of_git_once(self):
         self.git("init", "-q")
         action.ignore_outputs(self.tmp.name)

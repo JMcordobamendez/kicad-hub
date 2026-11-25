@@ -376,13 +376,14 @@ if ds is not None:
     if broken:
         md += [f"**{len(broken)} broken:**", "", table(["Part", "Value", "Datasheet", "Problem"], broken), ""]
     if unver:
-        n = sum(len(p) for p, _ in unver.values())
-        md += [f"**{n} datasheet link{'s' if n != 1 else ''} not checked** (the site blocks automated checks or did not "
-               f"answer after a retry; not counted as broken).", "",
-               f"<details><summary>Show the {len(unver)} URL{'s' if len(unver) != 1 else ''}</summary>", ""]
+        n, parts = len(unver), sum(len(p) for p, _ in unver.values())
+        used = f", used by {parts} parts" if parts != n else ""
+        md += [f"**{n} datasheet link{'s' if n != 1 else ''} not checked**{used} (the site blocks automated checks "
+               f"or did not answer after a retry; not counted as broken).", "",
+               f"<details><summary>Show the {n} link{'s' if n != 1 else ''}</summary>", ""]
         md += [f"- {', '.join(sorted(p, key=ref_key))}: {u} ({cell(w)})" for u, (p, w) in sorted(unver.items())[:MAX_ROWS]]
         md += ["", "</details>", ""]
-    counts["datasheets_not_checked"] = sum(len(p) for p, _ in unver.values())
+    counts["datasheets_not_checked"] = len(unver)  # links, as the report counts them
 
 # --- Cost and stock -------------------------------------------------------------
 src = None

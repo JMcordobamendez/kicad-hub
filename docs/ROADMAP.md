@@ -71,6 +71,7 @@ flowchart LR
     a2["B · One engine<br/>(kicad-hub run, local mode)"]:::done
     a3["C · KiCad plugin"]:::doing
     a4["D · Versions and review<br/>without the terminal"]:::todo
+    a5["E · Desktop app<br/>(Tauri, beside KiCad)"]:::doing
   end
 
   P1 --> P2 --> P2B --> P3 --> P4 --> PUB
@@ -80,19 +81,17 @@ flowchart LR
   b7 -. same diff engine .- p4
 ```
 
-**Now:** v1.5.0 released (2026-11-21, `v1` moved to it): everything in v1.4.0 plus the
-local mode (phase 7B): one engine, `scripts/kicad_hub.py`, that the action calls step by
-step and `kicad_hub.py run` runs whole on a PC with the KiCad installed there, tried on the
-owner's Windows PC with the same results as CI; the fab DRC table in any language; the
-fab notes no longer hang on Windows. Next: the KiCad plugin (phase 7C), starting with
-the choice between KiCad's two plugin interfaces. Left in B: before/after images without
-PIL, KiBot optional, small things (the cost in `run`'s summary, page titles). Left in A:
-the template repository. Then versions without the terminal (D).
+**Now:** v1.5.0 released (2026-11-21); the KiCad plugin (7C) merged after it worked on the
+owner's real board. The owner found it unfriendly (a ZIP to install, one button, results
+in the browser full of jargon) and commissioned a **desktop app beside KiCad** (phase 7E,
+2026-11-25): first subsystem, the quick check in plain words (`kicad_hub.py status`), is
+in review. Left in B: before/after images without PIL, KiBot optional, small things.
+Left in A: the template repository. Then versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
 dashed = optional.
 
-*Last update: 2026-11-21. Update the classes (`:::done`, `:::doing`, `:::todo`)
+*Last update: 2026-11-25. Update the classes (`:::done`, `:::doing`, `:::todo`)
 whenever a task changes state.*
 
 ## Phase 1 — Project template (~1 day)
@@ -540,8 +539,15 @@ developer wrote that KiCad 11 will not ship Python any more.
       Plugin and Content Manager is made by `scripts/build_plugin.py` (`metadata.json`
       with `"runtime": "ipc"`, the plugin, the engine) and attached to every release.
       Tests with a stand-in for KiCad's API (`tests/test_plugin.py`).
-      **Not tried in a real KiCad yet**: next, on the owner's PC (installing from the ZIP,
-      the environment KiCad makes, the button, the browser, the console windows)
+      **Tried on the owner's PC** (2026-11-22, KiCad 10.0.5, the owner's 95-part board):
+      it works (ERC, DRC, BOM equal to `main`, fab package, the server on 127.0.0.1 only,
+      no console windows, git status untouched, the kicad-python 0.7.1 KiCad installed).
+      177 s in all: ERC/DRC/BOM 16 s, datasheet links 121 s, prices 7 s, package 28 s,
+      report 5 s. Merged (#66, 2026-11-25). Found then and fixed with 7E's first
+      subsystem: the engine's log broken by the Windows code page (now UTF-8 mode), and
+      the report counting unchecked datasheet links once by part and once by link.
+      Still open: a `GET /main/$$:0:$$` 404 when the portal opens (probably the viewer's
+      scripts)
 - [ ] "Prepare for GitHub" button: writes the workflow and the template files into the
       project folder
 - [ ] Distribution: the ZIP is built on each release (done, see above); then a merge
@@ -549,6 +555,51 @@ developer wrote that KiCad 11 will not ship Python any more.
       services" there: write to plugins@kicad.org before submitting (the owner)
 - [ ] Before KiCad 11: where the engine's Python comes from when KiCad ships none
       (the plugin's own environment, made by KiCad, is the likely answer)
+
+### E — Desktop app beside KiCad (large; owner, 2026-11-25)
+The owner's commission (spec "kicad-hub de escritorio: encargo" and its mockup, both
+claude.ai artifacts of the owner): a window that sits beside KiCad and tells, in plain
+English, what is left before the board can be ordered. Tauri 2 (HTML/CSS) with an
+embedded Python running the same engine; the plugin's button only brings the window to
+the front. Look: a PCB (mask green, gold pads; pads as the indicators, sentences instead
+of labels), fonts Bricolage Grotesque, Figtree and DM Mono, five themes (Classic green,
+Deep blue, Purple, Red, Matte black) of 18 colours each, one file per theme. v1: watch the
+project folder and check on every save (~16 s); one sentence of status and five
+indicators (Schematic, Board, In sync, Parts, Datasheets); the "To tidy up" list, what
+stops an order first; **Show in KiCad** (select and zoom, only select when zooming
+fails); **Prepare the order** for the slow steps (datasheet links, prices, package); full
+window or a ~400 px strip beside KiCad, remembering the last one. Later: Save version
+(7D), the official catalogue, "Prepare for GitHub". One branch and one PR per subsystem;
+merged only when the owner says; the owner's Windows PC session tries each build.
+
+- [ ] **1 · The quick check in plain words** (in review): `kicad_hub.py status` runs ERC,
+      DRC with the board against the schematic, the BOM against `main` and the field and
+      datasheet checks (no network) and writes `.kicad-hub/status.json`: the headline
+      ("No errors. Six small things left to tidy up."), the five indicators with a note
+      each, and the rows to tidy up, errors first. `scripts/status.py` makes the sentences
+      from each violation's type (about 150 kinds of ERC and DRC, taken from KiCad 10's
+      own list), from the board file (what each item is: a part's name, a pad, a GND
+      track) and from the project's references, never from KiCad's text, which comes in
+      the PC's language; only the lengths are read from it (the last two: needed, found).
+      Many of one kind make one row ("183 holes are too small"). Each row has the ids
+      KiCad needs to select it, and the footprints of its parts. Its reports go to
+      `.kicad-hub/quick/`, apart from `run`'s. The BOM of `main` is exported once per
+      commit and kept in `.kicad-hub/cache/`. 9 s on the example board in Docker.
+      Also: datasheet links found working are remembered for a week
+      (`.kicad-hub/cache/datasheet-links.json`, `run` on a PC), the engine's log in UTF-8
+      on Windows, unchecked links counted as links everywhere
+- [ ] **2 · Show in KiCad**: select the row's items through the IPC API, then
+      `common.Control.zoomFitSelection`; only select when that action fails. Where
+      kicad-python comes from is open (the environment KiCad made for the plugin, or
+      bundled with the app)
+- [ ] **3 · The app**: Tauri 2 window, the five themes, full window and side strip, watching
+      the folder (only `.kicad_pcb`, `.kicad_sch`, `.kicad_pro`, `.kicad_dru`, after the
+      writes settle: a save also writes backups and `.kicad_prl`), the embedded Python
+      running `status`; it reads `.kicad-hub/` directly, with no local web server
+- [ ] **4 · Prepare the order**: datasheet links, prices and stock, fab package; the cost
+      card
+- [ ] **5 · Installer**: NSIS with the embeddable Python (~13 MB measured), attached to
+      releases; the plugin's button brings the window to the front
 
 ### D — Versions and review without the terminal (medium to large, after B and C)
 - [ ] Five actions, in plain words, in the plugin or the local portal: **Save version**
@@ -751,6 +802,14 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
       screenshot (2026-10-30)
 
 ## Decisions so far
+- **A desktop app after all, beside KiCad** (owner, 2026-11-25): it replaces the "not a
+  desktop application" of 2026-11-17 below. The plugin worked, but a ZIP install, one
+  button and a browser page of jargon were not plug and play. Tauri 2 (exe 4.3 MB, NSIS
+  installer 1.3 MB, ~13 MB with the embeddable Python, measured on the owner's PC; WebView2
+  ships with Windows). GitHub stays the door for working with others.
+- **The app reads `.kicad-hub/` directly** (owner, 2026-11-25): no local web server for
+  the app (no open port, no process left behind). The plugin's `serve` stays for the
+  plugin's portal until the app replaces it.
 - **Local mode depends only on what a stock KiCad ships** (2026-11-17, from the spike):
   `kicad-cli` and a Python with the standard library (KiCad's own today; no `pcbnew`
   needed since 2026-11-21). No PIL, numpy, `rsvg-convert` or Docker (the owner's PC has
@@ -771,7 +830,7 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
   desktop application**: it would need code signing on Windows and macOS, installers and
   updates, and it would lose what the project is for (the PR comment, a portal others open
   with a link). **Not Docker or `pipx` as the way in**: on Windows they need WSL, admin
-  rights and a terminal.
+  rights and a terminal. *Desktop app: overruled by the owner on 2026-11-25, see above.*
 - **KiBot becomes optional with the engine** (2026-11-17, takes effect with phase 7B):
   it is made for Linux, so in local mode the schematic PDF, BOM HTML and iBOM come from
   `kicad-cli` and our own scripts. CI may keep KiBot. Until then "`kicad-cli` first,

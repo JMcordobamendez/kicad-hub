@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shutil
+import time
 import urllib.error
 import urllib.request
 
@@ -31,7 +32,12 @@ ap.add_argument("--dirs", default="", help="comma-separated folders with datashe
 ap.add_argument("--out-dir", required=True)
 ap.add_argument("--check-urls", default="true")
 ap.add_argument("--json", required=True)
+ap.add_argument("--cache", default="", help="JSON of links checked earlier; links found working are not "
+                                            "checked again for CACHE_DAYS days (on a PC: <out>/cache/)")
+ap.add_argument("--no-copy", action="store_true",
+                help="only find each part's datasheet: copy no file, write no index.html (the quick check)")
 args = ap.parse_args()
+CACHE_DAYS = 7
 
 
 def blank(v):
@@ -62,11 +68,14 @@ for d in dirs:
                 folder_files.setdefault(os.path.normpath(os.path.join(d, name)), norm(os.path.splitext(name)[0]))
 
 ds_out = os.path.join(args.out_dir, "datasheets")
-os.makedirs(ds_out, exist_ok=True)
+if not args.no_copy:
+    os.makedirs(ds_out, exist_ok=True)
 copied = {}  # source path -> name inside datasheets/
 
 
 def bundle(path):
+    if args.no_copy:
+        return os.path.basename(path)
     if path not in copied:
         name, n = os.path.basename(path), 1
         while name in copied.values():
@@ -147,7 +156,21 @@ def check(url, timeout=15):
     return "unverified", ""
 
 
+def load_cache(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+cache = load_cache(args.cache) if args.cache else {}
+fresh = time.time() - CACHE_DAYS * 86400
 urls = sorted({e["target"] for e in result.values() if e["status"] == "pending"})
+reused = {u: ("ok", cache[u].get("why", "")) for u in urls
+          if isinstance(cache.get(u), dict) and cache[u].get("status") == "ok" and cache[u].get("checked", 0) > fresh}
+urls = [u for u in urls if u not in reused]
 if args.check_urls.lower() == "true" and urls:
     with concurrent.futures.ThreadPoolExecutor(8) as pool:
         checked = dict(zip(urls, pool.map(check, urls)))
@@ -157,11 +180,24 @@ if args.check_urls.lower() == "true" and urls:
             checked.update(zip(again, pool.map(lambda u: check(u, timeout=45), again)))
 else:
     checked = {u: ("unverified", "not checked") for u in urls}
+if args.cache and args.check_urls.lower() == "true":
+    now = time.time()
+    for u, (st, why) in checked.items():
+        cache[u] = {"status": st, "why": why, "checked": now}
+    os.makedirs(os.path.dirname(os.path.abspath(args.cache)), exist_ok=True)
+    with open(args.cache + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(cache, f, indent=1)
+    os.replace(args.cache + ".tmp", args.cache)
+checked.update(reused)
 for e in result.values():
     if e["status"] == "pending":
         e["status"], e["why"] = checked[e["target"]]
 
 # --- index.html ----------------------------------------------------------------
+if args.no_copy:
+    with open(args.json, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=1)
+    raise SystemExit(0)
 badge = {"ok": "#1a7f37", "broken": "#cf222e", "unverified": "#9a6700", "missing": "#59636e"}
 rows = []
 for ref, e in result.items():
