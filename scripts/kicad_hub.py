@@ -60,6 +60,7 @@ Run it from the repository's folder: paths are relative to it.
 """
 import argparse
 import csv
+import datetime
 import glob
 import hashlib
 import json
@@ -959,7 +960,8 @@ def cmd_status(args):
 def _stamp(result, started):
     head = _git_out("rev-parse", "HEAD")
     branch = _git_out("rev-parse", "--abbrev-ref", "HEAD") if head else ""
-    result.update(checked_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), seconds=round(time.monotonic() - started, 1),
+    checked = datetime.datetime.now().astimezone().isoformat(timespec="seconds")  # 2026-11-25T18:49:02+01:00
+    result.update(checked_at=checked, seconds=round(time.monotonic() - started, 1),
                   commit=head[:7], branch="" if branch == "HEAD" else branch,
                   changed=bool(head and _git_out("status", "--porcelain")))
 

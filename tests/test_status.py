@@ -249,6 +249,7 @@ class StatusCommandTest(EngineCase):
         self.assertIn("The silkscreen of TP2 sits on top of the name of U1", [r["title"] for r in s["items"]])
         self.assertIn("R1 (10k) has no part number", [r["title"] for r in s["items"]])
         self.assertIsInstance(s["seconds"], float)
+        self.assertRegex(s["checked_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d([+-]\d\d:\d\d|Z)$")  # for JavaScript's Date
         self.assertIn("No errors.", out)
         self.assertTrue(os.path.isfile(".kicad-hub/quick/erc.json"))      # apart from `run`'s reports
         self.assertFalse(os.path.exists(".kicad-hub/reports"))
