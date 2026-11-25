@@ -1,0 +1,178 @@
+{
+ "version": 1,
+ "state": "done",
+ "project": "riego-nodo-base",
+ "project_dir": "hardware/riego-nodo-base",
+ "headline": "No errors. Six small things left to tidy up.",
+ "errors": 0,
+ "to_tidy": 6,
+ "indicators": [
+  {
+   "id": "schematic",
+   "label": "Schematic",
+   "state": "ok",
+   "count": 0,
+   "note": "no issues"
+  },
+  {
+   "id": "board",
+   "label": "Board",
+   "state": "todo",
+   "count": 5,
+   "note": "5 to tidy"
+  },
+  {
+   "id": "sync",
+   "label": "In sync",
+   "state": "ok",
+   "count": 0,
+   "note": "board matches schematic"
+  },
+  {
+   "id": "parts",
+   "label": "Parts",
+   "state": "ok",
+   "count": 0,
+   "note": "95, same as main"
+  },
+  {
+   "id": "datasheets",
+   "label": "Datasheets",
+   "state": "todo",
+   "count": 1,
+   "note": "D3 is missing one"
+  }
+ ],
+ "items": [
+  {
+   "id": "r1",
+   "area": "board",
+   "kind": "silk_overlap",
+   "blocking": false,
+   "title": "The silkscreen of TP2 sits on top of the name of U1",
+   "detail": "They touch. They need 0.15 mm.",
+   "refs": [
+    "TP2",
+    "U1"
+   ],
+   "ref": "TP2 \u00b7 U1",
+   "count": 1,
+   "select": [
+    "u1"
+   ],
+   "footprints": [
+    "f1"
+   ]
+  },
+  {
+   "id": "r2",
+   "area": "board",
+   "kind": "silk_overlap",
+   "blocking": false,
+   "title": "The names of Q1 and TP4 are stuck together",
+   "detail": "They are 0.002 mm apart. They need 0.15 mm.",
+   "refs": [
+    "Q1",
+    "TP4"
+   ],
+   "ref": "Q1 \u00b7 TP4",
+   "count": 1,
+   "select": [
+    "u2"
+   ],
+   "footprints": [
+    "f2"
+   ]
+  },
+  {
+   "id": "r3",
+   "area": "board",
+   "kind": "silk_clearance",
+   "blocking": false,
+   "title": "The name of RTEMP2 is too close to a silkscreen line",
+   "detail": "They are 0.14 mm apart. They need 0.15 mm.",
+   "refs": [
+    "RTEMP2"
+   ],
+   "ref": "RTEMP2",
+   "count": 1,
+   "select": [
+    "u3"
+   ],
+   "footprints": [
+    "f3"
+   ]
+  },
+  {
+   "id": "r4",
+   "area": "board",
+   "kind": "silk_overlap",
+   "blocking": false,
+   "title": "The silkscreen of TP4 sits on top of a text of J3",
+   "detail": "They are 0.13 mm apart. They need 0.15 mm.",
+   "refs": [
+    "TP4",
+    "J3"
+   ],
+   "ref": "TP4 \u00b7 J3",
+   "count": 1,
+   "select": [
+    "u4"
+   ],
+   "footprints": [
+    "f4"
+   ]
+  },
+  {
+   "id": "r5",
+   "area": "board",
+   "kind": "lib_footprint_mismatch",
+   "blocking": false,
+   "title": "The footprint of D2 no longer matches your library",
+   "detail": "Update it from the library, or keep it if you changed it on purpose.",
+   "refs": [
+    "D2"
+   ],
+   "ref": "D2",
+   "count": 1,
+   "select": [
+    "u5"
+   ],
+   "footprints": [
+    "f5"
+   ]
+  },
+  {
+   "id": "r6",
+   "area": "datasheets",
+   "kind": "no_datasheet",
+   "blocking": false,
+   "title": "D3 (LED) has no datasheet",
+   "detail": "The Datasheet field is empty in the schematic.",
+   "refs": [
+    "D3"
+   ],
+   "ref": "D3",
+   "count": 1,
+   "select": [
+    "u6"
+   ],
+   "footprints": [
+    "f6"
+   ]
+  }
+ ],
+ "base": "main",
+ "bom": {
+  "fitted": 95,
+  "added": [],
+  "removed": [],
+  "changed": []
+ },
+ "kicad": "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
+ "checked_at": "2026-11-25T18:49:02+01:00",
+ "seconds": 16.2,
+ "commit": "744cb38",
+ "branch": "main",
+ "changed": true
+}

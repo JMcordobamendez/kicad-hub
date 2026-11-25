@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "kicad-hub",
+  "version": "0.1.0",
+  "identifier": "com.github.jmcordobamendez.kicad-hub",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "kicad-hub",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 360,
+        "minHeight": 480,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "resources": {
+      "../../scripts/": "engine/scripts/",
+      "../../fab-profiles/": "engine/fab-profiles/",
+      "../../LICENSE": "engine/LICENSE"
+    },
+    "copyright": "© José Miguel Córdoba Méndez, MIT license",
+    "shortDescription": "What is left before your KiCad board can be ordered",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

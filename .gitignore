@@ -1,3 +1,5 @@
 __pycache__/
 .kicad-hub/
 dist/
+app/src-tauri/target/
+app/src-tauri/gen/

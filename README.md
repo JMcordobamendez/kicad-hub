@@ -52,7 +52,7 @@ goes step by step, with or [without the command line](docs/manual.md#9-without-t
 
 The same checks run on your PC from a button in KiCad's PCB editor, with nothing else to
 install. **Preview:** tried on one real board with KiCad 10.0.5; a desktop app that sits
-beside KiCad is on its way (see the [roadmap](docs/ROADMAP.md), phase 7E).
+beside KiCad is on its way ([`app/`](app/README.md), roadmap phase 7E).
 
 1. Download `kicad-hub-plugin-<version>.zip` from the
    [latest release](https://github.com/JMcordobamendez/kicad-hub/releases/latest).
@@ -632,6 +632,8 @@ template/                   starting point for a new board repository
 examples/                   boards used to test the action (see examples/README.md)
 plugin/                     the KiCad plugin (IPC API): plugin.json, the button's script, icons;
                             scripts/build_plugin.py makes its ZIP, attached to every release
+app/                        the desktop app beside KiCad (Tauri 2, preview): ui/ the page,
+                            src-tauri/ the core; status.py's plain-words check (see app/README.md)
 tests/                      unit tests of the scripts (python3 -m unittest discover -s tests)
 .github/workflows/test.yml  runs the unit tests and the action on the example board on every push/PR/tag
 .github/workflows/kicad-hub-cleanup.yml  removes closed PRs' images and pages (same as the template's)
