@@ -125,6 +125,10 @@ h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; }
 .row-text { flex: 1 1 250px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .row-title { font-weight: 700; }
 .row-detail { color: var(--muted); font-size: 14px; }
+.said { font-size: 13.5px; font-weight: 600; margin-top: 4px; }
+.said.good { color: var(--ok); }
+.said.bad { color: var(--ink); }
+.said.bad::before { content: "! "; font-weight: 800; color: var(--pad); }
 .flag { font-size: 12.5px; font-weight: 700; color: var(--ink); text-transform: uppercase; letter-spacing: .04em; }
 .empty { margin: 0; padding: 16px 0 6px; border-top: 2px dashed var(--dash); color: var(--muted); }
 .foot-note { margin: 0; padding: 14px 0 4px; border-top: 2px dashed var(--dash); color: var(--muted); font-size: 14px; }
@@ -174,6 +178,8 @@ h1, h2 { font-family: var(--display); font-weight: 700; margin: 0; }
   .row-title { font-size: 14px; font-weight: 600; }
   .row-detail { display: none; }
   .row .pill { display: none; }
+  .row.can-show { cursor: pointer; }
+  .row.can-show:hover .row-title { text-decoration: underline; text-underline-offset: 3px; }
   .foot-note, .empty { padding-left: 4px; font-size: 13.5px; }
   .side-foot { margin: auto 16px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
     gap: 4px 12px; }

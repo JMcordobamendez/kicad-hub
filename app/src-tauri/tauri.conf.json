@@ -30,7 +30,8 @@
     "resources": {
       "../../scripts/": "engine/scripts/",
       "../../fab-profiles/": "engine/fab-profiles/",
-      "../../LICENSE": "engine/LICENSE"
+      "../../LICENSE": "engine/LICENSE",
+      "../python/show_in_kicad.py": "helper/show_in_kicad.py"
     },
     "copyright": "© José Miguel Córdoba Méndez, MIT license",
     "shortDescription": "What is left before your KiCad board can be ordered",

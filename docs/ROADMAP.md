@@ -85,7 +85,7 @@ flowchart LR
 owner's real board. The owner found it unfriendly (a ZIP to install, one button, results
 in the browser full of jargon) and commissioned a **desktop app beside KiCad** (phase 7E,
 2026-11-25): the quick check in plain words (`kicad_hub.py status`) and the app's window
-(`app/`) are in review; next, Show in KiCad. Left in B: before/after images without PIL, KiBot optional, small things.
+(`app/`) and Show in KiCad are in review; next, Prepare the order. Left in B: before/after images without PIL, KiBot optional, small things.
 Left in A: the template repository. Then versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -588,10 +588,17 @@ merged only when the owner says; the owner's Windows PC session tries each build
       Also: datasheet links found working are remembered for a week
       (`.kicad-hub/cache/datasheet-links.json`, `run` on a PC), the engine's log in UTF-8
       on Windows, unchecked links counted as links everywhere
-- [ ] **2 · Show in KiCad**: select the row's items through the IPC API, then
-      `common.Control.zoomFitSelection`; only select when that action fails. Where
-      kicad-python comes from is open (the environment KiCad made for the plugin, or
-      bundled with the app)
+- [ ] **2 · Show in KiCad** (in review, 2026-11-27): `app/python/show_in_kicad.py`, run by
+      the core with the app's Python, takes a row's ids from `status.json`, finds them on
+      the board open in KiCad (`Board.get_items_by_id`), selects them and runs
+      `common.Control.zoomFitSelection`; when the zoom fails it only selects. When none of
+      the ids is on the board any more, or the row comes from the schematic, it selects
+      the footprints of the row's parts. It says in plain words what to do when KiCad is
+      closed, its API is off, no board or another board is open. The answer shows under
+      the row; in the strip the whole row is the button. Tried for real: KiCad 10.0.4's
+      PCB editor on a virtual display, the app's button on "183 holes are too small"
+      selected the 183 vias in KiCad; a pad and 14 overlapping footprints too. Needs
+      Preferences → Plugins → "Enable KiCad API" in KiCad
 - [ ] **3 · The app** (in review, `app/`, 2026-11-25): Tauri 2. The page (`app/ui/`, plain
       HTML/CSS/JS, no build step) follows the mockup: the headline, the five pads (a ring
       with a check when fine, a filled pad with the count, a square pad for errors so they
@@ -821,6 +828,10 @@ end-of-life data (paid sources), MCAD plugins, PLM integration.
   button and a browser page of jargon were not plug and play. Tauri 2 (exe 4.3 MB, NSIS
   installer 1.3 MB, ~13 MB with the embeddable Python, measured on the owner's PC; WebView2
   ships with Windows). GitHub stays the door for working with others.
+- **kicad-python inside the app's installer** (owner, 2026-11-27): Show in KiCad needs
+  kicad-python; the installer bundles it with the app's own Python (~5 MB more), so the
+  app works alone, without the plugin. Bundled when the app is built, never pip-installed
+  on the user's PC. KiCad's API still has to be turned on in its preferences.
 - **The app reads `.kicad-hub/` directly** (owner, 2026-11-25): no local web server for
   the app (no open port, no process left behind). The plugin's `serve` stays for the
   plugin's portal until the app replaces it.
