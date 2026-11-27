@@ -33,6 +33,11 @@ function mockCore(initial) {
       if (name === "check_now") state = { ...state, checking: true };
       if (name === "choose_project") state = { ...state, project: window.NEXT_PROJECT || state.project };
       if (name === "show_in_kicad") return window.SHOWN || { ok: true, message: "Selected 2 items in KiCad." };
+      if (name === "prepare_order") {
+        if (window.ORDER_ERROR) throw window.ORDER_ERROR;
+        state = { ...state, ordering: "Starting" };
+      }
+      if (name === "open_package") return null;
       return state;
     },
     async listen(event, handler) { handlers.push(handler); },
@@ -188,6 +193,50 @@ await test("text from the files is never taken for markup", async () => {
   const page = await open({ ...base, status });
   assert.equal(await page.evaluate(() => window.hacked), undefined);
   assert.match(await page.textContent(".row-title"), /<img/);
+  await page.close();
+});
+
+await test("the order card before, during and after Prepare the order", async () => {
+  const page = await open(base);
+  assert.match(await page.textContent(".order-card"), /not ready yet/);
+  await page.click(".order-card [data-act='order']");
+  assert.deepEqual((await page.evaluate(() => window.calls)).at(-1), ["prepare_order", {}]);
+  assert.match(await page.textContent(".order-card .working"), /Starting/);
+  await page.evaluate((s) => window.pushState({ ...s, ordering: "Cost and stock" }), base);
+  assert.equal(await page.textContent(".order-card .working"), "Getting prices and stock… (step 4 of 7)");
+  assert.equal(await page.isDisabled(".order-card .pill.primary"), true);
+  const order = fixture("order-done.json");
+  await page.evaluate(([s, o]) => window.pushState({ ...s, ordering: null, order: o }), [base, order]);
+  const amounts = await page.$$eval(".price", (els) => els.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
+  assert.deepEqual(amounts, ["$53.74 a single board", "$26.13 each, if you order 10", "$20.59 each, if you order 100"]);
+  assert.match(await page.textContent(".short-head"), /For 100 boards, five parts are short on stock/);
+  assert.equal(await page.$$eval(".short-row", (e) => e.length), 5);
+  assert.match(await page.textContent(".order-card"), /2 links could not be checked/);
+  assert.equal(await page.$(".check-first"), null);          // no package warnings in this one
+  order.package.warnings = ["Via drill 0.00001 mm is below the project minimum drill 0.2 mm"];
+  await page.evaluate(([s, o]) => window.pushState({ ...s, ordering: null, order: o }), [base, order]);
+  assert.match(await page.textContent(".check-first"), /Check before ordering:\s*Via drill 0.00001 mm/);
+  await page.click("text=Show the fab package");
+  assert.deepEqual((await page.evaluate(() => window.calls)).at(-1), ["open_package", {}]);
+  assert.equal(await page.textContent(".order-card .pill.primary"), "Prepare again");
+  if (shots) await page.screenshot({ path: join(shots, "full-order.png"), fullPage: true });
+  await page.close();
+});
+
+await test("the order in the strip: one line", async () => {
+  const page = await open({ ...base, order: fixture("order-done.json") }, 400, 1000);
+  assert.equal(await page.isVisible(".order-card"), false);
+  assert.equal(await page.textContent(".side-order-line"), "One board: $53.74 · 5 short on stock · fab package ready");
+  if (shots) await page.screenshot({ path: join(shots, "side-order.png"), fullPage: true });
+  await page.close();
+});
+
+await test("an order that can't start says why, in the card", async () => {
+  const page = await open(base);
+  await page.evaluate(() => { window.ORDER_ERROR = "Wait for the check to finish, then try again."; });
+  await page.click(".order-card [data-act='order']");
+  assert.match(await page.textContent(".order-card .said"), /Wait for the check to finish/);
+  assert.equal(await page.textContent(".head .headline"), "No errors. Six small things left to tidy up."); // not a failure
   await page.close();
 });
 

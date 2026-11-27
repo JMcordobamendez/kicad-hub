@@ -8,8 +8,13 @@ one sentence, five indicators (Schematic, Board, In sync, Parts, Datasheets) and
 things to tidy up, the ones that stop an order first. Full window, or a 400 px strip down
 the right-hand side of the screen. Five themes.
 
-Roadmap phase 7E. **Preview**: the quick check, the window and *Show in KiCad* work;
-*Prepare the order* and the Windows installer (with its own Python) come next.
+Roadmap phase 7E. **Preview**: the quick check, the window, *Show in KiCad* and *Prepare
+the order* work; the Windows installer (with its own Python) comes next.
+
+**Prepare the order** runs the slow steps (`kicad_hub.py run --skip portal`: datasheet
+links, prices and stock, the fab package, requirements, report; about three minutes on a
+large board) and shows the cost per board for each batch, the parts short on stock, the
+fab package and what to check before ordering (`.kicad-hub/order.json`).
 
 **Show in KiCad** selects a row's items on the board open in KiCad and zooms to them
 (`python/show_in_kicad.py`, with kicad-python, which the installer bundles). KiCad must

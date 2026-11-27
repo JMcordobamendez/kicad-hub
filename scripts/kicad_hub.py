@@ -801,6 +801,7 @@ RUN_STEPS = ("datasheets", "sourcing", "package", "requirements", "portal")  # t
 
 def cmd_run(args):
     """Every step, in the action's order, with this computer's KiCad: what a PC needs."""
+    started = time.monotonic()
     skip = {x.strip() for x in args.skip.split(",") if x.strip()}
     unknown = skip - set(RUN_STEPS)
     if unknown:
@@ -850,6 +851,7 @@ def cmd_run(args):
         step("Cost and stock")
         sourcing(folder, args.out, args.boards, args.currency, args.choices)
     zip_name = ""
+    made = None
     if "package" not in skip and has_pcb:
         step("Fab package")
         made = package(k, folder, name, args.out, args.fab_profile, args.extra_formats)
@@ -880,11 +882,15 @@ def cmd_run(args):
               f"{args.out}/{PORTAL_DIR} 8000), then http://localhost:8000/{os.path.basename(site)}/")
     write_json(f"{args.out}/run.json", {"name": name, "summary": lines, "report": f"{reports}/report.md",
                                         "page": f"{os.path.basename(site)}/" if site else None})
+    # the desktop app's "Prepare the order": cost, stock, package and links, in plain data
+    write_json(f"{args.out}/{ORDER_FILE}", plain.order(args.out, made, round(time.monotonic() - started, 1),
+                                                       datetime.datetime.now().astimezone().isoformat(timespec="seconds")))
     return 0
 
 
 QUICK_DIR = "quick"  # <out>/quick/: the reports of `status`, apart from those of `run`
 STATUS_FILE = "status.json"
+ORDER_FILE = "order.json"
 
 
 def cached_base_bom(k, folder, name, reports, labels, base, out):

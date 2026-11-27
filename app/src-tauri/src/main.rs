@@ -71,6 +71,8 @@ struct View {
     problem: Option<String>,
     status: Option<Value>,
     features: Features,
+    ordering: Option<String>,
+    order: Option<Value>,
 }
 
 #[derive(Default)]
@@ -82,6 +84,8 @@ struct Inner {
     changed_at: Option<Instant>,
     problem: Option<String>,
     watcher: Option<RecommendedWatcher>,
+    /// Prepare the order is running: the engine's step now ("Starting" first).
+    ordering: Option<String>,
 }
 
 type Shared = Arc<Mutex<Inner>>;
@@ -187,9 +191,13 @@ fn ignore_outputs(work: &Path) {
     let _ = fs::write(file, text);
 }
 
-fn read_status(p: &Project) -> Option<Value> {
-    let text = fs::read_to_string(Path::new(&p.work).join(OUT).join("status.json")).ok()?;
+fn read_json(p: &Project, name: &str) -> Option<Value> {
+    let text = fs::read_to_string(Path::new(&p.work).join(OUT).join(name)).ok()?;
     serde_json::from_str(&text).ok()
+}
+
+fn read_status(p: &Project) -> Option<Value> {
+    read_json(p, "status.json")
 }
 
 fn view(inner: &Inner) -> View {
@@ -201,6 +209,8 @@ fn view(inner: &Inner) -> View {
         problem: inner.problem.clone(),
         status: inner.project.as_ref().and_then(read_status),
         features: Features { show_in_kicad: true },
+        ordering: inner.ordering.clone(),
+        order: inner.project.as_ref().and_then(|p| read_json(p, "order.json")),
     }
 }
 
@@ -250,7 +260,7 @@ fn ticker(app: AppHandle, shared: Shared) {
         let due = {
             let mut i = shared.lock().unwrap();
             match i.changed_at {
-                Some(t) if !i.checking && i.project.is_some() && t.elapsed() >= SETTLE => {
+                Some(t) if !i.checking && i.ordering.is_none() && i.project.is_some() && t.elapsed() >= SETTLE => {
                     i.changed_at = None;
                     true
                 }
@@ -316,8 +326,8 @@ fn engine(app: &AppHandle) -> PathBuf {
 fn check(app: &AppHandle, shared: &Shared) {
     let project = {
         let mut i = shared.lock().unwrap();
-        if i.checking {
-            i.changed_at.get_or_insert(Instant::now()); // once this one ends
+        if i.checking || i.ordering.is_some() {
+            i.changed_at.get_or_insert(Instant::now()); // once this one ends: they share .kicad-hub-base
             return;
         }
         match i.project.clone() {
@@ -354,6 +364,95 @@ fn check(app: &AppHandle, shared: &Shared) {
         }
         push(&app, &shared);
     });
+}
+
+/// Prepare the order: the engine's whole run but the portal (datasheet links, prices and
+/// stock, the fab package, requirements, report), ~3 minutes. The page hears each step;
+/// at the end it gets order.json and a quick check, so links found broken join the list.
+fn prepare(app: &AppHandle, shared: &Shared) -> Result<(), String> {
+    let project = {
+        let mut i = shared.lock().unwrap();
+        if i.ordering.is_some() {
+            return Ok(());
+        }
+        if i.checking {
+            return Err("Wait for the check to finish, then try again.".into());
+        }
+        let p = i.project.clone().ok_or("Choose a project first.")?;
+        i.ordering = Some("Starting".into());
+        p
+    };
+    push(app, shared);
+    let (app, shared) = (app.clone(), shared.clone());
+    let (python, engine) = (python(&app), engine(&app));
+    thread::spawn(move || {
+        use std::io::{BufRead, BufReader, Write};
+        let out = Path::new(&project.work).join(OUT);
+        let _ = fs::create_dir_all(&out);
+        let mut log = fs::File::create(out.join("order.log")).ok();
+        let mut cmd = Command::new(&python);
+        cmd.arg(&engine).args(["run", "--skip", "portal", "--out", OUT, "--project-dir"]).arg(&project.rel);
+        cmd.current_dir(&project.work).env("PYTHONUTF8", "1").env("PYTHONIOENCODING", "utf-8");
+        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let problem = match quiet(&mut cmd).spawn() {
+            Ok(mut child) => {
+                // kicad-cli's messages come on stderr: into the log, so the pipe never fills up
+                let err = child.stderr.take().map(|e| {
+                    let path = out.join("order-errors.log");
+                    thread::spawn(move || {
+                        if let Ok(mut f) = fs::File::create(path) {
+                            let _ = std::io::copy(&mut BufReader::new(e), &mut f);
+                        }
+                    })
+                });
+                if let Some(stdout) = child.stdout.take() {
+                    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                        if let Some(f) = log.as_mut() {
+                            let _ = writeln!(f, "{line}");
+                        }
+                        if let Some(step) = line.strip_prefix("== ") {
+                            shared.lock().unwrap().ordering = Some(step.trim().to_string());
+                            push(&app, &shared);
+                        }
+                    }
+                }
+                let code = child.wait().map(|s| s.success()).unwrap_or(false);
+                if let Some(t) = err {
+                    let _ = t.join();
+                }
+                if code { None } else {
+                    Some("Preparing the order stopped. Its messages are in .kicad-hub/order.log and order-errors.log.".to_string())
+                }
+            }
+            Err(e) => Some(format!("{} could not start: {e}", python.display())),
+        };
+        {
+            let mut i = shared.lock().unwrap();
+            i.ordering = None;
+            i.problem = problem;
+        }
+        push(&app, &shared);
+        check(&app, &shared);
+    });
+    Ok(())
+}
+
+/// Show a file in the system's file manager (the fab package's zip).
+fn reveal(path: &Path) -> Result<(), String> {
+    let mut cmd = if cfg!(windows) {
+        let mut c = Command::new("explorer");
+        c.arg(format!("/select,{}", path.display()));
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg("-R").arg(path);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(path.parent().unwrap_or(path));
+        c
+    };
+    cmd.spawn().map(|_| ()).map_err(|e| format!("Can't open the folder: {e}"))
 }
 
 // --- the window ------------------------------------------------------------------------------
@@ -403,6 +502,26 @@ fn check_now(app: AppHandle, shared: State<Shared>) -> View {
     check(&app, &shared);
     let v = view(&shared.lock().unwrap());
     v
+}
+
+#[tauri::command]
+fn prepare_order(app: AppHandle, shared: State<Shared>) -> Result<View, String> {
+    let shared: Shared = shared.inner().clone();
+    prepare(&app, &shared)?;
+    let v = view(&shared.lock().unwrap());
+    Ok(v)
+}
+
+#[tauri::command]
+fn open_package(shared: State<Shared>) -> Result<(), String> {
+    let project = shared.lock().unwrap().project.clone().ok_or("Choose a project first.")?;
+    let order = read_json(&project, "order.json").ok_or("Prepare the order first.")?;
+    let zip = order.pointer("/package/zip").and_then(Value::as_str).ok_or("There is no fab package yet.")?;
+    let path = Path::new(&project.work).join(zip);
+    if !path.is_file() {
+        return Err("The fab package is gone: prepare the order again.".into());
+    }
+    reveal(&path)
 }
 
 #[tauri::command]
@@ -496,7 +615,8 @@ fn main() {
             ticker(handle, shared.clone());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_state, choose_project, check_now, set_theme, set_mode, show_in_kicad])
+        .invoke_handler(tauri::generate_handler![get_state, choose_project, check_now, prepare_order, open_package, set_theme,
+                                                 set_mode, show_in_kicad])
         .run(tauri::generate_context!())
         .expect("kicad-hub could not start");
 }

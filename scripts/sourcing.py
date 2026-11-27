@@ -325,7 +325,8 @@ if args.choices and os.path.exists(args.choices):
                 targets[norm(r["Part"])] = t
 
 out = {"currency": CUR, "batches": batches, "suppliers": [{"name": n, "status": status[n]} for n, *_ in SUPPLIERS],
-       "choices_file": bool(choices), "targets": len(targets), "lines": [], "builds": [], "warnings": []}
+       "choices_file": bool(choices), "targets": len(targets), "lines": [], "builds": [], "warnings": [],
+       "short": []}  # parts without enough stock for the largest batch, for the desktop app
 warned = set()
 
 
@@ -386,6 +387,8 @@ for b in builds:
             if b["name"] == "default" and n == batches[-1] and o["stock"] < need:
                 warn(l["part"], f"{', '.join(refs)}: {o['supplier']} has {o['stock']} in stock, "
                                 f"{need} needed for {n} boards")
+                out["short"].append({"refs": refs, "mpn": l["mpn"] or l["lcsc"] or o["mpn"], "supplier": o["supplier"],
+                                     "stock": o["stock"], "need": need, "boards": n})
     res["totals"] = {k: round(v, 2) for k, v in res["totals"].items()}
     res["priced"] = res["fitted"] - len(res["unpriceable"]) - len(res["unpriced"])
     out["builds"].append(res)
