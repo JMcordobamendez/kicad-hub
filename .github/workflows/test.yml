@@ -22,8 +22,9 @@ jobs:
       - run: python3 -m unittest discover -s tests -v
 
   app:
-    # The desktop app (app/): its page in Chromium and its core's unit tests
-    runs-on: ubuntu-latest
+    # The desktop app (app/): its page in Chromium and its core's unit tests. Pinned: the
+    # Playwright pinned below installs its Chromium on Ubuntu 24.04, not on 26.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Page tests
