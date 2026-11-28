@@ -167,11 +167,20 @@ def run_engine(engine, work, project_rel, kicad_cli, out, page, title, python=sy
         cmd += ["--kicad-cli", kicad_cli]
     with open(log_path, "w", encoding="utf-8") as log:
         proc = subprocess.Popen(cmd, cwd=work, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                creationflags=NO_WINDOW)
+                                creationflags=NO_WINDOW, env=engine_env())
         while proc.poll() is None:
             write_page(page, progress_page(title, read(log_path)))
             time.sleep(1)
     return proc.returncode == 0, read(log_path)
+
+
+def engine_env(env=None):
+    """The engine's environment: Python in UTF-8 mode, so its log is UTF-8 on Windows too
+    (with the console's code page, "·" and accents came out broken in plugin.log)."""
+    env = dict(os.environ if env is None else env)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
 
 
 def read(path):

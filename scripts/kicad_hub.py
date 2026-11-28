@@ -21,6 +21,7 @@ report and the portal are. Or one at a time:
     kicad_hub.py report     [--project-dir DIR] [--out DIR] [--fab-profile NAME] [--base-ref NAME]
                             [--package FILE] [--required-fields LIST] (+ CI links: --portal-url …)
     kicad_hub.py portal     [--project-dir DIR] [--out DIR]   (CI: --site DIR and portal.py's build options)
+    kicad_hub.py status     [--project-dir DIR] [--out DIR] [--base REF|none]   (the desktop app's quick check)
 
 `checks`: ERC and DRC (with schematic parity) of the project, as JSON and text reports in
 <out>/reports/, plus a second DRC with a fab's rules when --fab-profile is given.
@@ -50,11 +51,16 @@ whatever the other commands wrote there, plus counts.json; run it last.
 working tree, in <out>/portal/<branch>/ with the site's front page around it; in CI only the
 page, in --site, with what the action passes (publishing it is GitHub-only, in the action).
 
+`status`: only the quick part (ERC, DRC, the board against the schematic, the BOM against
+main, missing fields and datasheets; no network), in plain words in <out>/status.json for
+the desktop app (see status.py). It runs on every save.
+
 The action calls it step by step while the rest of its steps move here (roadmap, phase 7B).
 Run it from the repository's folder: paths are relative to it.
 """
 import argparse
 import csv
+import datetime
 import glob
 import hashlib
 import json
@@ -64,11 +70,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 
 import bom_virtual
 import detect
 import kicad
+import status as plain
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAB_PROFILES = os.path.join(HERE, "..", "fab-profiles")
@@ -493,26 +501,40 @@ def run_script(name, *args, env=None):
     return subprocess.run([sys.executable, os.path.join(HERE, name), *args], env=env).returncode
 
 
-def datasheets(project_dir, out, dirs="", check_links=True):
-    """Datasheet of every fitted part: <out>/reports/datasheets.json and <out>/datasheets/."""
+LINK_CACHE = "cache/datasheet-links.json"  # inside <out>: links found working, not checked again for a week
+
+
+def datasheets(project_dir, out, dirs="", check_links=True, cache=False):
+    """Datasheet of every fitted part: <out>/reports/datasheets.json and <out>/datasheets/.
+    cache: remember the links found working in <out>/LINK_CACHE (a PC; CI starts afresh)."""
     bom = need_bom(out)
     result = f"{out}/reports/datasheets.json"
     _remove(result)
     code = run_script("datasheets.py", "--bom", bom, "--project-dir", project_dir, "--dirs", dirs,
-                      "--check-urls", "true" if check_links else "false", "--out-dir", out, "--json", result)
+                      "--check-urls", "true" if check_links else "false", "--out-dir", out, "--json", result,
+                      *(["--cache", f"{out}/{LINK_CACHE}"] if cache else []))
     if code or not os.path.isfile(result):
         raise StepError("The datasheet step failed: see its messages above")
     with open(result, encoding="utf-8") as f:
-        status = [e.get("status") for e in json.load(f).values()]
-    return {name: status.count(name) for name in ("ok", "broken", "unverified", "missing")}
+        entries = list(json.load(f).values())
+    status = [e.get("status") for e in entries]
+    found = {name: status.count(name) for name in ("ok", "broken", "unverified", "missing")}
+    found["unverified_links"] = len({e.get("target") for e in entries if e.get("status") == "unverified"})
+    return found
 
 
 def datasheet_line(found):
     """The terminal line for the datasheet step, counted as the report counts them: a link
-    that could not be checked is still a datasheet."""
+    that could not be checked is still a datasheet. Links are counted as links (one link is
+    often on several parts), parts as parts."""
     have = found["ok"] + found["unverified"]
-    return (f"Datasheets: {have} found" + (f" ({found['unverified']} link not checked)" if found["unverified"] else "")
-            + f", {found['broken']} broken, {found['missing']} missing")
+    links = found.get("unverified_links", found["unverified"])
+    unchecked = ""
+    if links:
+        unchecked = f"; {links} {'link' if links == 1 else 'links'} not checked"
+        if found["unverified"] != links:
+            unchecked += f" ({found['unverified']} parts)"
+    return f"Datasheets: {have} found, {found['broken']} broken, {found['missing']} missing{unchecked}"
 
 
 def keys_file(env=None):
@@ -820,7 +842,7 @@ def cmd_run(args):
     if "datasheets" not in skip:
         step("Datasheets")
         try:
-            found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true")
+            found = datasheets(folder, args.out, args.dirs, args.check_links.strip().lower() == "true", cache=True)
             lines.append(datasheet_line(found))
         except StepError as e:  # an extra: the rest still runs
             print(f"::warning::{e}: skipped", file=sys.stderr)
@@ -859,6 +881,89 @@ def cmd_run(args):
     write_json(f"{args.out}/run.json", {"name": name, "summary": lines, "report": f"{reports}/report.md",
                                         "page": f"{os.path.basename(site)}/" if site else None})
     return 0
+
+
+QUICK_DIR = "quick"  # <out>/quick/: the reports of `status`, apart from those of `run`
+STATUS_FILE = "status.json"
+
+
+def cached_base_bom(k, folder, name, reports, labels, base, out):
+    """bom-parts-base.csv of `base`, from <out>/cache/ when that commit was exported before:
+    checking a commit out for every save would take longer than the checks. Returns the
+    number of parts, or None when there is nothing to compare with."""
+    sha = _git_out("rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
+    key = hashlib.sha1(json.dumps([sha, folder, name, labels]).encode()).hexdigest()[:16]
+    cached = f"{out}/cache/base-bom-{key}.csv"
+    target = f"{reports}/bom-parts-base.csv"
+    if sha and os.path.isfile(cached):
+        shutil.copy(cached, target)
+        return fitted(target)[1]
+    parts = base_boms(k, folder, name, reports, labels, [], base)
+    if parts is not None and sha and os.path.isfile(target):
+        os.makedirs(os.path.dirname(cached), exist_ok=True)
+        shutil.copy(target, cached)
+    return parts
+
+
+def cmd_status(args):
+    """The quick check for the desktop app: ERC, DRC (with the board against the schematic),
+    the BOM against main, missing fields and datasheets, in plain words in <out>/status.json.
+    No network, nothing slow: it runs on every save."""
+    started = time.monotonic()
+    out_file = f"{args.out}/{STATUS_FILE}"
+    os.makedirs(args.out, exist_ok=True)
+    name = ""
+    try:
+        folder, name, has_pcb, note = detect.detect(args.project_dir.strip(), ".", [args.out])
+        if note:
+            print(note, flush=True)
+        if args.fab_profile != "generic":
+            fab_rules(args.fab_profile)
+        base = default_base() if args.base is None else args.base.strip()
+        if base.lower() == "none":
+            base = ""
+        k = make_kicad(args)
+        reports = f"{args.out}/{QUICK_DIR}"
+        clean(reports)
+        erc_drc(k, folder, name, has_pcb, reports)
+        fab = None
+        if args.fab_profile != "generic" and has_pcb:
+            fab_drc(k, folder, name, reports, args.fab_profile, args.out, tmp_root=args.tmp or None)
+            fab = (args.fab_profile, plain.load_json(f"{reports}/drc-fab.json"))
+        labels = bom_labels(args.required_fields)
+        boms(k, folder, name, reports, labels, [])
+        compared = cached_base_bom(k, folder, name, reports, labels, base, args.out) if base else None
+        found = None
+        if run_script("datasheets.py", "--bom", f"{reports}/bom-parts.csv", "--project-dir", folder,
+                      "--dirs", args.dirs, "--check-urls", "false", "--no-copy", "--out-dir", args.out,
+                      "--json", f"{reports}/datasheets.json") == 0:
+            found = plain.load_json(f"{reports}/datasheets.json")
+        result = plain.build(folder, name, reports, base if compared is not None else "", args.required_fields,
+                             found, plain.load_json(f"{args.out}/{LINK_CACHE}"), fab,
+                             args.datasheet_optional_refs, args.check_capacitor_voltage.strip().lower() == "true")
+        result["kicad"] = k.where
+    except (StepError, detect.DetectError, kicad.KiCadNotFound) as e:
+        result = plain.failed(name, str(e))
+        _stamp(result, started)
+        write_json(out_file, result)
+        raise
+    _stamp(result, started)
+    write_json(out_file, result)
+    sys.stdout.flush()
+    print(f"\n{name} ({result['kicad']}): {result['headline']}")
+    for item in result["items"]:
+        print(f"  {'!' if item['blocking'] else '-'} {item['ref'] + ': ' if item['ref'] else ''}{item['title']}")
+    print(f"Status: {out_file} ({result['seconds']} s)")
+    return 0
+
+
+def _stamp(result, started):
+    head = _git_out("rev-parse", "HEAD")
+    branch = _git_out("rev-parse", "--abbrev-ref", "HEAD") if head else ""
+    checked = datetime.datetime.now().astimezone().isoformat(timespec="seconds")  # 2026-11-25T18:49:02+01:00
+    result.update(checked_at=checked, seconds=round(time.monotonic() - started, 1),
+                  commit=head[:7], branch="" if branch == "HEAD" else branch,
+                  changed=bool(head and _git_out("status", "--porcelain")))
 
 
 def write_json(path, data):
@@ -1119,6 +1224,19 @@ def main(argv=None):
                    help="requirements file, relative to the project folder")
     n.add_argument("--tmp", default="", help="folder for temporary copies (default: the system's)")
     n.set_defaults(func=cmd_run)
+    t = sub.add_parser("status", help="the quick check for the desktop app: ERC, DRC, board against schematic, "
+                                      "BOM against main, in plain words in <out>/status.json")
+    add_common(t)
+    t.add_argument("--base", default=None, help="branch or commit to compare the BOM with (default: main, else "
+                                                "master; none: no comparison)")
+    t.add_argument("--fab-profile", default="generic", help="generic | a folder of fab-profiles/")
+    t.add_argument("--required-fields", default="Footprint,Datasheet,MPN|LCSC", help="fields every part needs")
+    t.add_argument("--check-capacitor-voltage", default="true", help="true | false")
+    t.add_argument("--datasheet-optional-refs", default=plain.DATASHEET_OPTIONAL,
+                   help="reference prefixes that need no datasheet")
+    t.add_argument("--dirs", default="", help="extra folders with datasheet files, comma-separated")
+    t.add_argument("--tmp", default="", help="folder for temporary copies (default: the system's)")
+    t.set_defaults(func=cmd_status)
     v = sub.add_parser("serve", help="serve the local portal on this computer (127.0.0.1 only)")
     v.add_argument("--out", default=".kicad-hub", help="the output folder `run` wrote (the portal is <out>/portal)")
     v.add_argument("--port", type=int, default=8000, help="port; 0 = any free one")

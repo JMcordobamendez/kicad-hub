@@ -51,7 +51,8 @@ goes step by step, with or [without the command line](docs/manual.md#9-without-t
 ### In KiCad, without GitHub (plugin, preview)
 
 The same checks run on your PC from a button in KiCad's PCB editor, with nothing else to
-install. **Preview:** not yet tried in a real KiCad (see the [roadmap](docs/ROADMAP.md)).
+install. **Preview:** tried on one real board with KiCad 10.0.5; a desktop app that sits
+beside KiCad is on its way (see the [roadmap](docs/ROADMAP.md), phase 7E).
 
 1. Download `kicad-hub-plugin-<version>.zip` from the
    [latest release](https://github.com/JMcordobamendez/kicad-hub/releases/latest).
@@ -679,6 +680,15 @@ features. Step-by-step recipes: [`template/docs/approvals.md`](template/docs/app
   one `NAME=value` per line with the names of the [secrets](#supplier-api-keys). It finds `kicad-cli` by
   itself when run with KiCad's own Python or when it is on the PATH; otherwise
   `--kicad-cli <path>`.
+- **Quick check for the desktop app (roadmap phase 7E):** `python scripts/kicad_hub.py
+  status` runs only what is quick (ERC, DRC with the board against the schematic, the BOM
+  against `main`, missing fields and datasheets, no network) and writes
+  `.kicad-hub/status.json`: a one-line headline, five indicators and the things to tidy
+  up in plain English, errors first, each with the parts it is about and the ids KiCad
+  needs to select them. Its reports go to `.kicad-hub/quick/`; the BOM of `main` is
+  exported once per commit and kept in `.kicad-hub/cache/`. The sentences come from the
+  kind of each violation and from the board file, never from KiCad's messages, which come
+  in the PC's language (`scripts/status.py`).
 - `python3 -m unittest discover -s tests` runs the unit tests of the scripts that have
   them (no KiCad needed); CI runs them in the `unit` job.
 - The Python scripts can be run locally against files exported with a local
