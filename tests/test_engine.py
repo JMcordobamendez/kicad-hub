@@ -1001,6 +1001,10 @@ class RunTest(EngineCase):
         done = self.load(".kicad-hub/run.json")          # what the KiCad plugin reads when it ends
         self.assertEqual((done["name"], done["page"], done["report"]), ("board", "main/", ".kicad-hub/reports/report.md"))
         self.assertIn("BOM: 3 fitted parts, lite 2, pro x 3; main: 1", done["summary"])
+        order = self.load(".kicad-hub/order.json")       # what the desktop app's Prepare the order reads
+        self.assertEqual((order["state"], order["package"]["name"]), ("done", "board-B-fab.zip"))
+        self.assertIn("datasheets", order)
+        self.assertIsInstance(order["seconds"], float)
 
     def test_no_base_and_most_steps_skipped(self):
         self.commit()

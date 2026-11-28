@@ -24,6 +24,7 @@ const core = (() => {
 
 let state = null;
 let notice = null; // {ok, message, id}: the answer of the last Show in KiCad
+let orderNote = ""; // why Prepare the order or Show the fab package could not start
 
 function esc(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -120,6 +121,91 @@ function rowsCard(status) {
     ${note ? `<span class="muted">${note}</span>` : ""}</div>${body}</section>`;
 }
 
+// --- the order --------------------------------------------------------------------------------
+
+const STEPS = [ // the engine's steps (`kicad_hub.py run`), in plain words
+  ["ERC / DRC", "Checking the design"], ["BOM", "Listing the parts"], ["Datasheets", "Opening the datasheet links"],
+  ["Cost and stock", "Getting prices and stock"], ["Fab package", "Making the fab package"],
+  ["Requirements", "Checking the requirements"], ["Report", "Writing the report"],
+];
+
+function stepText(step) {
+  const i = STEPS.findIndex(([key]) => (step || "").startsWith(key));
+  return i < 0 ? "Starting…" : `${STEPS[i][1]}… (step ${i + 1} of ${STEPS.length})`;
+}
+
+function money(cost, value) {
+  return cost.symbol + Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function words(n) {
+  return ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][n] || String(n);
+}
+
+function orderCard() {
+  const o = state.order;
+  const busy = !!state.ordering;
+  const cost = o && o.cost;
+  let body = "";
+  if (cost && cost.batches.length) {
+    const [first, ...more] = cost.batches;
+    body += `<div class="prices">
+      <div class="price big"><span class="amount">${esc(money(cost, first.each))}</span>
+        <span class="what">${first.boards === 1 ? "a single board" : `each, if you order ${first.boards}`}</span></div>
+      ${more.map((b) => `<div class="price"><span class="amount">${esc(money(cost, b.each))}</span>
+        <span class="what">each, if you order ${b.boards}</span></div>`).join("")}</div>
+      <p class="tag-note">${esc(cost.note)}</p>`;
+    const short = o.short || [];
+    if (short.length) {
+      const head = `For ${o.short_for} boards, ${words(short.length)} ${short.length === 1 ? "part is" : "parts are"} short on stock`;
+      body += `<div class="short"><span class="short-head">${esc(head)}</span>
+        ${short.map((x) => `<div class="short-row"><span><strong>${esc(x.refs)}</strong>
+          <span class="mono">${esc(x.mpn)}</span></span><span class="tag-muted">${esc(x.text)}</span></div>`).join("")}</div>`;
+    } else if (o.short_for) {
+      body += `<p class="tag-note">Every part is in stock for ${esc(o.short_for)} boards.</p>`;
+    }
+  } else if (o && !busy) {
+    body += `<p class="tag-note">No prices this time: the suppliers did not answer.</p>`;
+  }
+  if (o && o.package && !busy) {
+    const warns = o.package.warnings || [];
+    body += `<div class="package"><span><strong>Fab package ready.</strong> <span class="mono">${esc(o.package.name)}</span></span>
+      <button type="button" class="pill tag-pill" data-act="package">Show the fab package</button>
+      ${warns.length ? `<div class="check-first"><strong>Check before ordering:</strong>
+        <ul>${warns.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}</div>`;
+  }
+  if (o && o.datasheets && !busy) {
+    const d = o.datasheets;
+    const bits = [];
+    if (d.broken.length) bits.push(`${d.broken.length} datasheet ${d.broken.length === 1 ? "link is" : "links are"} broken (${d.broken.join(", ")}): they are in the list`);
+    if (d.not_checked) bits.push(`${d.not_checked} ${d.not_checked === 1 ? "link" : "links"} could not be checked (slow or blocking sites; not counted as problems)`);
+    if (bits.length) body += `<p class="tag-note">${esc(bits.join(". "))}.</p>`;
+  }
+  const when = o && o.checked_at && !busy ? `Prepared at ${clock(o.checked_at)}, in ${Math.max(1, Math.round((o.seconds || 0) / 60))} min.` : "";
+  const button = busy
+    ? `<button type="button" class="pill primary" disabled>Preparing…</button><p class="tag-note working" role="status">${esc(stepText(state.ordering))}</p>`
+    : `<button type="button" class="pill primary" data-act="order" ${state.checking ? "disabled" : ""}>${o ? "Prepare again" : "Prepare the order"}</button>
+       <p class="tag-note">${esc(when || "About three minutes: it opens the datasheet links, gets prices and stock, and makes the Gerbers and the shopping list.")}</p>`;
+  return `<section class="order-card" aria-labelledby="cost"><h2 id="cost">What it costs to build</h2>
+    ${!o && !busy ? `<p class="tag-note">Prices, stock and the fab package are not ready yet.</p>` : ""}
+    ${body}${orderNote ? `<p class="tag-note said bad">${esc(orderNote)}</p>` : ""}${button}</section>`;
+}
+
+function sideOrder() {
+  const o = state.order;
+  const busy = !!state.ordering;
+  const cost = o && o.cost && o.cost.batches.length ? o.cost : null;
+  const line = busy ? stepText(state.ordering)
+    : cost ? `${cost.batches[0].boards === 1 ? "One board" : `Each of ${cost.batches[0].boards}`}: ${money(cost, cost.batches[0].each)}`
+      + (o.short && o.short.length ? ` · ${o.short.length} short on stock` : "") + (o.package ? " · fab package ready" : "")
+    : "";
+  return `<div class="side-order side-only">
+    <button type="button" class="pill primary" data-act="order" ${busy || state.checking ? "disabled" : ""}>
+      ${busy ? "Preparing…" : o ? "Prepare again" : "Prepare the order"}</button>
+    ${line ? `<span class="side-order-line" role="status">${esc(line)}</span>` : ""}
+    ${orderNote ? `<span class="said bad">${esc(orderNote)}</span>` : ""}</div>`;
+}
+
 // --- screens --------------------------------------------------------------------------------
 
 function welcome() {
@@ -165,7 +251,8 @@ function project() {
       ${summary(s)}
     </header>
     <div class="side-only">${summary(s)}</div>
-    ${rowsCard(s)}
+    <div class="columns">${rowsCard(s)}<div class="full-only order-col">${orderCard()}</div></div>
+    ${sideOrder()}
     <div class="side-foot side-only">${themePicker("side")}</div>
   </main>`;
 }
@@ -204,6 +291,8 @@ document.addEventListener("click", (ev) => {
     act("set_theme", { theme: el.dataset.theme });
   } else if (el.dataset.act === "choose") act("choose_project");
   else if (el.dataset.act === "check") act("check_now");
+  else if (el.dataset.act === "order") orderAct("prepare_order");
+  else if (el.dataset.act === "package") orderAct("open_package");
   else if (el.dataset.act === "side") act("set_mode", { mode: "side" });
   else if (el.dataset.act === "full") act("set_mode", { mode: "full" });
   else if (el.classList.contains("show")) showInKiCad(el.dataset.id);
@@ -215,6 +304,17 @@ document.addEventListener("click", (ev) => {
   const row = ev.target.closest(".row.can-show");
   if (row && window.matchMedia("(max-width: 719px)").matches) showInKiCad(row.dataset.id);
 });
+
+async function orderAct(name) {
+  orderNote = "";
+  try {
+    const next = await core.invoke(name, {});
+    if (next && typeof next === "object") state = next;
+  } catch (e) {
+    orderNote = String(e && e.message ? e.message : e);
+  }
+  render();
+}
 
 async function showInKiCad(id) {
   notice = { ok: true, message: "Asking KiCad…", id };

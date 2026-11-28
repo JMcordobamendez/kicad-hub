@@ -1,0 +1,83 @@
+{
+ "version": 1,
+ "state": "done",
+ "checked_at": "2026-11-27T18:52:10+01:00",
+ "seconds": 171.2,
+ "cost": {
+  "currency": "USD",
+  "symbol": "$",
+  "batches": [
+   {
+    "boards": 1,
+    "total": 53.74,
+    "each": 53.74
+   },
+   {
+    "boards": 10,
+    "total": 261.3,
+    "each": 26.13
+   },
+   {
+    "boards": 100,
+    "total": 2059.0,
+    "each": 20.59
+   }
+  ],
+  "priced": 95,
+  "fitted": 95,
+  "unpriced": [],
+  "suppliers": [
+   "LCSC",
+   "JLCPCB"
+  ],
+  "no_key": [
+   "Mouser",
+   "Farnell",
+   "DigiKey"
+  ],
+  "failed": [],
+  "note": "Parts only, with prices from LCSC and JLCPCB. Comparing with Mouser, Farnell or DigiKey needs their API key."
+ },
+ "short": [
+  {
+   "refs": "L2",
+   "mpn": "SRN6028C-3R9M",
+   "text": "JLCPCB has 52 of 100",
+   "boards": 100
+  },
+  {
+   "refs": "RFB2",
+   "mpn": "RT0805BRD07140KL",
+   "text": "LCSC has none",
+   "boards": 100
+  },
+  {
+   "refs": "SW1, SW2",
+   "mpn": "TL3342F450QG",
+   "text": "JLCPCB has 1 of 200",
+   "boards": 100
+  },
+  {
+   "refs": "U2",
+   "mpn": "S-8252AAX-M6T1U",
+   "text": "LCSC has none",
+   "boards": 100
+  },
+  {
+   "refs": "U4",
+   "mpn": "AP63203WU-7",
+   "text": "JLCPCB has 2 of 100",
+   "boards": 100
+  }
+ ],
+ "short_for": 100,
+ "datasheets": {
+  "broken": [],
+  "not_checked": 2
+ },
+ "package": {
+  "zip": ".kicad-hub/package/riego-nodo-base-A-fab.zip",
+  "name": "riego-nodo-base-A-fab.zip",
+  "warnings": []
+ }
+}

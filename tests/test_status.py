@@ -281,6 +281,53 @@ class StatusCommandTest(EngineCase):
         self.assertIn("did not write", s["detail"])
 
 
+class OrderTest(unittest.TestCase):
+    """status.order(): what Prepare the order shows."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        os.makedirs(os.path.join(self.tmp.name, "reports"))
+
+    def write(self, name, data):
+        with open(os.path.join(self.tmp.name, "reports", name), "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    def test_cost_stock_package_and_links(self):
+        self.write("sourcing.json", {
+            "currency": "USD",
+            "suppliers": [{"name": "LCSC", "status": "ok"}, {"name": "JLCPCB", "status": "ok"},
+                          {"name": "Mouser", "status": "no API key"}, {"name": "Farnell", "status": "no API key"},
+                          {"name": "DigiKey", "status": "no API key"}],
+            "builds": [{"name": "default", "fitted": 95, "priced": 93, "unpriceable": ["J9"], "unpriced": ["X1"],
+                        "totals": {"1": 53.74, "10": 261.3, "100": 2059.0}}],
+            "short": [{"refs": ["SW2", "SW1"], "mpn": "TL3342F450QG", "supplier": "JLCPCB", "stock": 1, "need": 200,
+                       "boards": 100},
+                      {"refs": ["U2"], "mpn": "S-8252AAX", "supplier": "LCSC", "stock": 0, "need": 100, "boards": 100}]})
+        self.write("datasheets.json", {"U3": {"status": "unverified", "target": "https://a/x.pdf"},
+                                       "J1": {"status": "unverified", "target": "https://j/x.pdf"},
+                                       "J4": {"status": "unverified", "target": "https://j/x.pdf"},
+                                       "D9": {"status": "broken", "target": "https://d/x.pdf"}})
+        o = status.order(self.tmp.name, {"zip": ".kicad-hub/package/b-A-fab.zip", "name": "b-A-fab.zip",
+                                         "warnings": []}, 171.2, "2026-11-27T18:00:00+01:00")
+        c = o["cost"]
+        self.assertEqual([(b["boards"], b["each"]) for b in c["batches"]], [(1, 53.74), (10, 26.13), (100, 20.59)])
+        self.assertEqual(c["symbol"], "$")
+        self.assertEqual(c["note"], "Parts only, with prices from LCSC and JLCPCB. Comparing with Mouser, Farnell "
+                                    "or DigiKey needs their API key. Not priced: J9, X1.")
+        self.assertEqual(o["short"], [{"refs": "SW1, SW2", "mpn": "TL3342F450QG", "text": "JLCPCB has 1 of 200",
+                                       "boards": 100},
+                                      {"refs": "U2", "mpn": "S-8252AAX", "text": "LCSC has none", "boards": 100}])
+        self.assertEqual(o["short_for"], 100)
+        self.assertEqual(o["datasheets"], {"broken": ["D9"], "not_checked": 2})  # links, not parts
+        self.assertEqual(o["package"]["name"], "b-A-fab.zip")
+
+    def test_without_prices(self):
+        o = status.order(self.tmp.name)
+        self.assertNotIn("cost", o)
+        self.assertEqual(o["state"], "done")
+
+
 class LinkCacheTest(unittest.TestCase):
     """datasheets.py --cache: links found working are not checked again for a week."""
 

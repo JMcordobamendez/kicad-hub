@@ -827,3 +827,71 @@ def failed(name, message, project_dir=""):
             "headline": "The check could not run.", "detail": message, "errors": 0, "to_tidy": 0,
             "indicators": [{"id": a, "label": LABELS[a], "state": "off", "count": 0, "note": "not checked"}
                            for a in AREAS], "items": []}
+
+
+# --- the order (after `run`: datasheet links, prices, the fab package) ---------------------------
+
+SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£"}
+
+
+def order(out, package=None, seconds=None, checked_at=""):
+    """What "Prepare the order" found, for the app: the cost per board for each batch, the
+    parts short on stock for the largest one, the fab package and the datasheet links.
+    Reads what `run` wrote in <out>/reports/. package: `package()`'s result, or None."""
+    reports = os.path.join(out, "reports")
+    src = load_json(os.path.join(reports, "sourcing.json"))
+    result = {"version": VERSION, "state": "done", "checked_at": checked_at, "seconds": seconds}
+    if src and src.get("builds"):
+        build = src["builds"][0]
+        cur = src.get("currency", "USD")
+        totals = build.get("totals") or {}
+        batches = [{"boards": int(n), "total": t, "each": round(t / int(n), 2)}
+                   for n, t in sorted(totals.items(), key=lambda kv: int(kv[0])) if int(n) > 0]
+        used = [s["name"] for s in src.get("suppliers", []) if s.get("status") == "ok"]
+        no_key = [s["name"] for s in src.get("suppliers", []) if s.get("status") == "no API key"]
+        failed_ = [s["name"] for s in src.get("suppliers", []) if str(s.get("status", "")).startswith("failed")]
+        short = [{"refs": ", ".join(sorted(x.get("refs", []), key=ref_key)), "mpn": x.get("mpn", ""),
+                  "text": stock_text(x), "boards": x.get("boards")} for x in src.get("short", [])]
+        unpriced = sorted(set(build.get("unpriceable", [])) | set(build.get("unpriced", [])), key=ref_key)
+        result["cost"] = {
+            "currency": cur, "symbol": SYMBOLS.get(cur, cur + " "), "batches": batches,
+            "priced": build.get("priced"), "fitted": build.get("fitted"), "unpriced": unpriced,
+            "suppliers": used, "no_key": no_key, "failed": failed_,
+            "note": cost_note(used, no_key, failed_, unpriced),
+        }
+        result["short"] = short
+        result["short_for"] = short[0]["boards"] if short else (batches[-1]["boards"] if batches else None)
+    ds = load_json(os.path.join(reports, "datasheets.json"))
+    if ds is not None:
+        broken = sorted((r for r, e in ds.items() if e.get("status") == "broken"), key=ref_key)
+        unchecked = {e.get("target") for e in ds.values() if e.get("status") == "unverified"}
+        result["datasheets"] = {"broken": broken, "not_checked": len(unchecked)}
+    if package:
+        result["package"] = {"zip": package.get("zip"), "name": package.get("name"),
+                             "warnings": list(package.get("warnings") or [])}
+    return result
+
+
+def stock_text(x):
+    """"JLCPCB has 1 of 200", "LCSC has none"."""
+    if not x.get("stock"):
+        return f"{x.get('supplier')} has none"
+    return f"{x.get('supplier')} has {x['stock']} of {x.get('need')}"
+
+
+def cost_note(used, no_key, failed_, unpriced):
+    parts = []
+    if used:
+        parts.append("Parts only, with prices from " + " and ".join(used[:2] if len(used) <= 2 else
+                                                                   [", ".join(used[:-1]), used[-1]]) + ".")
+    else:
+        parts.append("No supplier answered: no prices this time.")
+    if failed_:
+        parts.append(" and ".join(failed_) + " did not answer.")
+    if no_key:
+        names = ", ".join(no_key[:-1]) + " or " + no_key[-1] if len(no_key) > 1 else no_key[0]
+        parts.append(f"Comparing with {names} needs {'their' if len(no_key) > 1 else 'its'} API key.")
+    if unpriced:
+        shown = ", ".join(unpriced[:6]) + (f" and {len(unpriced) - 6} more" if len(unpriced) > 6 else "")
+        parts.append(f"Not priced: {shown}.")
+    return " ".join(parts)

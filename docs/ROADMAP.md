@@ -85,7 +85,8 @@ flowchart LR
 owner's real board. The owner found it unfriendly (a ZIP to install, one button, results
 in the browser full of jargon) and commissioned a **desktop app beside KiCad** (phase 7E,
 2026-11-25): the quick check in plain words (`kicad_hub.py status`) and the app's window
-(`app/`) and Show in KiCad are in review; next, Prepare the order. Left in B: before/after images without PIL, KiBot optional, small things.
+(`app/`), Show in KiCad and Prepare the order are in review; next, the Windows
+installer. Left in B: before/after images without PIL, KiBot optional, small things.
 Left in A: the template repository. Then versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -617,8 +618,20 @@ merged only when the owner says; the owner's Windows PC session tries each build
       the mode remembered; `cargo check` for Windows passes. Tests: the page in Chromium
       (`app/tests/ui.test.mjs`, 10 tests, every theme in both layouts) and the core
       (`cargo test`), in CI's new `app` job. **Not tried on Windows yet**
-- [ ] **4 · Prepare the order**: datasheet links, prices and stock, fab package; the cost
-      card
+- [ ] **4 · Prepare the order** (in review, 2026-11-27): the button runs `kicad_hub.py run
+      --skip portal` (datasheet links, prices and stock, fab package, requirements, report);
+      the card shows each step in plain words ("Getting prices and stock… (step 4 of 7)"),
+      then the gold card of the mockup: cost per board for each batch, the parts short on
+      stock for the largest one ("JLCPCB has 1 of 200", from a new `short` list in
+      `sourcing.json`), which suppliers priced it and which need a key, the fab package
+      with *Show the fab package* (the file manager) and its "check before ordering"
+      warnings, the datasheet links that could not be checked. `run` writes it all to
+      `.kicad-hub/order.json` (`status.order()`); a quick check follows, so links found
+      broken join the list. The strip has the button and one line ("One board: $53.74 ·
+      5 short on stock · fab package ready"). Never at the same time as a quick check (both
+      use `.kicad-hub-base/`). Tried for real in the app on the example: 32 s, prices from
+      LCSC and JLCPCB ($29.01 one board, $10.18 each for 100), three parts short for 100
+      boards, the package and its via-drill warning
 - [ ] **5 · Installer**: NSIS with the embeddable Python (~13 MB measured), attached to
       releases; the plugin's button brings the window to the front
 
