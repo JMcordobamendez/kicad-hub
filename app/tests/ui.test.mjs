@@ -32,6 +32,7 @@ function mockCore(initial) {
       if (name === "set_mode") state = { ...state, mode: args.mode };
       if (name === "check_now") state = { ...state, checking: true };
       if (name === "choose_project") state = { ...state, project: window.NEXT_PROJECT || state.project };
+      if (name === "show_in_kicad") return window.SHOWN || { ok: true, message: "Selected 2 items in KiCad." };
       return state;
     },
     async listen(event, handler) { handlers.push(handler); },
@@ -159,10 +160,25 @@ await test("a check that could not run says why", async () => {
   await page.close();
 });
 
-await test("Show in KiCad when the core offers it", async () => {
+await test("Show in KiCad: the button, KiCad's answer under the row", async () => {
   const page = await open({ ...base, features: { show_in_kicad: true } });
   await page.click(".row[data-id='r2'] .show");
   assert.deepEqual((await page.evaluate(() => window.calls)).at(-1), ["show_in_kicad", { id: "r2" }]);
+  await page.waitForSelector(".row[data-id='r2'] .said.good");
+  assert.equal(await page.textContent(".row[data-id='r2'] .said"), "Selected 2 items in KiCad.");
+  await page.evaluate(() => { window.SHOWN = { ok: false, message: "KiCad doesn't answer. Is it open?" }; });
+  await page.click(".row[data-id='r5'] .show");
+  await page.waitForSelector(".row[data-id='r5'] .said.bad");
+  assert.equal(await page.$$eval(".said", (e) => e.length), 1); // only the last answer
+  if (shots) await page.screenshot({ path: join(shots, "show-in-kicad.png") });
+  await page.close();
+});
+
+await test("Show in KiCad in the strip: tap the row", async () => {
+  const page = await open({ ...base, features: { show_in_kicad: true } }, 400, 1000);
+  await page.click(".row[data-id='r3'] .row-title");
+  assert.deepEqual((await page.evaluate(() => window.calls)).at(-1), ["show_in_kicad", { id: "r3" }]);
+  assert.equal(await page.isVisible("text=Tap one and KiCad selects it on the board."), true);
   await page.close();
 });
 

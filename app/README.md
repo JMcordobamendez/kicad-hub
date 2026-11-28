@@ -8,8 +8,13 @@ one sentence, five indicators (Schematic, Board, In sync, Parts, Datasheets) and
 things to tidy up, the ones that stop an order first. Full window, or a 400 px strip down
 the right-hand side of the screen. Five themes.
 
-Roadmap phase 7E. **Preview**: the quick check and the window work; *Show in KiCad*,
+Roadmap phase 7E. **Preview**: the quick check, the window and *Show in KiCad* work;
 *Prepare the order* and the Windows installer (with its own Python) come next.
+
+**Show in KiCad** selects a row's items on the board open in KiCad and zooms to them
+(`python/show_in_kicad.py`, with kicad-python, which the installer bundles). KiCad must
+have the board open in the PCB editor and *Preferences → Plugins → Enable KiCad API*
+ticked.
 
 ## Layout
 
@@ -19,6 +24,7 @@ app/
     themes/            one file per theme, the 18 colours of each
     fonts/             Bricolage Grotesque, Figtree, DM Mono (SIL OFL 1.1), bundled
   src-tauri/           the core (Rust, Tauri 2): settings, watching, running the engine
+  python/              show_in_kicad.py: selects a row's items in KiCad (kicad-python)
   tests/ui.test.mjs    tests of the page in Chromium, with a stand-in core
   icon.svg             the app's icon (src-tauri/icons/ is made from it)
 ```
@@ -33,7 +39,8 @@ plugin does; the engine's messages go to `.kicad-hub/app.log`.
 
 ## Run it from the repository
 
-Needs Rust, a Python 3 on the PATH (or `KICAD_HUB_PYTHON`) and KiCad 10 (its `kicad-cli`
+Needs Rust, a Python 3 on the PATH (or `KICAD_HUB_PYTHON`; with `pip install
+kicad-python` for Show in KiCad) and KiCad 10 (its `kicad-cli`
 is found as the engine finds it, or give it with `KICAD_CLI`). On Linux also the
 WebKitGTK development packages (`libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev`).
 

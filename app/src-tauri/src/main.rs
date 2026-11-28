@@ -200,7 +200,7 @@ fn view(inner: &Inner) -> View {
         checking: inner.checking,
         problem: inner.problem.clone(),
         status: inner.project.as_ref().and_then(read_status),
-        features: Features { show_in_kicad: false },
+        features: Features { show_in_kicad: true },
     }
 }
 
@@ -425,9 +425,52 @@ fn set_mode(app: AppHandle, window: WebviewWindow, shared: State<Shared>, mode: 
     view(&i)
 }
 
+/// What Show in KiCad answers the page: whether it worked, and a sentence.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+struct Shown {
+    ok: bool,
+    message: String,
+}
+
+/// The helper that talks to KiCad: the copy bundled with the app, else the repository's.
+fn helper(app: &AppHandle) -> PathBuf {
+    if let Ok(res) = app.path().resource_dir() {
+        let c = res.join("helper").join("show_in_kicad.py");
+        if c.is_file() {
+            return c;
+        }
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("python").join("show_in_kicad.py")
+}
+
+/// The request for one row of status.json: its items, and its parts' footprints.
+fn show_request(status: &Value, id: &str, project: &Project) -> Option<Value> {
+    let row = status.get("items")?.as_array()?.iter().find(|r| r.get("id").and_then(Value::as_str) == Some(id))?;
+    let list = |key: &str| row.get(key).cloned().unwrap_or_else(|| Value::Array(vec![]));
+    Some(serde_json::json!({
+        "ids": list("select"),
+        "footprints": list("footprints"),
+        "project_dir": project.dir,
+        "board": format!("{}.kicad_pcb", project.name),
+    }))
+}
+
 #[tauri::command]
-fn show_in_kicad(id: String) -> Result<(), String> {
-    Err(format!("Show in KiCad is not ready yet ({id})"))
+async fn show_in_kicad(app: AppHandle, shared: State<'_, Shared>, id: String) -> Result<Shown, String> {
+    let project = shared.lock().unwrap().project.clone().ok_or("Choose a project first.")?;
+    let status = read_status(&project).ok_or("Wait for the check to finish.")?;
+    let request = show_request(&status, &id, &project).ok_or("That row is gone: the list has changed.")?;
+    let mut cmd = Command::new(python(&app));
+    cmd.arg(helper(&app)).env("PYTHONUTF8", "1").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let mut child = quiet(&mut cmd).spawn().map_err(|e| format!("Show in KiCad could not start: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        let _ = stdin.write_all(request.to_string().as_bytes());
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    serde_json::from_str::<Shown>(text.trim().lines().last().unwrap_or(""))
+        .map_err(|_| "Show in KiCad stopped without an answer.".to_string())
 }
 
 fn main() {
@@ -476,6 +519,19 @@ mod tests {
         // the project may itself live under a hidden folder or one named like a backup
         assert!(matters(Path::new("/home/me/.boards/x-backups/riego/board.kicad_pcb"),
                         Path::new("/home/me/.boards/x-backups/riego")));
+    }
+
+    #[test]
+    fn the_request_for_a_row() {
+        let status = serde_json::json!({"items": [
+            {"id": "a1", "select": ["u1", "u2"], "footprints": ["f1"]},
+            {"id": "b2", "select": [], "footprints": ["f9"]}]});
+        let p = Project { dir: "/b/riego".into(), work: "/b".into(), name: "riego".into(), rel: "riego".into() };
+        let r = show_request(&status, "a1", &p).unwrap();
+        assert_eq!(r["ids"], serde_json::json!(["u1", "u2"]));
+        assert_eq!(r["footprints"], serde_json::json!(["f1"]));
+        assert_eq!(r["board"], "riego.kicad_pcb");
+        assert!(show_request(&status, "zz", &p).is_none());
     }
 
     #[test]

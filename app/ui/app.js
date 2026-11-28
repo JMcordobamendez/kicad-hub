@@ -23,6 +23,7 @@ const core = (() => {
 })();
 
 let state = null;
+let notice = null; // {ok, message, id}: the answer of the last Show in KiCad
 
 function esc(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -103,11 +104,13 @@ function rowsCard(status) {
     body = `<ul class="rows">${items.map((it) => {
       const show = canShow && ((it.select || []).length || (it.footprints || []).length);
       const button = show ? `<button type="button" class="pill soft show" data-id="${esc(it.id)}">Show in KiCad</button>` : "";
-      return `<li class="row${it.blocking ? " blocking" : ""}" data-id="${esc(it.id)}">
+      const said = notice && notice.id === it.id
+        ? `<span class="said ${notice.ok ? "good" : "bad"}" role="status">${esc(notice.message)}</span>` : "";
+      return `<li class="row${it.blocking ? " blocking" : ""}${show ? " can-show" : ""}" data-id="${esc(it.id)}">
         <span class="chip">${esc(it.ref || AREA_LABEL[it.area] || "")}</span>
         <span class="row-text"><span class="row-title">${esc(it.title)}</span>
           ${it.blocking ? '<span class="flag full-only">Fix before ordering</span>' : ""}
-          ${it.detail ? `<span class="row-detail">${esc(it.detail)}</span>` : ""}</span>${button}</li>`;
+          ${it.detail ? `<span class="row-detail">${esc(it.detail)}</span>` : ""}${said}</span>${button}</li>`;
     }).join("")}</ul>`;
     if (canShow) body += `<p class="foot-note side-only">Tap one and KiCad selects it on the board.</p>`;
   }
@@ -203,8 +206,27 @@ document.addEventListener("click", (ev) => {
   else if (el.dataset.act === "check") act("check_now");
   else if (el.dataset.act === "side") act("set_mode", { mode: "side" });
   else if (el.dataset.act === "full") act("set_mode", { mode: "full" });
-  else if (el.classList.contains("show")) act("show_in_kicad", { id: el.dataset.id });
+  else if (el.classList.contains("show")) showInKiCad(el.dataset.id);
 });
+
+// In the strip the whole row is the button (there is no room for one).
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("button") || !core) return;
+  const row = ev.target.closest(".row.can-show");
+  if (row && window.matchMedia("(max-width: 719px)").matches) showInKiCad(row.dataset.id);
+});
+
+async function showInKiCad(id) {
+  notice = { ok: true, message: "Asking KiCad…", id };
+  render();
+  try {
+    const r = await core.invoke("show_in_kicad", { id });
+    notice = { ok: !!r.ok, message: r.message, id };
+  } catch (e) {
+    notice = { ok: false, message: String(e && e.message ? e.message : e), id };
+  }
+  render();
+}
 
 (async function start() {
   render();
