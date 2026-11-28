@@ -84,8 +84,8 @@ flowchart LR
 **Now:** v1.5.0 released (2026-11-21); the KiCad plugin (7C) merged after it worked on the
 owner's real board. The owner found it unfriendly (a ZIP to install, one button, results
 in the browser full of jargon) and commissioned a **desktop app beside KiCad** (phase 7E,
-2026-11-25): first subsystem, the quick check in plain words (`kicad_hub.py status`), is
-in review. Left in B: before/after images without PIL, KiBot optional, small things.
+2026-11-25): the quick check in plain words (`kicad_hub.py status`) and the app's window
+(`app/`) are in review; next, Show in KiCad. Left in B: before/after images without PIL, KiBot optional, small things.
 Left in A: the template repository. Then versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -592,10 +592,24 @@ merged only when the owner says; the owner's Windows PC session tries each build
       `common.Control.zoomFitSelection`; only select when that action fails. Where
       kicad-python comes from is open (the environment KiCad made for the plugin, or
       bundled with the app)
-- [ ] **3 · The app**: Tauri 2 window, the five themes, full window and side strip, watching
-      the folder (only `.kicad_pcb`, `.kicad_sch`, `.kicad_pro`, `.kicad_dru`, after the
-      writes settle: a save also writes backups and `.kicad_prl`), the embedded Python
-      running `status`; it reads `.kicad-hub/` directly, with no local web server
+- [ ] **3 · The app** (in review, `app/`, 2026-11-25): Tauri 2. The page (`app/ui/`, plain
+      HTML/CSS/JS, no build step) follows the mockup: the headline, the five pads (a ring
+      with a check when fine, a filled pad with the count, a square pad for errors so they
+      differ by shape too, a dashed ring when not checked), the list, errors first with
+      "Fix before ordering". Five theme files of 18 colours; the three fonts bundled (SIL
+      OFL), so it works offline. Full window (1280×860) or the 400 px strip down the
+      right-hand side of the screen (one page, two layouts below 720 px), remembered with
+      the project and the theme. The core (`app/src-tauri/`, Rust) watches the project
+      folder: only `.kicad_pcb`, `.kicad_sch`, `.kicad_pro` and `.kicad_dru`, not hidden
+      folders (`.kicad-hub-base/`, where the engine checks out `main`, set off a second
+      check when it was watched) nor `*-backups`, and checks 1.5 s after the last write;
+      a save during a check gets one more check after it. It runs `kicad_hub.py status`
+      with no console window and reads `.kicad-hub/status.json` directly: no web server.
+      Tried for real on Linux (Xvfb) on the example: a check at start, a check after a
+      save and none after that, the strip on the right edge, back to the full window,
+      the mode remembered; `cargo check` for Windows passes. Tests: the page in Chromium
+      (`app/tests/ui.test.mjs`, 10 tests, every theme in both layouts) and the core
+      (`cargo test`), in CI's new `app` job. **Not tried on Windows yet**
 - [ ] **4 · Prepare the order**: datasheet links, prices and stock, fab package; the cost
       card
 - [ ] **5 · Installer**: NSIS with the embeddable Python (~13 MB measured), attached to

@@ -21,6 +21,23 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 -m unittest discover -s tests -v
 
+  app:
+    # The desktop app (app/): its page in Chromium and its core's unit tests. Pinned: the
+    # Playwright pinned below installs its Chromium on Ubuntu 24.04, not on 26.04
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Page tests
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1.56.1
+          npx --prefix "$RUNNER_TEMP/pw" playwright install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/pw/node_modules" node app/tests/ui.test.mjs
+      - name: Core tests (Rust)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev
+          cargo test --manifest-path app/src-tauri/Cargo.toml
+
   royalblue54l-feather:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,22 @@
+/* kicad-hub theme: Purple. The 18 colours of the owner's spec; text on the mask is always #f4f5ef. */
+:root[data-theme="purple"] {
+  color-scheme: light;
+  --ground: #f1edf3;
+  --surface: #fcfafd;
+  --ink: #24172c;
+  --muted: #5a4c63;
+  --chip: #e8dfed;
+  --dash: #d9cde0;
+  --mask: #3a1f4d;
+  --board: #6a3d8a;
+  --pad: #e2a52b;
+  --on-pad: #2a1d05;
+  --ok: #6a3d8a;
+  --link: #6a3d8a;
+  --tag: #f3e3b8;
+  --tag-ink: #2a2206;
+  --tag-muted: #5c4a12;
+  --tag-dash: #d9c588;
+  --primary: #3a1f4d;
+  --on-primary: #f4f5ef;
+}

@@ -1,0 +1,22 @@
+/* kicad-hub theme: Classic green. The 18 colours of the owner's spec; text on the mask is always #f4f5ef. */
+:root[data-theme="green"] {
+  color-scheme: light;
+  --ground: #eef0e8;
+  --surface: #fbfbf7;
+  --ink: #17251f;
+  --muted: #4f5f57;
+  --chip: #e3eadf;
+  --dash: #d5dccf;
+  --mask: #12382b;
+  --board: #1f6b4f;
+  --pad: #e2a52b;
+  --on-pad: #2a1d05;
+  --ok: #1f6b4f;
+  --link: #1f6b4f;
+  --tag: #f3e3b8;
+  --tag-ink: #2a2206;
+  --tag-muted: #5c4a12;
+  --tag-dash: #d9c588;
+  --primary: #12382b;
+  --on-primary: #f4f5ef;
+}
