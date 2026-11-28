@@ -73,6 +73,9 @@ import tempfile
 import time
 import zipfile
 
+# The scripts beside this one, also with an embedded Python (the desktop app's on Windows),
+# whose ._pth file leaves the script's own folder out of the import path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bom_virtual
 import detect
 import kicad

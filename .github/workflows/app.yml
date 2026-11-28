@@ -43,7 +43,9 @@ jobs:
         run: |
           py=app/src-tauri/python/python.exe
           "$py" -c "import sys, ssl, kipy, pynng; ssl.create_default_context(); print(sys.version)"
+          # its ._pth leaves the script's folder out of the import path: the scripts add it
           "$py" scripts/kicad_hub.py status --help > /dev/null
+          "$py" scripts/report.py --help > /dev/null
           # no KiCad on the runner: Show in KiCad must say so, in plain words, as JSON
           answer=$(echo '{"ids": ["x"]}' | "$py" app/python/show_in_kicad.py || true)
           echo "$answer"
