@@ -40,6 +40,8 @@ jobs:
         run: python app/scripts/bundle_python.py
 
       - name: The bundled Python runs the engine and loads kicad-python
+        env:
+          PYTHONUTF8: "1"  # as the app runs it (the console's code page can't write "→")
         run: |
           py=app/src-tauri/python/python.exe
           "$py" -c "import sys, ssl, kipy, pynng; ssl.create_default_context(); print(sys.version)"
