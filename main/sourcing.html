@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supplier comparison</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --soft: #f6f8fa;
+    --accent: #0969da; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e; --pick: #ddf4ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --soft: #151b23;
+      --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --pick: #12263f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; background: var(--bg); color: var(--fg); padding: 6px 12px; cursor: pointer; font: inherit; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .btn { border: 1px solid var(--line); background: var(--soft); color: var(--fg); padding: 6px 12px;
+         border-radius: 6px; cursor: pointer; font: inherit; }
+  .btn:hover { border-color: var(--accent); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0 18px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--soft); }
+  .card b { display: block; font-size: 20px; }
+  .card span { color: var(--muted); font-size: 12px; }
+  .card.on { border-color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+  .chip.ok { color: var(--good); border-color: var(--good); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+  .wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 860px; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; position: sticky; top: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.part td { background: var(--soft); border-top: 2px solid var(--line); }
+  tr.part .refs { color: var(--muted); }
+  tr.offer.picked td { background: var(--pick); }
+  tr.offer label { cursor: pointer; display: flex; gap: 6px; align-items: center; }
+  .best { color: var(--good); font-weight: 600; }
+  .short { color: var(--bad); }
+  .tag { font-size: 11px; color: var(--muted); }
+  .over { color: var(--bad); font-weight: 600; }
+  tr.offer.above td.unit { background: color-mix(in srgb, var(--bad) 18%, transparent); }
+  input.tg { width: 84px; font: inherit; padding: 1px 4px; border: 1px solid var(--line); border-radius: 4px;
+             background: var(--bg); color: var(--fg); }
+  .auto { color: var(--muted); font-style: italic; }
+  a { color: var(--accent); }
+  .warns { margin: 0 0 14px; padding-left: 18px; color: var(--warn); }
+  .help { color: var(--muted); font-size: 13px; margin-top: 18px; }
+  code { background: var(--soft); padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Supplier comparison</h1>
+  <p class="sub" id="sub"></p>
+  <div class="chips" id="suppliers"></div>
+
+  <div class="bar">
+    <span>Build</span><div class="seg" id="builds"></div>
+    <span>Boards</span><div class="seg" id="batches"></div>
+  </div>
+  <div class="cards" id="cards"></div>
+  <ul class="warns" id="warns"></ul>
+  <details id="notes-box" style="margin:0 0 14px;color:var(--muted,inherit)"><summary id="notes-sum"></summary><ul id="notes"></ul></details>
+
+  <div class="bar">
+    <button class="btn" id="lock">Use the cheapest for every part</button>
+    <button class="btn" id="reset">Back to automatic</button>
+    <button class="btn" id="dl-choices">Download selection file</button>
+    <button class="btn" id="dl-order">Download purchase list</button>
+  </div>
+
+  <div class="wrap"><table>
+    <thead><tr>
+      <th>Supplier</th><th>SKU</th><th>Manufacturer PN</th><th class="num">Stock</th>
+      <th class="num">Min / mult.</th><th class="num">Unit price</th><th class="num">Buy</th><th class="num">Line total</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+
+  <p class="help">
+    Pick an offer per part, or leave it on <i>automatic</i> (cheapest with enough stock for the batch).
+    <b>Download selection file</b> saves your picks as <code>kicad-hub-sourcing.csv</code>: put it next to the
+    <code>.kicad_pro</code> and commit it, and the next CI run uses it for the totals. Type a <b>target</b> unit price next to a part and offers above it turn red; targets go into the same file. Your picks are also kept in
+    this browser until then.
+  </p>
+</main>
+
+<script>
+const DATA = {"currency":"EUR","batches":[1,5,10,100],"suppliers":[{"name":"LCSC","status":"ok"},{"name":"JLCPCB","status":"ok"},{"name":"Mouser","status":"failed (HTTPError: HTTP Error 403: Forbidden)"},{"name":"Farnell","status":"failed (HTTPError: HTTP Error 403: Forbidden)"},{"name":"DigiKey","status":"no API key"}],"choices_file":false,"targets":4,"lines":[{"key":"C307331","part":"C307331","mpn":"","lcsc":"C307331","value":"100nF","footprint":"C_0402_1005Metric","refs":{"default":["C1","C12","C16","C17","C19","C24","C25"],"lite":["C1","C12","C16","C17","C19","C24","C25"]},"offers":[{"supplier":"LCSC","sku":"C307331","mpn":"CL05B104KB54PNC","brand":"Samsung Electro-Mechanics","stock":1245400,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.007027],[1000,0.005202],[3000,0.004381],[10000,0.003833],[50000,0.003559],[100000,0.003377]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C307331.html","note":""},{"supplier":"JLCPCB","sku":"C307331","mpn":"CL05B104KB54PNC","brand":"Samsung Electro-Mechanics","stock":20583844,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.006936],[1000,0.005202],[3000,0.004381],[10000,0.003742],[50000,0.003559],[100000,0.003377]],"currency":"USD","url":"https://jlcpcb.com/partdetail/291005-CL05B104KB54PNC/C307331","note":"for JLCPCB assembly, basic part"},{"supplier":"Farnell","sku":"4748829","mpn":"CL05B104KB54PNC","brand":"SAMSUNG ELECTRO-MECHANICS","stock":280000,"moq":10000,"mult":1,"lifecycle":"STOCKED","ladders":[[10000,0.0121]],"currency":"EUR","url":"https://es.farnell.com/4748829","note":""}],"mpn_used":"CL05B104KB54PNC","choice":null,"target":0.0001,"vs_target":{"1":{"status":"above","price":0.006936,"supplier":"JLCPCB","diff":0.006836,"pct":6836.0},"5":{"status":"above","price":0.006936,"supplier":"JLCPCB","diff":0.006836,"pct":6836.0},"10":{"status":"above","price":0.006936,"supplier":"JLCPCB","diff":0.006836,"pct":6836.0},"100":{"status":"above","price":0.006936,"supplier":"JLCPCB","diff":0.006836,"pct":6836.0}}},{"key":"C23733","part":"C23733","mpn":"","lcsc":"C23733","value":"4.7uF","footprint":"C_0402_1005Metric","refs":{"default":["C7","C9","C10","C23"],"lite":["C7","C9","C10","C23"]},"offers":[{"supplier":"LCSC","sku":"C23733","mpn":"CL05A475MP5NRNC","brand":"Samsung Electro-Mechanics","stock":2462300,"moq":50,"mult":1,"lifecycle":"normal","ladders":[[50,0.008853],[500,0.006936],[1500,0.006024],[10000,0.005385],[20000,0.005111],[50000,0.004928]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C23733.html","note":""},{"supplier":"JLCPCB","sku":"C23733","mpn":"CL05A475MP5NRNC","brand":"Samsung Electro-Mechanics","stock":4990716,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.008762],[500,0.006845],[1500,0.006024],[10000,0.005385],[20000,0.005111],[50000,0.004928]],"currency":"USD","url":"https://jlcpcb.com/partdetail/24469-CL05A475MP5NRNC/C23733","note":"for JLCPCB assembly, basic part"},{"supplier":"Mouser","sku":"187-CL05A475MP5NRNC","mpn":"CL05A475MP5NRNC","brand":"Samsung Electro-Mechanics","stock":0,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,0.142],[10,0.08],[50,0.054],[100,0.046],[500,0.034],[2000,0.028],[4000,0.024],[10000,0.02]],"currency":"EUR","url":"https://www.mouser.es/es/ProductDetail/Samsung-Electro-Mechanics/CL05A475MP5NRNC?qs=o1waKiAPAqcD9NPTF25fGg%3D%3D","note":""}],"mpn_used":"CL05A475MP5NRNC","choice":null,"target":null,"vs_target":null},{"key":"C23630","part":"C23630","mpn":"","lcsc":"C23630","value":"2.2uF","footprint":"C_0603_1608Metric","refs":{"default":["C11"],"lite":["C11"]},"offers":[{"supplier":"LCSC","sku":"C23630","mpn":"CL10A225KO8NNNC","brand":"Samsung Electro-Mechanics","stock":882100,"moq":50,"mult":1,"lifecycle":"normal","ladders":[[50,0.007393],[500,0.005658],[1500,0.004837],[4000,0.004289],[24000,0.004016],[48000,0.003924]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C23630.html","note":""},{"supplier":"JLCPCB","sku":"C23630","mpn":"CL10A225KO8NNNC","brand":"Samsung Electro-Mechanics","stock":3124781,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.007301],[500,0.005567],[1500,0.004837],[4000,0.004289],[24000,0.004016],[48000,0.003833]],"currency":"USD","url":"https://jlcpcb.com/partdetail/24366-CL10A225KO8NNNC/C23630","note":"for JLCPCB assembly, basic part"},{"supplier":"Mouser","sku":"187-CL10A225KO8NNNC","mpn":"CL10A225KO8NNNC","brand":"Samsung Electro-Mechanics","stock":13334,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,0.098],[10,0.052],[50,0.036],[100,0.031],[500,0.023],[4000,0.023]],"currency":"EUR","url":"https://www.mouser.es/es/ProductDetail/Samsung-Electro-Mechanics/CL10A225KO8NNNC?qs=hqM3L16%252BxlecoJxUp5hKOw%3D%3D","note":""},{"supplier":"Farnell","sku":"3010064","mpn":"CL10A225KO8NNNC","brand":"SAMSUNG ELECTRO-MECHANICS","stock":4000,"moq":4000,"mult":1,"lifecycle":"STOCKED","ladders":[[4000,0.0226]],"currency":"EUR","url":"https://es.farnell.com/3010064","note":""}],"mpn_used":"CL10A225KO8NNNC","choice":null,"target":null,"vs_target":null},{"key":"C126505","part":"C126505","mpn":"","lcsc":"C126505","value":"300pF","footprint":"C_0402_1005Metric","refs":{"default":["C13","C14"],"lite":["C13","C14"]},"offers":[{"supplier":"LCSC","sku":"C126505","mpn":"GCM1555C1H301FA16D","brand":"muRata","stock":8140,"moq":20,"mult":1,"lifecycle":"normal","ladders":[[20,0.031943],[200,0.025281],[600,0.021539],[2000,0.019257],[10000,0.017341],[20000,0.016245]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C126505.html","note":""},{"supplier":"JLCPCB","sku":"C126505","mpn":"GCM1555C1H301FA16D","brand":"Murata Electronics","stock":10172,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.031761],[200,0.025007],[600,0.021265],[2000,0.019075],[10000,0.017158],[20000,0.016245]],"currency":"USD","url":"https://jlcpcb.com/partdetail/137785-GCM1555C1H301FA16D/C126505","note":"for JLCPCB assembly, extended part"},{"supplier":"Farnell","sku":"3784345RL","mpn":"GCM1555C1H301FA16D","brand":"MURATA","stock":27553,"moq":500,"mult":1,"lifecycle":"STOCKED","ladders":[[10,0.0378],[100,0.0224],[500,0.0163],[2500,0.0159],[5000,0.0155],[10000,0.0086]],"currency":"EUR","url":"https://es.farnell.com/3784345RL","note":""}],"mpn_used":"GCM1555C1H301FA16D","choice":null,"target":null,"vs_target":null},{"key":"C52923","part":"C52923","mpn":"","lcsc":"C52923","value":"1uF","footprint":"C_0402_1005Metric","refs":{"default":["C15","C22"],"lite":["C15","C22"]},"offers":[{"supplier":"LCSC","sku":"C52923","mpn":"CL05A105KA5NQNC","brand":"Samsung Electro-Mechanics","stock":2081700,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.004289],[1000,0.003194],[3000,0.002738],[10000,0.002373],[50000,0.00219],[100000,0.002099]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C52923.html","note":""},{"supplier":"JLCPCB","sku":"C52923","mpn":"CL05A105KA5NQNC","brand":"Samsung Electro-Mechanics","stock":10817195,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.004198],[1000,0.003194],[3000,0.002738],[10000,0.002373],[50000,0.00219],[100000,0.002099]],"currency":"USD","url":"https://jlcpcb.com/partdetail/53938-CL05A105KA5NQNC/C52923","note":"for JLCPCB assembly, basic part"},{"supplier":"Farnell","sku":"4539039","mpn":"CL05A105KA5NQNC","brand":"SAMSUNG ELECTRO-MECHANICS","stock":40989,"moq":10,"mult":1,"lifecycle":"STOCKED","ladders":[[10,0.107],[100,0.0717],[500,0.0627],[2500,0.051],[5000,0.05]],"currency":"EUR","url":"https://es.farnell.com/4539039","note":""}],"mpn_used":"CL05A105KA5NQNC","choice":null,"target":null,"vs_target":null},{"key":"C1547","part":"C1547","mpn":"","lcsc":"C1547","value":"12pF","footprint":"C_0402_1005Metric","refs":{"default":["C18","C20"]},"offers":[{"supplier":"LCSC","sku":"C1547","mpn":"0402CG120J500NT","brand":"FH","stock":650000,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.001734],[1000,0.001278],[3000,0.001095],[10000,0.000913],[50000,0.00073]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C1547.html","note":""},{"supplier":"JLCPCB","sku":"C1547","mpn":"0402CG120J500NT","brand":"FH (Guangdong Fenghua Advanced Tech)","stock":1844565,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.001734],[1000,0.001278],[3000,0.001095],[10000,0.000913],[50000,0.00073],[50200,0.00073]],"currency":"USD","url":"https://jlcpcb.com/partdetail/1899-0402CG120J500NT/C1547","note":"for JLCPCB assembly, basic part"}],"mpn_used":"0402CG120J500NT","choice":null,"target":null,"vs_target":null},{"key":"C96446","part":"C96446","mpn":"","lcsc":"C96446","value":"10uF","footprint":"C_0603_1608Metric","refs":{"default":["C2","C3","C4","C8"],"lite":["C2","C3","C4","C8"]},"offers":[{"supplier":"LCSC","sku":"C96446","mpn":"CL10A106MA8NRNC","brand":"Samsung Electro-Mechanics","stock":278660,"moq":20,"mult":1,"lifecycle":"normal","ladders":[[20,0.030026],[200,0.023547],[600,0.020261],[4000,0.017523],[8000,0.016519],[20000,0.01588]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C96446.html","note":""},{"supplier":"JLCPCB","sku":"C96446","mpn":"CL10A106MA8NRNC","brand":"Samsung Electro-Mechanics","stock":4606951,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.029844],[200,0.023364],[600,0.020078],[4000,0.017432],[8000,0.016337],[20000,0.015789]],"currency":"USD","url":"https://jlcpcb.com/partdetail/97651-CL10A106MA8NRNC/C96446","note":"for JLCPCB assembly, basic part"},{"supplier":"Mouser","sku":"187-CL10A106MA8NRNC","mpn":"CL10A106MA8NRNC","brand":"Samsung Electro-Mechanics","stock":2578,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,0.559],[10,0.32],[50,0.231],[100,0.205],[500,0.161],[2000,0.092],[4000,0.088]],"currency":"EUR","url":"https://www.mouser.es/es/ProductDetail/Samsung-Electro-Mechanics/CL10A106MA8NRNC?qs=47mY1nHWefS2vFRvRJVTdQ%3D%3D","note":""},{"supplier":"Farnell","sku":"4539174","mpn":"CL10A106MA8NRNC","brand":"SAMSUNG ELECTRO-MECHANICS","stock":91233,"moq":10,"mult":1,"lifecycle":"STOCKED","ladders":[[10,0.31],[100,0.199],[500,0.156],[1000,0.123],[2000,0.0894],[4000,0.0851]],"currency":"EUR","url":"https://es.farnell.com/4539174","note":""}],"mpn_used":"CL10A106MA8NRNC","choice":null,"target":0.05,"vs_target":{"1":{"status":"ok","price":0.029844,"supplier":"JLCPCB","diff":-0.020156,"pct":-40.3},"5":{"status":"ok","price":0.029844,"supplier":"JLCPCB","diff":-0.020156,"pct":-40.3},"10":{"status":"ok","price":0.029844,"supplier":"JLCPCB","diff":-0.020156,"pct":-40.3},"100":{"status":"ok","price":0.023364,"supplier":"JLCPCB","diff":-0.026636,"pct":-53.3}}},{"key":"C1546","part":"C1546","mpn":"","lcsc":"C1546","value":"100pF","footprint":"C_0402_1005Metric","refs":{"default":["C21"],"lite":["C21"]},"offers":[{"supplier":"LCSC","sku":"C1546","mpn":"0402CG101J500NT","brand":"FH","stock":107400,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.001643],[1000,0.001186],[3000,0.001004],[10000,0.000913],[50000,0.00073]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C1546.html","note":""},{"supplier":"JLCPCB","sku":"C1546","mpn":"0402CG101J500NT","brand":"FH (Guangdong Fenghua Advanced Tech)","stock":2437738,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.001643],[1000,0.001186],[3000,0.001004],[10000,0.000913],[50000,0.00073],[50200,0.00073]],"currency":"USD","url":"https://jlcpcb.com/partdetail/1898-0402CG101J500NT/C1546","note":"for JLCPCB assembly, basic part"}],"mpn_used":"0402CG101J500NT","choice":null,"target":null,"vs_target":null},{"key":"C15849","part":"C15849","mpn":"","lcsc":"C15849","value":"1uF","footprint":"C_0603_1608Metric","refs":{"default":["C5","C6"],"lite":["C5","C6"]},"offers":[{"supplier":"LCSC","sku":"C15849","mpn":"CL10A105KB8NNNC","brand":"Samsung Electro-Mechanics","stock":3494950,"moq":50,"mult":1,"lifecycle":"normal","ladders":[[50,0.012503],[500,0.009765],[1500,0.008579],[4000,0.007666],[24000,0.007301],[48000,0.007027]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C15849.html","note":""},{"supplier":"JLCPCB","sku":"C15849","mpn":"CL10A105KB8NNNC","brand":"Samsung Electro-Mechanics","stock":16879726,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.012412],[500,0.009674],[1500,0.008488],[4000,0.007575],[24000,0.00721],[48000,0.006936]],"currency":"USD","url":"https://jlcpcb.com/partdetail/16531-CL10A105KB8NNNC/C15849","note":"for JLCPCB assembly, basic part"},{"supplier":"Mouser","sku":"187-CL10A105KB8NNNC","mpn":"CL10A105KB8NNNC","brand":"Samsung Electro-Mechanics","stock":0,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,0.169],[10,0.099],[50,0.07],[100,0.061],[500,0.046],[2000,0.032],[4000,0.028]],"currency":"EUR","url":"https://www.mouser.es/es/ProductDetail/Samsung-Electro-Mechanics/CL10A105KB8NNNC?qs=ktYoCbbtCSJz4pFCLWXd5g%3D%3D","note":""}],"mpn_used":"CL10A105KB8NNNC","choice":null,"target":0.03,"vs_target":{"1":{"status":"ok","price":0.012412,"supplier":"JLCPCB","diff":-0.017588,"pct":-58.6},"5":{"status":"ok","price":0.012412,"supplier":"JLCPCB","diff":-0.017588,"pct":-58.6},"10":{"status":"ok","price":0.012412,"supplier":"JLCPCB","diff":-0.017588,"pct":-58.6},"100":{"status":"ok","price":0.012412,"supplier":"JLCPCB","diff":-0.017588,"pct":-58.6}}},{"key":"C125103","part":"C125103","mpn":"","lcsc":"C125103","value":"LED_Small","footprint":"LED_0603_1608Metric","refs":{"default":["D1"],"lite":["D1"]},"offers":[{"supplier":"LCSC","sku":"C125103","mpn":"LTST-C193TBKT-5A","brand":"LITEON","stock":51620,"moq":20,"mult":1,"lifecycle":"normal","ladders":[[20,0.021995],[200,0.017432],[600,0.014876],[5000,0.012047],[10000,0.010769],[20000,0.010039]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C125103.html","note":""},{"supplier":"JLCPCB","sku":"C125103","mpn":"LTST-C193TBKT-5A","brand":"Lite-On","stock":55440,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.021721],[200,0.017249],[600,0.014785],[5000,0.011956],[10000,0.010678],[20000,0.009948]],"currency":"USD","url":"https://jlcpcb.com/partdetail/LiteOn-LTST_C193TBKT5A/C125103","note":"for JLCPCB assembly, extended part"}],"mpn_used":"LTST-C193TBKT-5A","choice":null,"target":null,"vs_target":null},{"key":"C404280","part":"C404280","mpn":"","lcsc":"C404280","value":"LED_ARGB","footprint":"LED_Wurth_150044M155260","refs":{"default":["D3"],"lite":["D3"]},"offers":[{"supplier":"LCSC","sku":"C404280","mpn":"MHPA1010RGBDT","brand":"MEIHUA","stock":38940,"moq":10,"mult":1,"lifecycle":"normal","ladders":[[10,0.071735],[100,0.055855],[300,0.047915],[1000,0.041982],[5000,0.032856],[10000,0.030483]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C404280.html","note":""},{"supplier":"JLCPCB","sku":"C404280","mpn":"MHPA1010RGBDT","brand":"MEIHUA","stock":38944,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.071005],[100,0.055398],[300,0.047458],[1000,0.041708],[5000,0.032491],[10000,0.030118]],"currency":"USD","url":"https://jlcpcb.com/partdetail/MEIHUA-MHPA1010RGBDT/C404280","note":"for JLCPCB assembly, extended part"}],"mpn_used":"MHPA1010RGBDT","choice":null,"target":null,"vs_target":null},{"key":"C165948","part":"C165948","mpn":"","lcsc":"C165948","value":"USB_C_Receptacle_USB2.0_16P","footprint":"USB_C_Receptacle_HRO_TYPE-C-31-M-12","refs":{"default":["J3"],"lite":["J3"]},"offers":[{"supplier":"LCSC","sku":"C165948","mpn":"TYPE-C-31-M-12","brand":"Korean Hroparts Elec","stock":372825,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.17231],[50,0.135986],[150,0.118281],[1000,0.09592],[2000,0.091631],[5000,0.088984]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C165948.html","note":""},{"supplier":"JLCPCB","sku":"C165948","mpn":"TYPE-C-31-M-12","brand":"Korean Hroparts Elec","stock":391835,"moq":2,"mult":1,"lifecycle":"","ladders":[[1,0.171032],[50,0.135073],[150,0.117459],[1000,0.095282],[2000,0.090901],[5000,0.088345]],"currency":"USD","url":"https://jlcpcb.com/partdetail/Korean_HropartsElec-TYPE_C_31_M12/C165948","note":"for JLCPCB assembly, extended part"}],"mpn_used":"TYPE-C-31-M-12","choice":null,"target":null,"vs_target":null},{"key":"C295747","part":"C295747","mpn":"","lcsc":"C295747","value":"Conn_01x02_MountingPin","footprint":"JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal","refs":{"default":["J4"],"lite":["J4"]},"offers":[{"supplier":"LCSC","sku":"C295747","mpn":"S2B-PH-SM4-TB(LF)(SN)","brand":"JST","stock":11880,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.187551],[50,0.149402],[150,0.130875],[1000,0.114265],[2000,0.109702],[5000,0.106964]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C295747.html","note":""},{"supplier":"JLCPCB","sku":"C295747","mpn":"S2B-PH-SM4-TB(LF)(SN)","brand":"JST","stock":11870,"moq":2,"mult":1,"lifecycle":"","ladders":[[1,0.186091],[50,0.148398],[150,0.129871],[1000,0.113535],[2000,0.10888],[5000,0.106233]],"currency":"USD","url":"https://jlcpcb.com/partdetail/JST-S2B_PH_SM4_TB_LF_SN/C295747","note":"for JLCPCB assembly, extended part"},{"supplier":"Farnell","sku":"9492615","mpn":"S2B-PH-SM4-TB(LF)(SN)","brand":"JST / JAPAN SOLDERLESS TERMINALS","stock":184986,"moq":10,"mult":1,"lifecycle":"STOCKED","ladders":[[10,0.43],[100,0.328],[500,0.292],[1000,0.278]],"currency":"EUR","url":"https://es.farnell.com/9492615","note":""}],"mpn_used":"S2B-PH-SM4-TB(LF)(SN)","choice":null,"target":null,"vs_target":null},{"key":"C3029343","part":"C3029343","mpn":"","lcsc":"C3029343","value":"Conn_01x04_MountingPin","footprint":"JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal","refs":{"default":["J5"],"lite":["J5"]},"offers":[{"supplier":"LCSC","sku":"C3029343","mpn":"WAFER-SH1.0-4PWB","brand":"XUNPU","stock":23035,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.097107],[50,0.077485],[150,0.067719],[500,0.060418],[2000,0.053299],[4000,0.050379]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C3029343.html","note":""},{"supplier":"JLCPCB","sku":"C3029343","mpn":"WAFER-SH1.0-4PWB","brand":"XUNPU","stock":23035,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.096194],[50,0.076846],[150,0.06708],[500,0.059779],[2000,0.052934],[4000,0.049922]],"currency":"USD","url":"https://jlcpcb.com/partdetail/XUNPU-WAFER_SH1_04PWB/C3029343","note":"for JLCPCB assembly, extended part"}],"mpn_used":"WAFER-SH1.0-4PWB","choice":null,"target":null,"vs_target":null},{"key":"C337910","part":"C337910","mpn":"","lcsc":"C337910","value":"2.2uH","footprint":"L_0603_1608Metric","refs":{"default":["L1"],"lite":["L1"]},"offers":[{"supplier":"LCSC","sku":"C337910","mpn":"LQM18PN2R2MFRL","brand":"muRata","stock":2390,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.116729],[50,0.095282],[150,0.084512],[500,0.076481],[2500,0.063795],[4000,0.060509]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C337910.html","note":""},{"supplier":"JLCPCB","sku":"C337910","mpn":"LQM18PN2R2MFRL","brand":"Murata Electronics","stock":2951,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.115725],[50,0.094551],[150,0.083691],[500,0.075842],[2500,0.063247],[4000,0.060053]],"currency":"USD","url":"https://jlcpcb.com/partdetail/MurataElectronics-LQM18PN2R2MFRL/C337910","note":"for JLCPCB assembly, extended part"},{"supplier":"Farnell","sku":"3471383RL","mpn":"LQM18PN2R2MFRL","brand":"MURATA","stock":16972,"moq":100,"mult":1,"lifecycle":"STOCKED","ladders":[[10,0.179],[100,0.148],[500,0.135],[1000,0.121],[2000,0.11],[4000,0.0989]],"currency":"EUR","url":"https://es.farnell.com/3471383RL","note":""}],"mpn_used":"LQM18PN2R2MFRL","choice":null,"target":null,"vs_target":null},{"key":"C25741","part":"C25741","mpn":"","lcsc":"C25741","value":"100kR","footprint":"R_0402_1005Metric","refs":{"default":["R1","R8"],"lite":["R1","R8"]},"offers":[{"supplier":"LCSC","sku":"C25741","mpn":"0402WGF1003TCE","brand":"UNI-ROYAL","stock":3001900,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.000821],[1000,0.000639],[3000,0.000548],[10000,0.000456]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C25741.html","note":""},{"supplier":"JLCPCB","sku":"C25741","mpn":"0402WGF1003TCE","brand":"UNI-ROYAL(Uniroyal Elec)","stock":10812159,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.000821],[1000,0.000639],[3000,0.000548],[10000,0.000456],[50000,0.000456],[50200,0.000456]],"currency":"USD","url":"https://jlcpcb.com/partdetail/26484-0402WGF1003TCE/C25741","note":"for JLCPCB assembly, basic part"}],"mpn_used":"0402WGF1003TCE","choice":null,"target":null,"vs_target":null},{"key":"C25778","part":"C25778","mpn":"","lcsc":"C25778","value":"330kR","footprint":"R_0402_1005Metric","refs":{"default":["R4"],"lite":["R4"]},"offers":[{"supplier":"LCSC","sku":"C25778","mpn":"0402WGF3303TCE","brand":"UNI-ROYAL","stock":366800,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.001186],[1000,0.000913],[3000,0.000821],[10000,0.00073],[50000,0.000548]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C25778.html","note":""},{"supplier":"JLCPCB","sku":"C25778","mpn":"0402WGF3303TCE","brand":"UNI-ROYAL(Uniroyal Elec)","stock":638958,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.001186],[1000,0.000913],[3000,0.000821],[10000,0.00073],[50000,0.000548],[50200,0.000548]],"currency":"USD","url":"https://jlcpcb.com/partdetail/26521-0402WGF3303TCE/C25778","note":"for JLCPCB assembly, extended part"}],"mpn_used":"0402WGF3303TCE","choice":null,"target":null,"vs_target":null},{"key":"C25744","part":"C25744","mpn":"","lcsc":"C25744","value":"10kR","footprint":"R_0402_1005Metric","refs":{"default":["R5","R7"],"lite":["R5","R7"]},"offers":[{"supplier":"LCSC","sku":"C25744","mpn":"0402WGF1002TCE","brand":"UNI-ROYAL","stock":8335800,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.000821],[1000,0.000639],[3000,0.000548],[10000,0.000456]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C25744.html","note":""},{"supplier":"JLCPCB","sku":"C25744","mpn":"0402WGF1002TCE","brand":"UNI-ROYAL(Uniroyal Elec)","stock":30782597,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.000821],[1000,0.000639],[3000,0.000548],[10000,0.000456],[50000,0.000456],[50200,0.000456]],"currency":"USD","url":"https://jlcpcb.com/partdetail/26487-0402WGF1002TCE/C25744","note":"for JLCPCB assembly, basic part"}],"mpn_used":"0402WGF1002TCE","choice":null,"target":0.01,"vs_target":{"1":{"status":"ok","price":0.000821,"supplier":"JLCPCB","diff":-0.009179,"pct":-91.8},"5":{"status":"ok","price":0.000821,"supplier":"JLCPCB","diff":-0.009179,"pct":-91.8},"10":{"status":"ok","price":0.000821,"supplier":"JLCPCB","diff":-0.009179,"pct":-91.8},"100":{"status":"ok","price":0.000821,"supplier":"LCSC","diff":-0.009179,"pct":-91.8}}},{"key":"C25117","part":"C25117","mpn":"","lcsc":"C25117","value":"470R","footprint":"R_0402_1005Metric","refs":{"default":["R6"],"lite":["R6"]},"offers":[{"supplier":"LCSC","sku":"C25117","mpn":"0402WGF4700TCE","brand":"UNI-ROYAL","stock":573600,"moq":100,"mult":1,"lifecycle":"normal","ladders":[[100,0.000913],[1000,0.00073],[3000,0.000639],[10000,0.000548],[50000,0.000456]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C25117.html","note":""},{"supplier":"JLCPCB","sku":"C25117","mpn":"0402WGF4700TCE","brand":"UNI-ROYAL(Uniroyal Elec)","stock":2092769,"moq":20,"mult":1,"lifecycle":"","ladders":[[1,0.000913],[1000,0.00073],[3000,0.000639],[10000,0.000548],[50000,0.000456],[50200,0.000456]],"currency":"USD","url":"https://jlcpcb.com/partdetail/25860-0402WGF4700TCE/C25117","note":"for JLCPCB assembly, basic part"}],"mpn_used":"0402WGF4700TCE","choice":null,"target":null,"vs_target":null},{"key":"C139797","part":"C139797","mpn":"","lcsc":"C139797","value":"SW_Push","footprint":"SW_Push_1P1T_NO_Vertical_Wuerth_434133025816","refs":{"default":["SW1","SW2"],"lite":["SW1","SW2"]},"offers":[{"supplier":"LCSC","sku":"C139797","mpn":"SKRPACE010","brand":"ALPSALPINE","stock":129150,"moq":10,"mult":1,"lifecycle":"normal","ladders":[[10,0.061148],[100,0.04974],[300,0.043808],[1000,0.038971],[4000,0.031761],[8000,0.030574]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C139797.html","note":""},{"supplier":"JLCPCB","sku":"C139797","mpn":"SKRPACE010","brand":"ALPSALPINE","stock":129158,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.060692],[100,0.049284],[300,0.043443],[1000,0.038697],[4000,0.031487],[8000,0.030392]],"currency":"USD","url":"https://jlcpcb.com/partdetail/ALPSALPINE-SKRPACE010/C139797","note":"for JLCPCB assembly, extended part"},{"supplier":"Farnell","sku":"3261825","mpn":"SKRPACE010","brand":"ALPS ALPINE","stock":2618,"moq":10,"mult":1,"lifecycle":"STOCKED","ladders":[[10,0.308],[50,0.196],[100,0.154],[500,0.131]],"currency":"EUR","url":"https://es.farnell.com/3261825","note":""}],"mpn_used":"SKRPACE010","choice":null,"target":null,"vs_target":null},{"key":"C9900148376","part":"C9900148376","mpn":"","lcsc":"C9900148376","value":"BM15x","footprint":"BM15x-LGA-45_15.8x10mm","refs":{"default":["U1"],"lite":["U1"]},"offers":[{"supplier":"JLCPCB","sku":"C9900148376","mpn":"BM15C","brand":"JLCPCB Assembly","stock":0,"moq":438,"mult":1,"lifecycle":"","ladders":[[1,0.036415],[100,0.018801]],"currency":"USD","url":"https://jlcpcb.com/partdetail/JLCPCBAssembly-BM15C/C9900148376","note":"for JLCPCB assembly, extended part"}],"mpn_used":"BM15C","choice":null,"target":null,"vs_target":null},{"key":"C7466043","part":"C7466043","mpn":"","lcsc":"C7466043","value":"nPM1300-QEXX","footprint":"QFN-32-1EP_5x5mm_P0.5mm_EP3.6x3.6mm_ThermalVias","refs":{"default":["U2"],"lite":["U2"]},"offers":[{"supplier":"LCSC","sku":"C7466043","mpn":"nPM1300-QEAA-R","brand":"NORDIC","stock":0,"moq":1,"mult":1,"lifecycle":"normal","ladders":[[1,2.888108],[10,2.507712],[30,2.270603],[100,2.026102],[500,1.915853],[1000,1.867573]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C7466043.html","note":""},{"supplier":"JLCPCB","sku":"C7466043","mpn":"nPM1300-QEAA-R","brand":"Nordic Semicon","stock":0,"moq":3,"mult":1,"lifecycle":"","ladders":[[1,2.864014],[10,2.486721],[30,2.25162],[100,2.009127],[500,1.899881],[1000,1.851967]],"currency":"USD","url":"https://jlcpcb.com/partdetail/NordicSemicon-nPM1300_QEAAR/C7466043","note":"for JLCPCB assembly, extended part"}],"mpn_used":"nPM1300-QEAA-R","choice":null,"target":null,"vs_target":null},{"key":"C2999113","part":"C2999113","mpn":"","lcsc":"C2999113","value":"TPD3E001DRLR","footprint":"SOT-553","refs":{"default":["U3"],"lite":["U3"]},"offers":[{"supplier":"LCSC","sku":"C2999113","mpn":"TPD3E001DRLR-TP","brand":"TECH PUBLIC","stock":5615,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.127407],[50,0.113443],[150,0.10742],[500,0.099936],[2500,0.08579],[4000,0.083782]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C2999113.html","note":""},{"supplier":"JLCPCB","sku":"C2999113","mpn":"TPD3E001DRLR-TP","brand":"TECH PUBLIC","stock":5618,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.126403],[50,0.11244],[150,0.106507],[500,0.099115],[2500,0.08506],[4000,0.083143]],"currency":"USD","url":"https://jlcpcb.com/partdetail/TECHPUBLIC-TPD3E001DRLRTP/C2999113","note":"for JLCPCB assembly, extended part"}],"mpn_used":"TPD3E001DRLR-TP","choice":null,"target":null,"vs_target":null},{"key":"C2843335","part":"C2843335","mpn":"","lcsc":"C2843335","value":"W25Q16JVUXIQ","footprint":"Winbond_USON-8-1EP_3x2mm_P0.5mm_EP0.2x1.6mm","refs":{"default":["U4"],"lite":["U4"]},"offers":[{"supplier":"LCSC","sku":"C2843335","mpn":"W25Q16JVUXIQ","brand":"Winbond","stock":0,"moq":1,"mult":1,"lifecycle":"normal","ladders":[[1,1.448663],[10,1.210459],[30,1.079401],[100,0.931642],[500,0.798941],[1000,0.768824]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C2843335.html","note":""},{"supplier":"JLCPCB","sku":"C2843335","mpn":"W25Q16JVUXIQ","brand":"Winbond Elec","stock":0,"moq":6,"mult":1,"lifecycle":"","ladders":[[1,1.438715],[10,1.202245],[30,1.071917],[100,0.925253],[500,0.793465],[1000,0.76353]],"currency":"USD","url":"https://jlcpcb.com/partdetail/WinbondElec-W25Q16JVUXIQ/C2843335","note":"for JLCPCB assembly, extended part"}],"mpn_used":"W25Q16JVUXIQ","choice":null,"target":null,"vs_target":null},{"key":"C2895249","part":"C2895249","mpn":"","lcsc":"C2895249","value":"nRF52833-QDXX","footprint":"QFN-40-1EP_5x5mm_P0.4mm_EP3.6x3.6mm_ThermalVias","refs":{"default":["U5"]},"offers":[{"supplier":"LCSC","sku":"C2895249","mpn":"nRF52833-QDAA-R","brand":"NORDIC","stock":14481,"moq":1,"mult":1,"lifecycle":"normal","ladders":[[1,5.877339],[10,5.191932],[30,4.784339],[100,4.370631],[500,4.180433],[1000,4.094369]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C2895249.html","note":""},{"supplier":"JLCPCB","sku":"C2895249","mpn":"nRF52833-QDAA-R","brand":"Nordic Semicon","stock":17003,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,5.828238],[10,5.14849],[30,4.744273],[100,4.334124],[500,4.145478],[1000,4.060144]],"currency":"USD","url":"https://jlcpcb.com/partdetail/NordicSemicon-nRF52833_QDAAR/C2895249","note":"for JLCPCB assembly, extended part"},{"supplier":"Mouser","sku":"949-NRF52833-QDAA-R","mpn":"nRF52833-QDAA-R","brand":"Nordic Semiconductor","stock":2045,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,4.95],[10,3.77],[25,3.47],[100,3.14],[250,3.04],[4000,3.04]],"currency":"EUR","url":"https://www.mouser.es/es/ProductDetail/Nordic-Semiconductor/nRF52833-QDAA-R?qs=xZ%2FP%252Ba9zWqYrk%252Bfy26NOZQ%3D%3D","note":""},{"supplier":"Farnell","sku":"3596267","mpn":"NRF52833-QDAA-R","brand":"NORDIC SEMICONDUCTOR","stock":1741,"moq":1,"mult":1,"lifecycle":"STOCKED","ladders":[[1,4.87],[10,3.93],[25,3.67],[50,3.51],[100,3.35],[250,3.19],[500,3.07]],"currency":"EUR","url":"https://es.farnell.com/3596267","note":""}],"mpn_used":"nRF52833-QDAA-R","choice":null,"target":null,"vs_target":null},{"key":"C2652978","part":"C2652978","mpn":"","lcsc":"C2652978","value":"TXB0106RGY","footprint":"Texas_RGY_R-PVQFN-N16_EP2.05x2.55mm","refs":{"default":["U6"]},"offers":[{"supplier":"LCSC","sku":"C2652978","mpn":"TXB0106RGYR","brand":"TI","stock":16377,"moq":1,"mult":1,"lifecycle":"normal","ladders":[[1,1.217213],[10,0.997262],[30,0.876791],[100,0.74117],[500,0.679474],[1000,0.652368]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C2652978.html","note":""},{"supplier":"JLCPCB","sku":"C2652978","mpn":"TXB0106RGYR","brand":"Texas Instruments","stock":16377,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,1.209729],[10,0.991147],[30,0.871315],[100,0.736607],[500,0.675276],[1000,0.648261]],"currency":"USD","url":"https://jlcpcb.com/partdetail/TexasInstruments-TXB0106RGYR/C2652978","note":"for JLCPCB assembly, extended part"},{"supplier":"Mouser","sku":"595-TXB0106RGYR","mpn":"TXB0106RGYR","brand":"Texas Instruments","stock":0,"moq":1,"mult":1,"lifecycle":"","ladders":[[1,2.18],[10,1.61],[25,1.47],[100,1.31],[250,1.26],[3000,1.13]],"currency":"EUR","url":"https://www.mouser.es/es/ProductDetail/Texas-Instruments/TXB0106RGYR?qs=XGzIaZb%2FFYLhB9Sk%252BZUXMA%3D%3D","note":""},{"supplier":"Farnell","sku":"3120970","mpn":"TXB0106RGYR","brand":"TEXAS INSTRUMENTS","stock":0,"moq":1,"mult":1,"lifecycle":"NO_LONGER_STOCKED","ladders":[[1,1.23],[10,0.893],[50,0.808],[100,0.716],[250,0.672],[500,0.645],[1000,0.622],[2500,0.61]],"currency":"EUR","url":"https://es.farnell.com/3120970","note":""}],"mpn_used":"TXB0106RGYR","choice":null,"target":null,"vs_target":null},{"key":"C32346","part":"C32346","mpn":"","lcsc":"C32346","value":"32.768KHz","footprint":"Crystal_SMD_3215-2Pin_3.2x1.5mm","refs":{"default":["Y1"],"lite":["Y1"]},"offers":[{"supplier":"LCSC","sku":"C32346","mpn":"Q13FC13500004","brand":"EPSON","stock":74325,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.137538],[50,0.104956],[150,0.089167],[500,0.074929],[3000,0.071096],[6000,0.068723]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C32346.html","note":""},{"supplier":"JLCPCB","sku":"C32346","mpn":"Q13FC13500004","brand":"Seiko Epson","stock":217758,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.136442],[50,0.104134],[150,0.088345],[500,0.07429],[3000,0.070549],[6000,0.068176]],"currency":"USD","url":"https://jlcpcb.com/partdetail/SeikoEpson-Q13FC13500004/C32346","note":"for JLCPCB assembly, basic part"},{"supplier":"Farnell","sku":"1278036","mpn":"Q13FC13500004","brand":"EPSON","stock":33552,"moq":1,"mult":1,"lifecycle":"STOCKED","ladders":[[1,2.38],[10,2.07],[50,1.87],[200,1.79],[500,1.63]],"currency":"EUR","url":"https://es.farnell.com/1278036","note":""}],"mpn_used":"Q13FC13500004","choice":null,"target":null,"vs_target":null},{"key":"C2682773","part":"C2682773","mpn":"","lcsc":"C2682773","value":"32MHz","footprint":"Crystal_SMD_2016-4Pin_2.0x1.6mm","refs":{"default":["Y2"]},"offers":[{"supplier":"LCSC","sku":"C2682773","mpn":"X201632MOB4SI","brand":"YXC Crystal Oscillators","stock":99620,"moq":5,"mult":1,"lifecycle":"normal","ladders":[[5,0.10313],[50,0.082504],[150,0.072191],[500,0.064434],[3000,0.049466],[6000,0.046363]],"currency":"USD","url":"https://www.lcsc.com/product-detail/C2682773.html","note":""},{"supplier":"JLCPCB","sku":"C2682773","mpn":"X201632MOB4SI","brand":"YXC Crystal Oscillators","stock":109085,"moq":5,"mult":1,"lifecycle":"","ladders":[[1,0.102583],[50,0.082048],[150,0.071735],[500,0.06416],[3000,0.049192],[6000,0.046181]],"currency":"USD","url":"https://jlcpcb.com/partdetail/2777870-X201632MOB4SI/C2682773","note":"for JLCPCB assembly, extended part"}],"mpn_used":"X201632MOB4SI","choice":null,"target":null,"vs_target":null}],"builds":[{"name":"default","fitted":48,"unpriceable":["J6"],"unpriced":[],"totals":{"1":25.46,"5":68.54,"10":107.72,"100":810.06},"by_supplier":{"1":{"JLCPCB":24,"Mouser":1,"LCSC":2,"Farnell":1},"5":{"JLCPCB":26,"LCSC":1,"Farnell":1},"10":{"JLCPCB":27,"Mouser":1},"100":{"JLCPCB":21,"LCSC":6,"Mouser":1}},"priced":47},{"name":"lite","fitted":43,"unpriceable":["J6"],"unpriced":[],"totals":{"1":18.84,"5":37.59,"10":59.05,"100":413.85},"by_supplier":{"1":{"JLCPCB":21,"Mouser":1,"LCSC":2},"5":{"JLCPCB":23,"LCSC":1},"10":{"JLCPCB":24},"100":{"JLCPCB":19,"LCSC":5}},"priced":42}],"warnings":[{"part":"C9900148376","message":"U1: JLCPCB has 0 in stock, 100 needed for 100 boards"},{"part":"C7466043","message":"U2: JLCPCB has 0 in stock, 100 needed for 100 boards"},{"part":"C2843335","message":"U4: JLCPCB has 0 in stock, 100 needed for 100 boards"}],"short":[{"refs":["U1"],"mpn":"C9900148376","supplier":"JLCPCB","stock":0,"need":100,"boards":100},{"refs":["U2"],"mpn":"C7466043","supplier":"JLCPCB","stock":0,"need":100,"boards":100},{"refs":["U4"],"mpn":"C2843335","supplier":"JLCPCB","stock":0,"need":100,"boards":100}],"notes":[],"above_target":1};
+const KEY = "kicad-hub-sourcing:" + DATA.lines.map(l => l.key).join(",");  // picks of this BOM only
+const fmt = v => v == null ? "—" : new Intl.NumberFormat(undefined, {style: "currency", currency: DATA.currency,
+  maximumFractionDigits: v < 1 ? 4 : 2}).format(v);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+
+let build = DATA.builds[0].name;
+let batch = DATA.batches.find(n => n > 1) || DATA.batches[0];
+let sel = {};  // line key -> offer index (manual); missing = automatic
+DATA.lines.forEach(l => { if (l.choice != null) sel[l.key] = l.choice; });
+try { Object.assign(sel, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
+let tg = {};  // line key -> target unit price; missing = none
+DATA.lines.forEach(l => { if (l.target != null) tg[l.key] = l.target; });
+const KEYT = KEY + ":target";
+try { Object.assign(tg, JSON.parse(localStorage.getItem(KEYT) || "{}")); } catch (e) {}
+const saveT = () => { try { localStorage.setItem(KEYT, JSON.stringify(tg)); } catch (e) {} };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(sel)); } catch (e) {} };
+
+function order(o, need) {
+  let qty = Math.max(need, o.moq);
+  qty = Math.ceil(qty / o.mult) * o.mult;
+  let price = o.ladders.length ? o.ladders[0][1] : null;
+  for (const [q, p] of o.ladders) if (qty >= q) price = p;
+  return {qty, price, total: price == null ? null : qty * price};
+}
+function auto(l, need) {
+  const c = l.offers.map((o, i) => ({i, t: order(o, need).total, s: o.stock >= need})).filter(x => x.t != null);
+  if (!c.length) return null;
+  const pool = c.some(x => x.s) ? c.filter(x => x.s) : c;
+  return pool.reduce((a, b) => b.t < a.t ? b : a).i;
+}
+const pick = (l, need) => (l.key in sel && l.offers[sel[l.key]]) ? sel[l.key] : auto(l, need);
+const qtyOf = (l, b) => (l.refs[b] || []).length;
+
+function totals(b, n) {
+  let t = 0, missing = 0; const by = {};
+  for (const l of DATA.lines) {
+    const q = qtyOf(l, b); if (!q) continue;
+    const i = pick(l, q * n); if (i == null) { missing += q; continue; }
+    const o = l.offers[i]; t += order(o, q * n).total; by[o.supplier] = (by[o.supplier] || 0) + 1;
+  }
+  return {t, missing, by};
+}
+
+function render() {
+  const bInfo = DATA.builds.find(b => b.name === build);
+  document.getElementById("sub").textContent =
+    `${bInfo.fitted} fitted parts, components only, prices in ${DATA.currency}` +
+    (bInfo.unpriceable.length ? ` · no MPN or LCSC code: ${bInfo.unpriceable.join(", ")}` : "");
+  document.getElementById("suppliers").innerHTML = DATA.suppliers.map(s =>
+    `<span class="chip ${s.status === "ok" ? "ok" : s.status.startsWith("failed") ? "bad" : ""}" title="${esc(s.status)}">` +
+    `${esc(s.name)}${s.status === "ok" ? "" : " · " + esc(s.status.split(" (")[0])}</span>`).join("");
+  document.getElementById("builds").innerHTML = DATA.builds.map(b =>
+    `<button class="${b.name === build ? "on" : ""}" data-b="${esc(b.name)}">${esc(b.name)}</button>`).join("");
+  document.getElementById("batches").innerHTML = DATA.batches.map(n =>
+    `<button class="${n === batch ? "on" : ""}" data-n="${n}">${n}</button>`).join("");
+  document.getElementById("cards").innerHTML = DATA.batches.map(n => {
+    const r = totals(build, n);
+    return `<div class="card ${n === batch ? "on" : ""}"><span>${n} board${n > 1 ? "s" : ""}</span><b>${fmt(r.t)}</b>` +
+      `<span>${n > 1 ? fmt(r.t / n) + " each · " : ""}${Object.entries(r.by).map(([s, c]) => `${s} ${c}`).join(", ")}` +
+      `${r.missing ? ` · ${r.missing} unpriced` : ""}</span></div>`;
+  }).join("");
+  document.getElementById("warns").innerHTML = DATA.warnings.map(w => `<li>${esc(w.part)} · ${esc(w.message)}</li>`).join("");
+  const notes = DATA.notes || [];
+  document.getElementById("notes-box").hidden = !notes.length;
+  document.getElementById("notes-sum").textContent = `${notes.length} note${notes.length > 1 ? "s" : ""} (lifecycle of offers that are not used)`;
+  document.getElementById("notes").innerHTML = notes.map(w => `<li>${esc(w.part)} · ${esc(w.message)}</li>`).join("");
+
+  const rows = [];
+  for (const l of DATA.lines) {
+    const q = qtyOf(l, build); if (!q) continue;
+    const need = q * batch, chosen = pick(l, need), manual = l.key in sel && l.offers[sel[l.key]];
+    const target = tg[l.key], used = chosen == null ? null : order(l.offers[chosen], need).price;
+    const flag = target == null ? "" : used == null ? ` <span class="over">no offer to compare</span>` :
+      used > target ? ` <span class="over">above target ${fmt(used - target)} (+${(100 * (used - target) / target).toFixed(1)}%)</span>` :
+      ` <span class="best">within target</span>`;
+    const costs = l.offers.map(o => order(o, need).total).filter(t => t != null);
+    const best = costs.length ? Math.min(...costs) : null;
+    rows.push(`<tr class="part"><td colspan="8"><b>${esc(l.part)}</b> ${esc(l.value)} · ${esc(l.footprint)} ` +
+      `<span class="refs">· ${q} per board: ${esc(l.refs[build].join(", "))}</span> ` +
+      `<label class="tag"><input type="radio" name="${esc(l.key)}" data-k="${esc(l.key)}" data-i="" ${manual ? "" : "checked"}> automatic</label> ` +
+      `<label class="tag">target <input class="tg" type="number" min="0" step="any" data-t="${esc(l.key)}" value="${target ?? ""}" placeholder="none"> ${DATA.currency}</label>${flag}</td></tr>`);
+    if (!l.offers.length) rows.push(`<tr><td colspan="8" class="auto">Not found at any supplier</td></tr>`);
+    l.offers.forEach((o, i) => {
+      const r = order(o, need);
+      rows.push(`<tr class="offer ${i === chosen ? "picked" : ""} ${target != null && r.price != null && r.price > target ? "above" : ""}">` +
+        `<td><label><input type="radio" name="${esc(l.key)}" data-k="${esc(l.key)}" data-i="${i}" ${manual && sel[l.key] === i ? "checked" : ""}>` +
+        `${esc(o.supplier)}</label>${o.note ? `<div class="tag">${esc(o.note)}</div>` : ""}</td>` +
+        `<td>${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.sku)}</a>` : esc(o.sku)}</td>` +
+        `<td>${esc(o.mpn)}<div class="tag">${esc(o.brand)}${o.lifecycle ? " · " + esc(o.lifecycle) : ""}</div></td>` +
+        `<td class="num ${o.stock < need ? "short" : ""}">${o.stock.toLocaleString()}</td>` +
+        `<td class="num">${o.moq}${o.mult > 1 ? " / " + o.mult : ""}</td>` +
+        `<td class="num unit">${fmt(r.price)}</td><td class="num">${r.qty.toLocaleString()}</td>` +
+        `<td class="num ${r.total === best ? "best" : ""}">${fmt(r.total)}</td></tr>`);
+    });
+  }
+  document.getElementById("rows").innerHTML = rows.join("");
+}
+
+function download(name, rows) {
+  const csv = rows.map(r => r.map(v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v).join(",")).join("\n") + "\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.b) { build = t.dataset.b; render(); }
+  if (t.dataset.n) { batch = +t.dataset.n; render(); }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.t) {
+    const v = parseFloat(t.value);
+    if (v > 0) tg[t.dataset.t] = v; else delete tg[t.dataset.t];
+    saveT(); render(); return;
+  }
+  if (!t.dataset.k) return;
+  if (t.dataset.i === "") delete sel[t.dataset.k]; else sel[t.dataset.k] = +t.dataset.i;
+  save(); render();
+});
+document.getElementById("lock").onclick = () => {
+  for (const l of DATA.lines) { const q = qtyOf(l, build); const i = q ? auto(l, q * batch) : null; if (i != null) sel[l.key] = i; }
+  save(); render();
+};
+document.getElementById("reset").onclick = () => { sel = {}; save(); render(); };
+document.getElementById("dl-choices").onclick = () => download("kicad-hub-sourcing.csv",
+  [["Part", "Supplier", "SKU", "Target"], ...DATA.lines.filter(l => (l.key in sel && l.offers[sel[l.key]]) || tg[l.key] != null)
+    .map(l => { const o = l.key in sel ? l.offers[sel[l.key]] : null;
+      return [l.part, o ? o.supplier : "", o ? o.sku : "", tg[l.key] ?? ""]; })]);
+document.getElementById("dl-order").onclick = () => {
+  const rows = [];
+  for (const l of DATA.lines) {
+    const q = qtyOf(l, build); if (!q) continue;
+    const i = pick(l, q * batch); if (i == null) continue;
+    const o = l.offers[i], r = order(o, q * batch);
+    rows.push([o.supplier, o.sku, o.mpn, o.brand, r.qty, r.price, +r.total.toFixed(4), l.refs[build].join(" ")]);
+  }
+  rows.sort((a, b) => a[0].localeCompare(b[0]));
+  download(`purchase-${build}-${batch}-boards.csv`,
+    [["Supplier", "SKU", "Manufacturer PN", "Brand", "Quantity", `Unit price (${DATA.currency})`,
+      `Total (${DATA.currency})`, "References"], ...rows]);
+};
+render();
+</script>
+</body>
+</html>

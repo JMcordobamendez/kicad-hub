@@ -1,0 +1,28 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "v1.1.0",
+ "label": "v1.1.0",
+ "kind": "release",
+ "sha": "b8f09d8e5d96d9f2e9557a80d4e49c055c23289d",
+ "date": "2026-10-29 14:41 UTC",
+ "title": "",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "sourcing_warnings": 3,
+  "fab_warnings": 1
+ },
+ "cost": {
+  "boards": 1,
+  "total": 26.06,
+  "currency": "EUR"
+ }
+}

@@ -1,0 +1,41 @@
+{
+ "name": "RoyalBlue54L-Feather",
+ "rev": "",
+ "label": "PR #26",
+ "kind": "pr",
+ "sha": "12549028b05c4b727786d3f20b86beb4cb281b07",
+ "date": "2026-10-29 16:48 UTC",
+ "title": "fix: small follow-ups after the parallel batch",
+ "counts": {
+  "erc_errors": 5,
+  "drc_errors": 237,
+  "fab_profile": "jlcpcb",
+  "drc_fab_violations": 408,
+  "drc_fab_new": 138,
+  "requirements_total": 7,
+  "requirements_passed": 6,
+  "requirements_failed": 1,
+  "requirements_unknown": 0,
+  "bom_added": 0,
+  "bom_removed": 0,
+  "bom_changed": 0,
+  "visual_changes": 0,
+  "variants": 1,
+  "variant_mismatches": 1,
+  "variant_bom_changes": 0,
+  "unannotated": 0,
+  "pending_values": 0,
+  "missing_fields": 36,
+  "datasheets_found": 6,
+  "datasheets_broken": 0,
+  "sourcing_warnings": 0,
+  "fab_warnings": 1
+ },
+ "cost": {
+  "boards": 1,
+  "total": 23.03,
+  "currency": "EUR"
+ },
+ "bom": "bom-parts.csv",
+ "renders": "renders/renders.json"
+}
