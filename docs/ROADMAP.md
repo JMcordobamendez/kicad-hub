@@ -85,8 +85,8 @@ flowchart LR
 owner's real board. The owner found it unfriendly (a ZIP to install, one button, results
 in the browser full of jargon) and commissioned a **desktop app beside KiCad** (phase 7E,
 2026-11-25): the quick check in plain words (`kicad_hub.py status`) and the app's window
-(`app/`), Show in KiCad and Prepare the order are in review; next, the Windows
-installer. Left in B: before/after images without PIL, KiBot optional, small things.
+(`app/`), Show in KiCad and Prepare the order are merged (#67–#70); the Windows
+installer is in review. Left in B: before/after images without PIL, KiBot optional, small things.
 Left in A: the template repository. Then versions without the terminal (D).
 
 **Legend:** green = done · orange = next / in progress · grey = planned ·
@@ -573,7 +573,7 @@ window or a ~400 px strip beside KiCad, remembering the last one. Later: Save ve
 (7D), the official catalogue, "Prepare for GitHub". One branch and one PR per subsystem;
 merged only when the owner says; the owner's Windows PC session tries each build.
 
-- [ ] **1 · The quick check in plain words** (in review): `kicad_hub.py status` runs ERC,
+- [x] **1 · The quick check in plain words** (#67, 2026-11-28): `kicad_hub.py status` runs ERC,
       DRC with the board against the schematic, the BOM against `main` and the field and
       datasheet checks (no network) and writes `.kicad-hub/status.json`: the headline
       ("No errors. Six small things left to tidy up."), the five indicators with a note
@@ -589,7 +589,7 @@ merged only when the owner says; the owner's Windows PC session tries each build
       Also: datasheet links found working are remembered for a week
       (`.kicad-hub/cache/datasheet-links.json`, `run` on a PC), the engine's log in UTF-8
       on Windows, unchecked links counted as links everywhere
-- [ ] **2 · Show in KiCad** (in review, 2026-11-27): `app/python/show_in_kicad.py`, run by
+- [x] **2 · Show in KiCad** (#69, 2026-11-28): `app/python/show_in_kicad.py`, run by
       the core with the app's Python, takes a row's ids from `status.json`, finds them on
       the board open in KiCad (`Board.get_items_by_id`), selects them and runs
       `common.Control.zoomFitSelection`; when the zoom fails it only selects. When none of
@@ -600,7 +600,7 @@ merged only when the owner says; the owner's Windows PC session tries each build
       PCB editor on a virtual display, the app's button on "183 holes are too small"
       selected the 183 vias in KiCad; a pad and 14 overlapping footprints too. Needs
       Preferences → Plugins → "Enable KiCad API" in KiCad
-- [ ] **3 · The app** (in review, `app/`, 2026-11-25): Tauri 2. The page (`app/ui/`, plain
+- [x] **3 · The app** (#68, 2026-11-28, `app/`): Tauri 2. The page (`app/ui/`, plain
       HTML/CSS/JS, no build step) follows the mockup: the headline, the five pads (a ring
       with a check when fine, a filled pad with the count, a square pad for errors so they
       differ by shape too, a dashed ring when not checked), the list, errors first with
@@ -618,7 +618,7 @@ merged only when the owner says; the owner's Windows PC session tries each build
       the mode remembered; `cargo check` for Windows passes. Tests: the page in Chromium
       (`app/tests/ui.test.mjs`, 10 tests, every theme in both layouts) and the core
       (`cargo test`), in CI's new `app` job. **Not tried on Windows yet**
-- [ ] **4 · Prepare the order** (in review, 2026-11-27): the button runs `kicad_hub.py run
+- [x] **4 · Prepare the order** (#70, 2026-11-28): the button runs `kicad_hub.py run
       --skip portal` (datasheet links, prices and stock, fab package, requirements, report);
       the card shows each step in plain words ("Getting prices and stock… (step 4 of 7)"),
       then the gold card of the mockup: cost per board for each batch, the parts short on
@@ -632,8 +632,17 @@ merged only when the owner says; the owner's Windows PC session tries each build
       use `.kicad-hub-base/`). Tried for real in the app on the example: 32 s, prices from
       LCSC and JLCPCB ($29.01 one board, $10.18 each for 100), three parts short for 100
       boards, the package and its via-drill warning
-- [ ] **5 · Installer**: NSIS with the embeddable Python (~13 MB measured), attached to
-      releases; the plugin's button brings the window to the front
+- [ ] **5 · Installer** (in review, 2026-11-28): `app/scripts/bundle_python.py` puts the
+      official embeddable Python 3.13 for Windows (SHA-256 checked) in the app, with
+      kicad-python and its Windows wheels (31 MB unpacked); `tauri.windows.conf.json`
+      ships it. `.github/workflows/app.yml` builds the NSIS installer on a Windows runner
+      (per user, no admin rights) after checking that the bundled Python loads kicad-python
+      and runs the engine; it runs on pull requests that touch the app (the installer is
+      the run's artifact) and the Release workflow calls it and attaches
+      `kicad-hub-app-<version>-windows-setup.exe`. One window only: a second launch brings
+      the first to the front, and `--project <folder>` switches it to that project (tried
+      on Linux). The plugin's button opens the app on the board's project when the app is
+      installed, else does what it did. Not signed: Windows SmartScreen warns on first run
 
 ### D — Versions and review without the terminal (medium to large, after B and C)
 - [ ] Five actions, in plain words, in the plugin or the local portal: **Save version**

@@ -1,5 +1,6 @@
 # Publishes a version of kicad-hub: creates the tag vX.Y.Z on the head of the default
-# branch, moves the major tag (v1) to it and creates the GitHub Release.
+# branch, moves the major tag (v1) to it and creates the GitHub Release, with the KiCad
+# plugin's ZIP and the desktop app's Windows installer (built by app.yml) attached.
 # Run it by hand: Actions → Release → Run workflow, with the version.
 # Notes: docs/releases/vX.Y.Z.md (first line "# title", the rest is the text); without
 # that file GitHub writes the notes from the merged pull requests.
@@ -16,10 +17,38 @@ permissions:
   contents: write        # tags and the release
 
 jobs:
+  # A wrong version or branch stops here, before the app's ten-minute build
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Version, branch and tag
+        env:
+          VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version must look like v1.4.0, not '$VERSION'"; exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::Run this workflow on $DEFAULT_BRANCH, not on $GITHUB_REF_NAME"; exit 1
+          fi
+
+  # The desktop app's Windows installer, built on Windows (.github/workflows/app.yml)
+  app:
+    needs: check
+    uses: ./.github/workflows/app.yml
+    with:
+      version: ${{ inputs.version }}
+
   release:
+    needs: app
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kicad-hub-app-windows
+          path: ${{ runner.temp }}/app
 
       - name: Tag, move the major tag, publish the release
         env:
@@ -50,13 +79,16 @@ jobs:
           # the KiCad plugin of this version, attached to the release (Install from File)
           python3 scripts/build_plugin.py --version "${VERSION#v}" --out "$RUNNER_TEMP/dist"
           plugin_zip="$RUNNER_TEMP/dist/kicad-hub-plugin-${VERSION#v}.zip"
+          # the desktop app's installer, with a name that says what it is
+          setup="$RUNNER_TEMP/dist/kicad-hub-app-${VERSION#v}-windows-setup.exe"
+          cp "$(ls "$RUNNER_TEMP"/app/*.exe | head -1)" "$setup"
 
           notes="docs/releases/$VERSION.md"
           if [ -f "$notes" ]; then
             title=$(sed -n '1s/^# *//p' "$notes")
             tail -n +2 "$notes" > "$RUNNER_TEMP/notes.md"
-            gh release create "$VERSION" --verify-tag --title "${title:-$VERSION}" --notes-file "$RUNNER_TEMP/notes.md" "$plugin_zip"
+            gh release create "$VERSION" --verify-tag --title "${title:-$VERSION}" --notes-file "$RUNNER_TEMP/notes.md" "$plugin_zip" "$setup"
           else
-            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes "$plugin_zip"
+            gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes "$plugin_zip" "$setup"
           fi
           echo "Published $VERSION ($major moved to it) at ${GITHUB_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY"

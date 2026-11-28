@@ -63,9 +63,21 @@ cargo test --manifest-path app/src-tauri/Cargo.toml                  # the core
 `--shots DIR` saves a screenshot of every screen in both layouts and every theme. CI runs
 both (`app` job in `.github/workflows/test.yml`).
 
-## Windows
+## The Windows installer
 
-`cargo check --target x86_64-pc-windows-msvc` passes. The installer (NSIS, with the
-embeddable Python, about 13 MB) is built with
-`npx @tauri-apps/cli@2 build --runner cargo-xwin --target x86_64-pc-windows-msvc`
-(needs `lld-link`, `llvm-rc`, `clang-cl` and `makensis`); see the roadmap, phase 7E step 5.
+Built on a Windows runner by `.github/workflows/app.yml` (on pull requests that touch the
+app, and by the Release workflow, which attaches it to the release):
+
+```
+python app/scripts/bundle_python.py      # app/src-tauri/python: embeddable Python + kicad-python
+cd app && npx @tauri-apps/cli@2.12.6 build --bundles nsis
+```
+
+`tauri.windows.conf.json` adds the Python to the bundle, next to the engine (`scripts/`,
+`fab-profiles/`) and `python/show_in_kicad.py`. The installer installs for the current
+user, without admin rights. It is not signed yet: Windows SmartScreen asks once
+("More info → Run anyway").
+
+Only one window runs: starting the app again brings it to the front, and
+`kicad-hub --project <folder>` also switches it to that project. That is what the KiCad
+plugin's button does when the app is installed.

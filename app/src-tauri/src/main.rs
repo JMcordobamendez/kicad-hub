@@ -592,15 +592,64 @@ async fn show_in_kicad(app: AppHandle, shared: State<'_, Shared>, id: String) ->
         .map_err(|_| "Show in KiCad stopped without an answer.".to_string())
 }
 
+/// `--project <folder>` (or `--project=<folder>`): the KiCad plugin's button opens the app
+/// on the project open in KiCad.
+fn project_arg(argv: &[String]) -> Option<PathBuf> {
+    let mut args = argv.iter().skip(1);
+    while let Some(a) = args.next() {
+        if a == "--project" {
+            return args.next().map(PathBuf::from);
+        }
+        if let Some(v) = a.strip_prefix("--project=") {
+            return Some(PathBuf::from(v));
+        }
+    }
+    None
+}
+
+fn same_folder(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+/// Bring the window to the front (from the KiCad plugin's button, or a second launch).
+fn to_front(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// A second launch (the plugin's button): no second window, this one comes forward and,
+/// when it names another project, switches to it.
+fn second_launch(app: &AppHandle, argv: Vec<String>) {
+    to_front(app);
+    let Some(dir) = project_arg(&argv) else { return };
+    let shared: Shared = app.state::<Shared>().inner().clone();
+    let current = shared.lock().unwrap().project.as_ref().map(|p| PathBuf::from(&p.dir));
+    if current.as_deref().map_or(false, |c| same_folder(c, &dir)) {
+        return;
+    }
+    if let Err(e) = open_project(app, &shared, &dir) {
+        shared.lock().unwrap().problem = Some(e);
+    }
+    push(app, &shared);
+}
+
 fn main() {
     let shared: Shared = Arc::new(Mutex::new(Inner::default()));
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| second_launch(app, argv)))
         .plugin(tauri_plugin_dialog::init())
         .manage(shared.clone())
         .setup(move |app| {
             let handle = app.handle().clone();
             let settings = load_settings(&handle);
-            let (project, mode) = (settings.project.clone(), settings.mode.clone());
+            let asked = project_arg(&std::env::args().collect::<Vec<_>>());
+            let (project, mode) = (asked.or(settings.project.clone()), settings.mode.clone());
             shared.lock().unwrap().settings = settings;
             if let Some(window) = app.get_webview_window("main") {
                 if mode == "side" {
@@ -639,6 +688,15 @@ mod tests {
         // the project may itself live under a hidden folder or one named like a backup
         assert!(matters(Path::new("/home/me/.boards/x-backups/riego/board.kicad_pcb"),
                         Path::new("/home/me/.boards/x-backups/riego")));
+    }
+
+    #[test]
+    fn the_project_from_the_command_line() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(project_arg(&args(&["kicad-hub", "--project", "C:/b/riego"])), Some(PathBuf::from("C:/b/riego")));
+        assert_eq!(project_arg(&args(&["kicad-hub", "--project=/b/x"])), Some(PathBuf::from("/b/x")));
+        assert_eq!(project_arg(&args(&["kicad-hub"])), None);
+        assert_eq!(project_arg(&args(&["kicad-hub", "--project"])), None);
     }
 
     #[test]

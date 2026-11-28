@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -215,7 +216,7 @@ class MainTest(unittest.TestCase):
         self.addCleanup(os.environ.pop, "FAKE_ENGINE_FAIL", None)
 
     def test_runs_the_engine_and_ends_on_the_portal(self):
-        self.assertEqual(action.main(FakeKiCad(self.project), browser=self.opened.append), 0)
+        self.assertEqual(action.main(FakeKiCad(self.project), browser=self.opened.append, app=""), 0)
         out = os.path.join(self.repo, ".kicad-hub")
         self.assertEqual(self.opened, ["http://127.0.0.1:1/" + action.PROGRESS])
         with open(os.path.join(out, "args.json"), encoding="utf-8") as f:
@@ -228,16 +229,35 @@ class MainTest(unittest.TestCase):
         with open(os.path.join(out, "plugin.log"), encoding="utf-8") as f:
             self.assertIn("== Portal", f.read())
 
+    def test_opens_the_desktop_app_when_installed(self):
+        launched = []
+        code = action.main(FakeKiCad(self.project), browser=self.opened.append, app="/opt/kicad-hub",
+                           launch=lambda app, folder: launched.append((app, folder)))
+        self.assertEqual(code, 0)
+        self.assertEqual(launched, [("/opt/kicad-hub", self.project)])
+        self.assertEqual(self.opened, [])                                   # no browser, no engine
+        self.assertFalse(os.path.exists(os.path.join(self.repo, ".kicad-hub", "plugin.log")))
+
+    def test_where_the_app_is_installed(self):
+        exe = os.path.join(self.tmp.name, "kicad-hub", "kicad-hub.exe")
+        os.makedirs(os.path.dirname(exe))
+        open(exe, "w").close()
+        self.assertEqual(action.find_app({"KICAD_HUB_APP": exe}), exe)
+        if os.name == "nt":
+            self.assertEqual(action.find_app({"LOCALAPPDATA": self.tmp.name}), exe)
+        self.assertIsNone(action.find_app({"KICAD_HUB_APP": os.path.join(self.tmp.name, "nope")})
+                          if not shutil.which("kicad-hub") else None)
+
     def test_a_failed_run_says_why(self):
         os.environ["FAKE_ENGINE_FAIL"] = "1"
         with self.assertRaisesRegex(action.PluginError, "kicad-cli stopped"):
-            action.main(FakeKiCad(self.project), browser=self.opened.append)
+            action.main(FakeKiCad(self.project), browser=self.opened.append, app="")
         with open(os.path.join(self.repo, ".kicad-hub", "portal", action.PROGRESS), encoding="utf-8") as f:
             self.assertIn("stopped with an error", f.read())
 
     def test_no_board_open(self):
         with self.assertRaisesRegex(action.PluginError, "No board is open"):
-            action.main(FakeKiCad(None), browser=self.opened.append)
+            action.main(FakeKiCad(None), browser=self.opened.append, app="")
         self.assertEqual(self.opened, [])
 
 

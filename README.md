@@ -48,11 +48,21 @@ the three steps are done on github.com.
 Starting a new board, or the project is not on GitHub yet? The [manual](docs/manual.md)
 goes step by step, with or [without the command line](docs/manual.md#9-without-the-command-line-github-desktop).
 
+### On your PC, beside KiCad (desktop app, preview)
+
+A window beside KiCad that says, in plain words, what is left before the board can be
+ordered, and checks again each time you save. Windows: download
+`kicad-hub-app-<version>-windows-setup.exe` from the
+[latest release](https://github.com/JMcordobamendez/kicad-hub/releases/latest), install it
+(no admin rights; the installer is not signed yet, so Windows asks once: *More info → Run
+anyway*) and choose your project's folder. For *Show in KiCad*, tick *Preferences →
+Plugins → Enable KiCad API* in KiCad. More in [`app/README.md`](app/README.md).
+
 ### In KiCad, without GitHub (plugin, preview)
 
 The same checks run on your PC from a button in KiCad's PCB editor, with nothing else to
-install. **Preview:** tried on one real board with KiCad 10.0.5; a desktop app that sits
-beside KiCad is on its way ([`app/`](app/README.md), roadmap phase 7E).
+install. **Preview:** tried on one real board with KiCad 10.0.5. With the desktop app
+installed, the button opens the app on the board's project instead.
 
 1. Download `kicad-hub-plugin-<version>.zip` from the
    [latest release](https://github.com/JMcordobamendez/kicad-hub/releases/latest).

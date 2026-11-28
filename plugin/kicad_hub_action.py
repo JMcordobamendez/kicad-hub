@@ -2,7 +2,10 @@
 """The "kicad-hub" button of the PCB editor (a KiCad IPC API plugin).
 
 KiCad starts this script as its own process when the button is pressed, with the
-plugin's Python (KiCad made it when the plugin was installed). It:
+plugin's Python (KiCad made it when the plugin was installed).
+
+When the kicad-hub desktop app is installed, the button only opens it on the board's
+project, or brings its window to the front: the app does the checks. Without the app it:
 
 1. asks KiCad which board is open and where `kicad-cli` is;
 2. starts, or reuses, a small web server on this computer (127.0.0.1 only) for the
@@ -83,6 +86,33 @@ def ignore_outputs(work):
     os.makedirs(info, exist_ok=True)
     with open(os.path.join(info, "exclude"), "a", encoding="utf-8") as f:
         f.write(f"\n# kicad-hub's local outputs (the KiCad plugin)\n{OUT}/\n")
+
+
+# --- the desktop app ------------------------------------------------------------------------
+
+def find_app(env=None):
+    """The kicad-hub desktop app, when installed: $KICAD_HUB_APP, the installer's folder
+    (per user, then for everyone) or the PATH. None when it is not installed."""
+    env = os.environ if env is None else env
+    candidates = [env.get("KICAD_HUB_APP", "")]
+    if os.name == "nt":
+        for base in (env.get("LOCALAPPDATA"), env.get("ProgramFiles"), env.get("ProgramW6432")):
+            if base:
+                candidates.append(os.path.join(base, "kicad-hub", "kicad-hub.exe"))
+    elif sys.platform == "darwin":
+        candidates.append("/Applications/kicad-hub.app/Contents/MacOS/kicad-hub")
+    candidates.append(shutil.which("kicad-hub") or "")
+    return next((c for c in candidates if c and os.path.isfile(c)), None)
+
+
+def open_app(app, project_dir):
+    """Start the app on the project; when it is already running, the running one comes to
+    the front instead (it allows one window only) and switches to this project."""
+    detach = ({"creationflags": getattr(subprocess, "DETACHED_PROCESS", 0)
+               | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)} if os.name == "nt"
+              else {"start_new_session": True})
+    subprocess.Popen([app, "--project", project_dir], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, close_fds=True, **detach)
 
 
 # --- the web server -----------------------------------------------------------------------
@@ -204,11 +234,15 @@ def open_board(kicad):
     return folder, doc.board_filename
 
 
-def main(kicad=None, browser=webbrowser.open):
+def main(kicad=None, browser=webbrowser.open, app=None, launch=open_app):
     if kicad is None:
         from kipy import KiCad  # noqa: PLC0415 - installed by KiCad with the plugin (requirements.txt)
         kicad = KiCad()
     project_dir, board = open_board(kicad)
+    app = find_app() if app is None else app
+    if app:
+        launch(app, project_dir)
+        return 0
     try:
         kicad_cli = kicad.get_kicad_binary_path("kicad-cli")
     except Exception:  # an older KiCad: the engine finds it by itself
