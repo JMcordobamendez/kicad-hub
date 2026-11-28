@@ -11,7 +11,11 @@ import csv
 import json
 import os
 import re
+import sys
 
+# The scripts beside this one, also with an embedded Python (the desktop app's on Windows),
+# whose ._pth file leaves the script's own folder out of the import path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import drc_groups
 
 MAX_ROWS = 60  # rows per table before cutting, to keep PR comments readable

@@ -1080,3 +1080,18 @@ class ServeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EmbeddedPythonTest(unittest.TestCase):
+    """The desktop app runs the engine with Windows' embeddable Python, whose ._pth file
+    leaves the script's own folder out of the import path; `python -P` does the same."""
+
+    def test_scripts_find_the_modules_beside_them(self):
+        if sys.version_info < (3, 11):
+            self.skipTest("-P needs Python 3.11")
+        import subprocess
+        with tempfile.TemporaryDirectory() as elsewhere:
+            for script, args in (("kicad_hub.py", ["status", "--help"]), ("report.py", ["--help"])):
+                r = subprocess.run([sys.executable, "-P", os.path.join(SCRIPTS, script), *args],
+                                   cwd=elsewhere, capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, f"{script}: {r.stderr[-300:]}")

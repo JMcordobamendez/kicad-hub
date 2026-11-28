@@ -1,0 +1,72 @@
+# Builds the desktop app's Windows installer (app/): the embeddable Python with
+# kicad-python (app/scripts/bundle_python.py), the engine, and the NSIS installer from
+# Tauri. On pull requests that touch the app it is a check (the installer is kept as the
+# run's artifact, to try it); the Release workflow calls it and attaches the installer.
+name: App
+
+on:
+  pull_request:
+    paths: ["app/**", "plugin/**", ".github/workflows/app.yml"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App version (e.g. 1.6.0); empty keeps the one in tauri.conf.json
+        required: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Python for the app (embeddable, with kicad-python)
+        run: python app/scripts/bundle_python.py
+
+      - name: The bundled Python runs the engine and loads kicad-python
+        env:
+          PYTHONUTF8: "1"  # as the app runs it (the console's code page can't write "→")
+        run: |
+          py=app/src-tauri/python/python.exe
+          "$py" -c "import sys, ssl, kipy, pynng; ssl.create_default_context(); print(sys.version)"
+          # its ._pth leaves the script's folder out of the import path: the scripts add it
+          "$py" scripts/kicad_hub.py status --help > /dev/null
+          "$py" scripts/report.py --help > /dev/null
+          # no KiCad on the runner: Show in KiCad must say so, in plain words, as JSON
+          answer=$(echo '{"ids": ["x"]}' | "$py" app/python/show_in_kicad.py || true)
+          echo "$answer"
+          echo "$answer" | grep -q "KiCad doesn't answer"
+
+      - name: Build the installer
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          cd app
+          args=(build --ci --bundles nsis)
+          if [ -n "$VERSION" ]; then
+            args+=(--config "{\"version\": \"${VERSION#v}\"}")
+          fi
+          npx --yes @tauri-apps/cli@2.12.6 "${args[@]}"
+          ls -la src-tauri/target/release/bundle/nsis/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kicad-hub-app-windows
+          path: app/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
